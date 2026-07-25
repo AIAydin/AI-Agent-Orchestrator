@@ -1,4 +1,3 @@
-import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   access,
@@ -35,6 +34,11 @@ import type {
   ProjectRecoveryAssessment,
 } from '../../shared/application/contracts.js';
 import { customAgentManifest } from '../custom-agent/custom-agent.js';
+import {
+  environmentWithLoginShellPath,
+  loginShellPath,
+} from '../terminal/login-shell-path.js';
+import { resolveTerminalExecutable } from '../terminal/launch-resolution.js';
 import { gitCloneDisclosure } from '../outbound/destinations.js';
 import type {
   OutboundActionGate,
@@ -46,9 +50,6 @@ import {
   assertExternalApplicationSelection,
   externalApplicationDialogOptions,
 } from './external-application-selection.js';
-
-const execFileAsync = promisify(execFile);
-const MAX_OUTPUT = 2 * 1024 * 1024;
 
 const PROVIDER_DISCLOSURES = {
   codex: 'Codex CLI may send explicitly selected context to OpenAI under your CLI account terms.',
@@ -930,9 +931,11 @@ function declaredPackageManager(value: unknown): 'pnpm' | 'npm' | 'yarn' | 'bun'
 
 async function findExecutable(name: string): Promise<string | null> {
   try {
-    const locator = process.platform === 'win32' ? 'where.exe' : 'which';
-    const result = await run(locator, [name], process.cwd(), 5_000);
-    return result.stdout.trim().split('\n')[0] || null;
+    // Resolve against the user's login-shell PATH (with the inherited GUI PATH as fallback) so
+    // detection finds the same — newest — binary the spawned login-shell session will run,
+    // instead of an older install that happens to come first on the GUI PATH.
+    const environment = environmentWithLoginShellPath(process.env, await loginShellPath());
+    return await resolveTerminalExecutable(name, process.cwd(), environment['PATH']);
   } catch {
     return null;
   }
@@ -946,22 +949,6 @@ async function validateExecutableOverride(candidate: string): Promise<string | n
   } catch {
     return null;
   }
-}
-
-async function run(
-  executable: string,
-  args: readonly string[],
-  cwd: string,
-  timeout = 15_000,
-): Promise<{ stdout: string; stderr: string }> {
-  const result = await execFileAsync(executable, [...args], {
-    cwd,
-    timeout,
-    maxBuffer: MAX_OUTPUT,
-    windowsHide: true,
-    shell: false,
-  });
-  return { stdout: result.stdout, stderr: result.stderr };
 }
 
 function redactRemote(remote: string): string {
