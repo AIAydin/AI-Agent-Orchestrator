@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Download, RefreshCw } from 'lucide-react';
 
 import type { AppSettings } from '../../../../shared/application/contracts.js';
-import type { DockerReadiness } from '../../../../shared/docker/contracts.js';
+import {
+  DEFAULT_DOCKER_SESSION_CONTAINER_EXECUTABLE,
+  DEFAULT_DOCKER_SESSION_IMAGE,
+  type DockerLocalList,
+  type DockerReadiness,
+} from '../../../../shared/docker/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 import {
   dockerEvidenceBelongsTo,
@@ -33,10 +38,31 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
   );
   const [busy, setBusy] = useState<'check' | 'pull' | 'browse' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [localList, setLocalList] = useState<DockerLocalList | null>(null);
+  const [syncAttempt, setSyncAttempt] = useState(0);
   const configuration = dockerReadinessRequest(props.value);
   const configurationRef = useRef(configuration);
   configurationRef.current = configuration;
   const currentEvidence = dockerEvidenceBelongsTo(props.value, evidence) ? evidence : null;
+
+  // Keep the image picker synced with the local Docker daemon. Listing is read-only, so a
+  // missing daemon just leaves the picker with the default image and the saved value.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await window.forgeboard.docker.listLocal?.({
+          dockerExecutable: props.value.dockerExecutable.trim() || 'docker',
+        });
+        if (!cancelled && result?.ok === true) setLocalList(result.value);
+      } catch {
+        // The picker still offers the default image when Docker cannot be reached.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.value.dockerExecutable, syncAttempt]);
 
   useEffect(() => {
     setEvidence(props.initialReadiness ?? null);
@@ -108,18 +134,31 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
     });
   }
 
-  async function pull(): Promise<void> {
-    if (configuration === null) return;
-    const request = configuration;
-    clearReadiness();
+  /** The create action: select the default image (git + Node) and pull it after confirmation. */
+  async function getDefaultImage(): Promise<void> {
+    const nextValue = {
+      ...props.value,
+      dockerImage: DEFAULT_DOCKER_SESSION_IMAGE,
+      dockerContainerExecutable:
+        props.value.dockerContainerExecutable.trim() === ''
+          ? DEFAULT_DOCKER_SESSION_CONTAINER_EXECUTABLE
+          : props.value.dockerContainerExecutable,
+    };
+    const request = dockerReadinessRequest(nextValue);
+    if (request === null) return;
+    update({
+      dockerImage: nextValue.dockerImage,
+      dockerContainerExecutable: nextValue.dockerContainerExecutable,
+    });
     await perform('pull', async () => {
       const result = unwrap(await window.forgeboard.docker.pull(request));
       if (result.readiness !== null) acceptReadiness(request, result.readiness);
       setNotice(
         result.outcome === 'cancelled'
           ? 'Download cancelled — nothing was downloaded.'
-          : 'Download finished, and the check ran again.',
+          : 'Default image ready.',
       );
+      setSyncAttempt((count) => count + 1);
     });
   }
 
@@ -153,16 +192,36 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
             </button>
           </span>
         </div>
-        <label>
-          Container image
-          <input
-            name="docker-container-image"
-            value={props.value.dockerImage}
-            disabled={props.disabled || busy !== null}
-            placeholder="registry.example.com/agent:version"
-            onChange={(event) => update({ dockerImage: event.target.value })}
-          />
-        </label>
+        <div className="docker-field">
+          <label htmlFor="docker-container-image">Container image</label>
+          <span className="path-picker">
+            <select
+              id="docker-container-image"
+              name="docker-container-image"
+              value={props.value.dockerImage}
+              disabled={props.disabled || busy !== null}
+              onChange={(event) =>
+                update({
+                  dockerImage: event.target.value,
+                  ...(event.target.value === DEFAULT_DOCKER_SESSION_IMAGE &&
+                  props.value.dockerContainerExecutable.trim() === ''
+                    ? { dockerContainerExecutable: DEFAULT_DOCKER_SESSION_CONTAINER_EXECUTABLE }
+                    : {}),
+                })
+              }
+            >
+              {imageOptions(props.value.dockerImage.trim(), localList)}
+            </select>
+            <button
+              type="button"
+              aria-label="Sync images from Docker"
+              disabled={props.disabled || busy !== null}
+              onClick={() => setSyncAttempt((count) => count + 1)}
+            >
+              Sync
+            </button>
+          </span>
+        </div>
         <label>
           Agent executable inside image
           <input
@@ -176,9 +235,12 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
       </div>
 
       <p className="docker-explanation">
-        The image must already contain this exact agent program — Forgeboard doesn't assume a
-        general image has it installed.
+        Images are synced from your local Docker. The default image ships git and Node and runs
+        agents with npx.
       </p>
+      {localList !== null && !localList.daemonAvailable && (
+        <small className="docker-notice">{localList.reason ?? 'Docker is not running.'}</small>
+      )}
 
       <div className="docker-readiness-actions">
         <button
@@ -193,11 +255,11 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
         <button
           type="button"
           className="button ghost"
-          disabled={props.disabled || configuration === null || busy !== null}
-          onClick={() => void pull()}
+          disabled={props.disabled || busy !== null}
+          onClick={() => void getDefaultImage()}
         >
           <Download size={14} aria-hidden="true" />{' '}
-          {busy === 'pull' ? 'Downloading…' : 'Pull image…'}
+          {busy === 'pull' ? 'Downloading…' : 'Get default image'}
         </button>
         <small>You will be asked to confirm before anything is downloaded.</small>
       </div>
@@ -205,9 +267,7 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
       {configuration === null && (
         <div className="docker-readiness missing" role="status">
           <AlertTriangle size={15} aria-hidden="true" />
-          <span>
-            Enter an image and the full path of the agent program inside it, then run the check.
-          </span>
+          <span>Pick an image, or get the default one, then run the check.</span>
         </div>
       )}
       {configuration !== null && currentEvidence === null && (
@@ -222,6 +282,49 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
       {currentEvidence !== null && <DockerReadinessStatus readiness={currentEvidence.readiness} />}
       {notice !== null && <small className="docker-notice">{notice}</small>}
     </div>
+  );
+}
+
+/**
+ * Select options for the image picker: everything local Docker knows (images, then containers by
+ * their image), plus the default image and the saved value so the select never loses state.
+ */
+function imageOptions(currentImage: string, localList: DockerLocalList | null) {
+  const images = localList?.images ?? [];
+  const containers = localList?.containers ?? [];
+  const known = new Set(images.map((image) => image.reference));
+  return (
+    <>
+      {currentImage === '' && (
+        <option value="" disabled hidden>
+          Choose an image…
+        </option>
+      )}
+      {currentImage !== '' &&
+        currentImage !== DEFAULT_DOCKER_SESSION_IMAGE &&
+        !known.has(currentImage) && <option value={currentImage}>{currentImage}</option>}
+      {!known.has(DEFAULT_DOCKER_SESSION_IMAGE) && (
+        <option value={DEFAULT_DOCKER_SESSION_IMAGE}>
+          {DEFAULT_DOCKER_SESSION_IMAGE} — default
+        </option>
+      )}
+      {images.map((image) => (
+        <option key={image.reference} value={image.reference}>
+          {image.reference === DEFAULT_DOCKER_SESSION_IMAGE
+            ? `${image.reference} — default`
+            : image.reference}
+        </option>
+      ))}
+      {containers.length > 0 && (
+        <optgroup label="Containers">
+          {containers.map((container) => (
+            <option key={`container-${container.name}`} value={container.image}>
+              {container.name} — {container.image}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </>
   );
 }
 

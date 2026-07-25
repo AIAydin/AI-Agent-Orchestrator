@@ -4,7 +4,13 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { checkDockerReadiness, pullDockerImage } from './docker-runtime.js';
+import {
+  checkDockerReadiness,
+  listLocalDocker,
+  parseDockerContainerListOutput,
+  parseDockerImageListOutput,
+  pullDockerImage,
+} from './docker-runtime.js';
 
 const roots: string[] = [];
 
@@ -108,6 +114,59 @@ describe('main-owned Docker runtime', () => {
   });
 });
 
+describe('local Docker listing', () => {
+  it('parses image rows and drops untagged, duplicate, or hostile references', () => {
+    const output = [
+      JSON.stringify({ Repository: 'node', Tag: '22-bookworm', ID: 'sha256:aa' }),
+      JSON.stringify({ Repository: '<none>', Tag: '<none>', ID: 'sha256:bb' }),
+      JSON.stringify({ Repository: 'node', Tag: '22-bookworm', ID: 'sha256:aa' }),
+      JSON.stringify({ Repository: 'evil image', Tag: 'latest', ID: 'sha256:cc' }),
+      'not json at all',
+      JSON.stringify({ Repository: 'acme/agents', Tag: '1', ID: 'sha256:dd' }),
+    ].join('\n');
+
+    expect(parseDockerImageListOutput(output)).toEqual([
+      { reference: 'node:22-bookworm', imageId: 'sha256:aa' },
+      { reference: 'acme/agents:1', imageId: 'sha256:dd' },
+    ]);
+  });
+
+  it('parses container rows and skips ones without a usable image reference', () => {
+    const output = [
+      JSON.stringify({ Names: 'dev-box', Image: 'node:22-bookworm', State: 'running' }),
+      JSON.stringify({ Names: 'broken', Image: 'has space', State: 'exited' }),
+      JSON.stringify({ Names: '', Image: 'node:22-bookworm', State: 'exited' }),
+      JSON.stringify({ Names: 'old', Image: 'acme/agents:1', State: 'exited' }),
+    ].join('\n');
+
+    expect(parseDockerContainerListOutput(output)).toEqual([
+      { name: 'dev-box', image: 'node:22-bookworm', state: 'running' },
+      { name: 'old', image: 'acme/agents:1', state: 'exited' },
+    ]);
+  });
+
+  it('lists images and containers from the daemon with literal argv', async () => {
+    if (process.platform === 'win32') return;
+    const fixture = await dockerFixture('ready');
+    const list = await listLocalDocker(fixture.executable);
+
+    expect(list.daemonAvailable).toBe(true);
+    expect(list.images).toEqual([{ reference: 'node:22-bookworm', imageId: 'sha256:ee' }]);
+    expect(list.containers).toEqual([
+      { name: 'dev-box', image: 'node:22-bookworm', state: 'running' },
+    ]);
+    const argumentsLog = await readFile(fixture.log, 'utf8');
+    expect(argumentsLog).toContain(['images', '--format', '{{json .}}'].join('\n'));
+    expect(argumentsLog).toContain(['ps', '--all', '--format', '{{json .}}'].join('\n'));
+  });
+
+  it('degrades to an empty reasoned list when the executable is missing', async () => {
+    const list = await listLocalDocker('/missing/docker-binary');
+    expect(list).toMatchObject({ daemonAvailable: false, images: [], containers: [] });
+    expect(list.reason).toBeTruthy();
+  });
+});
+
 async function dockerFixture(mode: 'ready' | 'missing-agent' | 'timeout'): Promise<{
   executable: string;
   log: string;
@@ -140,6 +199,14 @@ if [ "$1" = "run" ]; then
 fi
 if [ "$1" = "pull" ]; then
   printf 'downloaded'
+  exit 0
+fi
+if [ "$1" = "images" ]; then
+  printf '{"Repository":"node","Tag":"22-bookworm","ID":"sha256:ee"}\\n'
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  printf '{"Names":"dev-box","Image":"node:22-bookworm","State":"running"}\\n'
   exit 0
 fi
 if [ "$1" = "rm" ]; then

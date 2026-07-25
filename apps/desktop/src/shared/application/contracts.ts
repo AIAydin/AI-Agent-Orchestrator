@@ -1114,6 +1114,7 @@ export const IPC_CHANNELS = Object.freeze({
   storageCheckIntegrity: 'storage:check-integrity',
   dockerCheck: 'docker:check',
   dockerPull: 'docker:pull',
+  dockerListLocal: 'docker:list-local',
   runsList: 'runs:list',
   runsGet: 'runs:get',
   runsPrepare: 'runs:prepare',

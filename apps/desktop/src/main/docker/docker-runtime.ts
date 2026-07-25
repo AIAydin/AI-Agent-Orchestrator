@@ -7,8 +7,13 @@ import path from 'node:path';
 import { detectDockerRuntime } from '@forgeboard/agent-adapters';
 
 import {
+  DockerImageReferenceSchema,
+  DockerLocalListSchema,
   DockerReadinessInputSchema,
   DockerReadinessSchema,
+  type DockerLocalContainer,
+  type DockerLocalImage,
+  type DockerLocalList,
   type DockerReadiness,
   type DockerReadinessInput,
   type DockerReadinessStatus,
@@ -18,14 +23,18 @@ const DEFAULT_CHECK_TIMEOUT_MS = 5_000;
 const DEFAULT_PULL_TIMEOUT_MS = 10 * 60_000;
 const MAX_CHECK_OUTPUT = 16_384;
 const MAX_PULL_OUTPUT = 131_072;
+const MAX_LIST_OUTPUT = 262_144;
+const MAX_LOCAL_LIST_ENTRIES = 256;
 
-interface CommandResult {
+export interface DockerCommandResult {
   exitCode: number | null;
   stdout: string;
   stderr: string;
   timedOut: boolean;
   reason?: string;
 }
+
+type CommandResult = DockerCommandResult;
 
 interface RuntimeLimits {
   checkTimeoutMs?: number;
@@ -125,7 +134,7 @@ export async function checkDockerReadiness(
   }
 
   const containerName = limits.probeContainerName ?? `forgeboard-readiness-${randomUUID()}`;
-  const probe = await runBoundedCommand(
+  const probe = await runBoundedDockerCommand(
     executable,
     [
       'run',
@@ -203,7 +212,7 @@ export async function pullDockerImage(
 ): Promise<DockerPullExecution> {
   const configuration = DockerReadinessInputSchema.parse(input);
   const executable = await resolveDockerExecutable(configuration.dockerExecutable);
-  const result = await runBoundedCommand(
+  const result = await runBoundedDockerCommand(
     executable,
     ['pull', configuration.image],
     boundedTimeout(limits.pullTimeoutMs, DEFAULT_PULL_TIMEOUT_MS, 1_000, DEFAULT_PULL_TIMEOUT_MS),
@@ -221,6 +230,110 @@ export async function pullDockerImage(
     image: configuration.image,
     output: safeText([result.stdout, result.stderr].filter(Boolean).join(' '), MAX_PULL_OUTPUT),
   };
+}
+
+/**
+ * Enumerates local images and containers for the Settings picker. Read-only: it never starts a
+ * container or reaches the network, so an unavailable daemon degrades to an empty, reasoned list.
+ */
+export async function listLocalDocker(
+  configuredExecutable: string,
+  limits: RuntimeLimits = {},
+  beforeCommand?: BeforeDockerCommand,
+): Promise<DockerLocalList> {
+  const timeoutMs = boundedTimeout(limits.checkTimeoutMs, DEFAULT_CHECK_TIMEOUT_MS, 100, 30_000);
+  let executable: string;
+  try {
+    executable = await resolveDockerExecutable(configuredExecutable);
+  } catch (error) {
+    return unavailableLocalList(error);
+  }
+  const images = await runBoundedDockerCommand(
+    executable,
+    ['images', '--format', '{{json .}}'],
+    timeoutMs,
+    MAX_LIST_OUTPUT,
+    beforeCommand,
+  );
+  if (images.exitCode !== 0) {
+    const detail = images.reason ?? safeText(images.stderr);
+    return unavailableLocalList(
+      new Error(detail === '' ? 'Docker is not running. Start it and sync again.' : detail),
+    );
+  }
+  const containers = await runBoundedDockerCommand(
+    executable,
+    ['ps', '--all', '--format', '{{json .}}'],
+    timeoutMs,
+    MAX_LIST_OUTPUT,
+    beforeCommand,
+  );
+  return DockerLocalListSchema.parse({
+    daemonAvailable: true,
+    images: parseDockerImageListOutput(images.stdout),
+    containers: containers.exitCode === 0 ? parseDockerContainerListOutput(containers.stdout) : [],
+  });
+}
+
+/** Parses `docker images --format '{{json .}}'` lines, skipping untagged or malformed rows. */
+export function parseDockerImageListOutput(output: string): DockerLocalImage[] {
+  const images: DockerLocalImage[] = [];
+  const seen = new Set<string>();
+  for (const row of jsonLines(output)) {
+    if (images.length >= MAX_LOCAL_LIST_ENTRIES) break;
+    const repository = typeof row['Repository'] === 'string' ? row['Repository'] : '';
+    const tag = typeof row['Tag'] === 'string' ? row['Tag'] : '';
+    if (repository === '' || repository === '<none>' || tag === '' || tag === '<none>') continue;
+    const reference = DockerImageReferenceSchema.safeParse(`${repository}:${tag}`);
+    if (!reference.success || seen.has(reference.data)) continue;
+    seen.add(reference.data);
+    const id = typeof row['ID'] === 'string' ? safeText(row['ID'], 512) : '';
+    images.push({ reference: reference.data, ...(id === '' ? {} : { imageId: id }) });
+  }
+  return images;
+}
+
+/** Parses `docker ps --all --format '{{json .}}'` lines, skipping malformed rows. */
+export function parseDockerContainerListOutput(output: string): DockerLocalContainer[] {
+  const containers: DockerLocalContainer[] = [];
+  for (const row of jsonLines(output)) {
+    if (containers.length >= MAX_LOCAL_LIST_ENTRIES) break;
+    const name = typeof row['Names'] === 'string' ? safeText(row['Names'], 256) : '';
+    const state = typeof row['State'] === 'string' ? safeText(row['State'], 64) : '';
+    const image = DockerImageReferenceSchema.safeParse(
+      typeof row['Image'] === 'string' ? row['Image'] : '',
+    );
+    if (name === '' || state === '' || !image.success) continue;
+    containers.push({ name, image: image.data, state });
+  }
+  return containers;
+}
+
+function jsonLines(output: string): Record<string, unknown>[] {
+  const rows: Record<string, unknown>[] = [];
+  for (const line of output.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed === '') continue;
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        rows.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // A truncated or non-JSON line is skipped rather than failing the whole listing.
+    }
+  }
+  return rows;
+}
+
+function unavailableLocalList(error: unknown): DockerLocalList {
+  const reason = safeText(error instanceof Error ? error.message : String(error));
+  return DockerLocalListSchema.parse({
+    daemonAvailable: false,
+    images: [],
+    containers: [],
+    ...(reason === '' ? {} : { reason }),
+  });
 }
 
 function readinessResult(
@@ -263,18 +376,18 @@ async function removeProbeContainer(
   name: string,
   beforeCommand?: BeforeDockerCommand,
 ): Promise<void> {
-  await runBoundedCommand(executable, ['rm', '--force', name], 2_000, 2_048, beforeCommand).catch(
+  await runBoundedDockerCommand(executable, ['rm', '--force', name], 2_000, 2_048, beforeCommand).catch(
     () => undefined,
   );
 }
 
-async function runBoundedCommand(
+export async function runBoundedDockerCommand(
   executable: string,
   arguments_: readonly string[],
   timeoutMs: number,
   maximumOutput: number,
   beforeCommand?: BeforeDockerCommand,
-): Promise<CommandResult> {
+): Promise<DockerCommandResult> {
   await beforeCommand?.();
   return await new Promise((resolve) => {
     let stdout = '';
