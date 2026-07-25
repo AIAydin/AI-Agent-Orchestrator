@@ -427,6 +427,7 @@ function createPipeRuntime(plan: PreparedAgentLaunch, beforeSpawn?: () => void):
     env: plan.environment,
     shell: false,
     stdio: ['pipe', 'pipe', 'pipe'],
+    windowsVerbatimArguments: launch.windowsVerbatimArguments,
     windowsHide: true,
     detached: shouldCreateProcessGroup,
   });
@@ -500,7 +501,9 @@ async function createPtyRuntime(
     plan.environment,
   );
   beforeSpawn?.();
-  const terminal = pty.spawn(launch.executable, [...launch.arguments], {
+  const terminalArguments =
+    launch.windowsVerbatimArguments === true ? launch.arguments.join(' ') : [...launch.arguments];
+  const terminal = pty.spawn(launch.executable, terminalArguments, {
     cwd: plan.disclosure.cwd,
     env: plan.environment,
     name: 'xterm-256color',
@@ -990,7 +993,11 @@ async function runExecutableProbe(
   return await new Promise((resolve) => {
     let output = '';
     let settled = false;
-    let launch: { readonly executable: string; readonly arguments: readonly string[] };
+    let launch: {
+      readonly executable: string;
+      readonly arguments: readonly string[];
+      readonly windowsVerbatimArguments?: true;
+    };
     try {
       launch = resolveWindowsBatchLaunch(executable, arguments_, process.env);
     } catch (error) {
@@ -1005,6 +1012,7 @@ async function runExecutableProbe(
       env: process.env,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsVerbatimArguments: launch.windowsVerbatimArguments,
       windowsHide: true,
     });
     const finish = (result: ExecutableProbeResult): void => {
@@ -1053,7 +1061,11 @@ export function resolveWindowsBatchLaunch(
   arguments_: readonly string[],
   environment: NodeJS.ProcessEnv,
   platform: NodeJS.Platform = process.platform,
-): { readonly executable: string; readonly arguments: readonly string[] } {
+): {
+  readonly executable: string;
+  readonly arguments: readonly string[];
+  readonly windowsVerbatimArguments?: true;
+} {
   if (platform !== 'win32' || !/\.(?:bat|cmd)$/iu.test(executable)) {
     return { executable, arguments: arguments_ };
   }
@@ -1084,6 +1096,9 @@ export function resolveWindowsBatchLaunch(
   return {
     executable: commandProcessor,
     arguments: ['/d', '/s', '/v:off', '/c', commandLine],
+    // Node's default Windows argv encoder follows the C runtime rules. cmd.exe uses different
+    // quote parsing, so pass this already-validated command line without a second escaping layer.
+    windowsVerbatimArguments: true,
   };
 }
 

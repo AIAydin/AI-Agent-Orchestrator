@@ -53,7 +53,11 @@ export const runProviderAuthProcess: ProviderAuthProcessRunner = async (command,
     const statusBytes: Record<'stdout' | 'stderr', number> = { stdout: 0, stderr: 0 };
     let forceKillTimer: NodeJS.Timeout | undefined;
     let child!: ChildProcess;
-    let launch: { readonly executable: string; readonly arguments: readonly string[] };
+    let launch: {
+      readonly executable: string;
+      readonly arguments: readonly string[];
+      readonly windowsVerbatimArguments?: true;
+    };
 
     const finish = (result: ProviderAuthProcessResult): void => {
       if (settled) return;
@@ -88,6 +92,7 @@ export const runProviderAuthProcess: ProviderAuthProcessRunner = async (command,
         cwd: command.cwd,
         env: { ...command.environment },
         shell: false,
+        windowsVerbatimArguments: launch.windowsVerbatimArguments,
         windowsHide: true,
         detached: process.platform !== 'win32',
         stdio: ['ignore', 'pipe', 'pipe'],

@@ -413,11 +413,14 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
     [
       'node:fs#fsyncSync',
       'node:fs#openSync',
-      'node:fs#renameSync',
       'node:fs#unlinkSync',
       'node:fs/promises#open',
       'node:fs/promises#unlink',
     ],
+  ),
+  'packages/git-engine/src/repository/remotes/windows-replace.ts': entry(
+    'reviewed-domain-operation',
+    ['node:fs/promises#rename'],
   ),
   'packages/git-engine/src/repository/service.ts': entry('reviewed-domain-operation', [
     'node:fs/promises#open',

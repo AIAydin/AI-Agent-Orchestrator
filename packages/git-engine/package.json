@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@forgeboard/core": "workspace:*",
-    "@forgeboard/windows-durable-fs": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
