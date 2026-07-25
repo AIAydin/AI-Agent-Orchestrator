@@ -7,7 +7,7 @@ import { unwrap } from '../../../lib/ipc.js';
 import { trapModalFocus } from '../../../lib/modal-focus.js';
 import type { PaletteAction } from '../../shell/CommandPalette.js';
 import { joinVoiceChunks, resampleVoiceAudio } from './audio.js';
-import { matchVoiceAction, type VoiceActionMatch } from './action-matcher.js';
+import { interpretVoiceCommand, type VoiceActionMatch } from './action-matcher.js';
 
 interface ActiveRecording {
   readonly context: AudioContext;
@@ -37,6 +37,7 @@ export function VoiceCommandControl({
   const [state, setState] = useState<'idle' | 'requesting' | 'recording' | 'transcribing'>('idle');
   const [transcript, setTranscript] = useState('');
   const [match, setMatch] = useState<VoiceActionMatch | null>(null);
+  const [guesses, setGuesses] = useState<readonly PaletteAction[]>([]);
   const [autoRan, setAutoRan] = useState(false);
   const recording = useRef<ActiveRecording | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
@@ -51,6 +52,7 @@ export function VoiceCommandControl({
       event.preventDefault();
       setTranscript('');
       setMatch(null);
+      setGuesses([]);
       setAutoRan(false);
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -61,6 +63,7 @@ export function VoiceCommandControl({
   async function start(): Promise<void> {
     setTranscript('');
     setMatch(null);
+    setGuesses([]);
     setAutoRan(false);
     let stream: MediaStream | null = null;
     let context: AudioContext | null = null;
@@ -130,16 +133,20 @@ export function VoiceCommandControl({
     setState('transcribing');
     try {
       const result = unwrap(await window.forgeboard.voice.transcribe({ samples }));
-      const nextMatch =
-        matchVoiceAction(result.text, actions) ?? resolveParameterizedAction?.(result.text) ?? null;
+      const parameterized = resolveParameterizedAction?.(result.text) ?? null;
+      const interpretation =
+        parameterized !== null
+          ? { match: parameterized, guesses: [] }
+          : interpretVoiceCommand(result.text, actions);
       setTranscript(result.text);
-      setMatch(nextMatch);
+      setMatch(interpretation.match);
+      setGuesses(interpretation.guesses);
       if (
-        nextMatch !== null &&
-        nextMatch.action.voiceSafety === 'safe' &&
+        interpretation.match !== null &&
+        interpretation.match.action.voiceSafety === 'safe' &&
         settings.voiceAutoRunSafeActions
       ) {
-        nextMatch.action.run();
+        interpretation.match.action.run();
         setAutoRan(true);
       }
     } catch (error) {
@@ -152,6 +159,7 @@ export function VoiceCommandControl({
   function closeResult(): void {
     setTranscript('');
     setMatch(null);
+    setGuesses([]);
     setAutoRan(false);
   }
 
@@ -207,7 +215,24 @@ export function VoiceCommandControl({
             <blockquote>“{transcript}”</blockquote>
             {match === null ? (
               <div className="inline-notice" role="alert">
-                <p>No registered Forgeboard action matched that phrase.</p>
+                <p>{guesses.length > 0 ? 'No match. Did you mean:' : 'No matching action.'}</p>
+                {guesses.length > 0 && (
+                  <div className="voice-guess-list">
+                    {guesses.map((guess) => (
+                      <button
+                        key={guess.id}
+                        className="button ghost"
+                        type="button"
+                        onClick={() => {
+                          guess.run();
+                          closeResult();
+                        }}
+                      >
+                        {guess.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <button className="button ghost" type="button" onClick={onOpenSettings}>
                   <Settings2 size={14} aria-hidden="true" /> Voice settings
                 </button>
