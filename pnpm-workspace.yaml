@@ -4,9 +4,11 @@ packages:
 
 overrides:
   # Remove once the upstream ranges include the advisory-fixed versions.
+  brace-expansion: 5.0.8
   sharp: 0.35.0
   tar: 7.5.21
   typescript: 5.8.3
+  vite: 6.4.3
 
 allowBuilds:
   '@tailwindcss/oxide': true
@@ -24,7 +26,7 @@ allowBuilds:
 catalog:
   '@hocuspocus/provider': 3.4.4
   '@hocuspocus/server': 3.4.4
-  '@playwright/test': 1.53.2
+  '@playwright/test': 1.55.1
   '@tailwindcss/vite': 4.1.11
   '@tanstack/react-query': 5.81.5
   '@testing-library/jest-dom': 6.6.3
@@ -35,7 +37,7 @@ catalog:
   '@xterm/addon-fit': 0.10.0
   '@xterm/xterm': 5.5.0
   '@xyflow/react': 12.8.2
-  electron: 36.5.0
+  electron: 39.8.5
   electron-builder: 26.15.3
   electron-vite: 3.1.0
   express: 5.1.0
@@ -47,11 +49,14 @@ catalog:
   react-dom: 19.1.0
   tailwindcss: 4.1.11
   tsup: 8.5.0
-  vite: 6.3.5
-  vitest: 3.2.4
+  vite: 6.4.3
+  vitest: 3.2.6
   yjs: 13.6.27
   zod: 3.25.67
   zustand: 5.0.6
 
 minimumReleaseAgeExclude:
   - pnpm@11.15.1
+
+patchedDependencies:
+  brace-expansion@5.0.8: patches/brace-expansion@5.0.8.patch

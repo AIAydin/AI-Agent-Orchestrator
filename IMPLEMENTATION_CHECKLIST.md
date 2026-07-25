@@ -2001,11 +2001,14 @@ unchecked when only a subset of their required behavior has proof.
   Dependabot alerts/security updates and automated fixes, and private vulnerability reporting.
   Public documentation no longer exposes personal checkout paths or describes the repository as
   private. The one Stripe-shaped redaction fixture now constructs its test value at runtime, and
-  GitHub has zero open secret alerts. Workspace overrides move Sharp to 0.35.0 and tar to 7.5.21;
-  the live production audit reports zero advisories. Structure (1,473 files), controls (858 files),
-  formatting, lint, typecheck, 3,139 unit tests, 331/332 integration tests together plus the
-  load-sensitive 19/19 file in isolation, three docs tests, seven quality tests, and all production
-  builds passed.
+  GitHub has zero open secret alerts. Electron, Playwright, Vite, Vitest, Sharp, tar, and
+  brace-expansion now resolve to patched versions; a pnpm-managed compatibility patch preserves the
+  callable CommonJS API required by legacy minimatch consumers. The complete 875-package audit
+  reports zero advisories. Structure (1,473 files), controls (858 files), formatting, lint,
+  typecheck, all 3,139 unit tests, all 332 integration tests, three docs tests, seven quality tests,
+  every production build, and the Electron 39 text-node create/edit/rotate/relaunch E2E scenario
+  passed. The wider E2E suite still contains pre-existing stale readiness and canvas expectations;
+  its representative keyboard-readiness failure reproduces unchanged on pristine `main`.
 - 2026-07-25: editing an external Preview node address now navigates its already-connected managed
   Chrome tab through the existing validated browser-companion open path instead of leaving the tab
   on its previous page. The focused Preview node suite passed all 30 tests, followed by affected
