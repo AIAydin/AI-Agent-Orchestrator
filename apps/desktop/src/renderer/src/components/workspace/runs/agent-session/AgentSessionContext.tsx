@@ -41,19 +41,6 @@ export interface FileTargetEntry {
 }
 
 /**
- * Canvas file nodes that reference a project image, so the note-image face can
- * reuse an image already placed on the canvas (mirrors the inspector's list).
- */
-export interface CanvasImageNodeEntry {
-  readonly id: string;
-  readonly title: string;
-  readonly projectId: string;
-  readonly relativePath: string;
-  readonly missing: boolean;
-  readonly lastKnownHash?: string;
-}
-
-/**
  * Workspace services exposed to components rendered inside canvas nodes.
  * React Flow nodes can't receive props directly from Workspace, so
  * in-canvas components read this context instead.
@@ -75,7 +62,6 @@ export interface AgentSessionContextValue {
   /** Attaches a whiteboard's visual specification to an Agent as explicit Context. */
   attachWhiteboardContext(sourceNodeId: string, targetNodeId: string): string;
   readonly nodeRoster: readonly CanvasNodeRosterEntry[];
-  readonly canvasImageNodes: readonly CanvasImageNodeEntry[];
   readonly checkProducers: readonly CheckProducerEntry[];
   readonly fileTargets: readonly FileTargetEntry[];
   openGitPrReadiness(runId: string): void;

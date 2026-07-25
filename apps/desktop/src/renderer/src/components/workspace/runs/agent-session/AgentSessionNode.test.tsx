@@ -142,7 +142,6 @@ function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentS
     requestDeleteNode: spies.requestDeleteNode,
     attachWhiteboardContext: spies.attachWhiteboardContext,
     nodeRoster: [],
-    canvasImageNodes: [],
     checkProducers: [],
     fileTargets: [],
     openGitPrReadiness: spies.openGitPrReadiness,

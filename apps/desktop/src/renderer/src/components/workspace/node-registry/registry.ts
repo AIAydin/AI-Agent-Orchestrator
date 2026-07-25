@@ -16,6 +16,7 @@ import {
   PanelTop,
   Play,
   Smartphone,
+  StickyNote,
   TerminalSquare,
   TestTube2,
   Workflow,
@@ -134,7 +135,7 @@ const BUILT_INS: readonly Omit<NodeTypeDefinition, 'behaviors' | 'source' | 'key
   ),
   builtin('diagram', 'Diagram', 'Turn Mermaid text into a diagram', '#7888d8', Network),
   builtin('whiteboard', 'Whiteboard', 'Sketch and add notes freely', '#c482aa', PanelTop),
-  builtin('note-image', 'Note / image', 'A quick note or picture', '#c5a75f', Image),
+  builtin('note-image', 'Note', 'A quick note', '#c5a75f', StickyNote),
   builtin('group-frame', 'Group', 'Collect related nodes in one area', '#82909b', Frame),
 ];
 

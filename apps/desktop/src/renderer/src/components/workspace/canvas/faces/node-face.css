@@ -505,33 +505,6 @@ svg.whiteboard-face-canvas {
   justify-content: space-between;
   gap: 6px;
 }
-.note-image-face-grid {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap: 8px;
-}
-.note-image-face-grid li {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.note-image-face-grid img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-.note-image-face-grid code {
-  font-size: var(--text-2xs);
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .file-node-face .node-face-body {
   padding: 0;
 }
@@ -622,70 +595,6 @@ svg.whiteboard-face-canvas {
 }
 .group-frame-face-hint {
   color: var(--text-faint);
-}
-.note-image-face-reuse {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.note-image-face-reuse label {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-}
-.note-image-face-reuse label span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.note-image-face-reuse small {
-  color: var(--text-faint);
-  white-space: nowrap;
-}
-.note-image-face-editors {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.note-image-face-editors li {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.note-image-face-editors code {
-  font-size: var(--text-2xs);
-  color: var(--text-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.note-image-face-missing {
-  color: #c9964f;
-}
-.note-image-face-actions {
-  display: flex;
-  gap: 6px;
-}
-.note-image-face-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-  cursor: pointer;
-}
-.note-image-face-actions button:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 .whiteboard-face-element,
 .whiteboard-face-context {
