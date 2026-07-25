@@ -118,7 +118,7 @@
 
 .help-articles summary {
   display: grid;
-  grid-template-columns: 30px 1fr;
+  grid-template-columns: 30px 1fr auto;
   gap: 9px;
   align-items: center;
   padding: 11px;
@@ -178,6 +178,26 @@
 
 .help-articles li + li {
   margin-top: 6px;
+}
+
+.help-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.help-pagination > span {
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+}
+
+.help-pagination .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-md);
 }
 
 .help-empty {
