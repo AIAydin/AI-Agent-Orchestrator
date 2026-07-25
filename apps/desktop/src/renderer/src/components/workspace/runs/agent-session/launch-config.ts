@@ -59,7 +59,9 @@ export function agentSessionLaunch(
       enforced = true;
     }
   }
-  if (profile === 'worktree-write') enforced = true;
+  // worktree-write runs in a managed worktree; project-write runs right in the project
+  // directory by design — both do exactly what their labels promise.
+  if (profile === 'worktree-write' || profile === 'project-write') enforced = true;
   return {
     configuration: {
       executable,
@@ -73,7 +75,11 @@ export function agentSessionLaunch(
               adapterId: agent.id,
             },
           }
-        : {}),
+        : profile === 'project-write'
+          ? // Runs right in the project directory; main reconstructs and authorizes the launch
+            // from the persisted node, so no native confirmation interrupts the zero-click start.
+            { workspace: { kind: 'project' as const } }
+          : {}),
       ...(peers !== null ? { peerProvisionId: peers.provisionId } : {}),
     },
     profileNote: enforced

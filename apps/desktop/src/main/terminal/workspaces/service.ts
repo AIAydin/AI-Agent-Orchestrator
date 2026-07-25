@@ -18,8 +18,13 @@ import {
 import { synchronizeCanvasDocument } from '../../../shared/canvas/adapter.js';
 import type { LocalStore, StoredRunRecord } from '../../storage.js';
 import { assertPersistedAgentNodeMutable } from '../../runs/context/persisted-agent-context.js';
+import {
+  environmentWithLoginShellPath,
+  loginShellPath,
+} from '../login-shell-path.js';
 import type {
   AutomaticTerminalAgentLaunch,
+  AutomaticTerminalProjectLaunch,
   PreparedTerminalWorkspace,
   TerminalWorkspaceManager,
 } from './contracts.js';
@@ -63,11 +68,11 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     readonly nodeId: string;
     readonly adapterId: string;
   }): Promise<PreparedTerminalWorkspace> {
-    const configuration = this.#persistedAgentConfiguration(
-      input.project.id,
-      input.nodeId,
-      input.adapterId,
-    );
+    const configuration = this.#persistedAgentConfiguration(input.project.id, input.nodeId, {
+      expectedAdapterId: input.adapterId,
+      profiles: ['worktree-write'],
+      profileLabel: '“Write in a worktree”',
+    });
     const currentProject = this.store.getProject(input.project.id);
     if (
       currentProject === undefined ||
@@ -150,6 +155,7 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
         kind: 'managed-agent-worktree',
         runId,
         branch: provisioned.ownership.branch,
+        directory: provisioned.ownership.worktreePath,
       },
     };
     this.#safeAudit('provision', 'allowed', {
@@ -168,11 +174,11 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     workspace: PreparedTerminalWorkspace,
   ): Promise<AutomaticTerminalAgentLaunch | null> {
     const record = this.#boundRun(workspace);
-    const configuration = this.#persistedAgentConfiguration(
-      record.projectId,
-      record.nodeId,
-      record.adapterId,
-    );
+    const configuration = this.#persistedAgentConfiguration(record.projectId, record.nodeId, {
+      expectedAdapterId: record.adapterId,
+      profiles: ['worktree-write'],
+      profileLabel: '“Write in a worktree”',
+    });
     this.#assertRecordedConfiguration(record, configuration);
     const manifest = getBuiltInAgentManifest(record.adapterId);
     if (manifest === undefined) return null;
@@ -191,6 +197,8 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
         ? {}
         : { executable: executableOverride }),
       cwd: workspace.rootPath,
+      // The user's login-shell PATH resolves the newest installed CLI, not the stale GUI PATH.
+      environment: environmentWithLoginShellPath(process.env, await loginShellPath()),
     });
     if (!location.available || location.executable === null) {
       throw new Error(
@@ -198,11 +206,11 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       );
     }
 
-    const currentConfiguration = this.#persistedAgentConfiguration(
-      record.projectId,
-      record.nodeId,
-      record.adapterId,
-    );
+    const currentConfiguration = this.#persistedAgentConfiguration(record.projectId, record.nodeId, {
+      expectedAdapterId: record.adapterId,
+      profiles: ['worktree-write'],
+      profileLabel: '“Write in a worktree”',
+    });
     this.#assertRecordedConfiguration(record, currentConfiguration);
     const currentOverride = this.getSettings().agentExecutableOverrides[record.adapterId]?.trim();
     if ((currentOverride ?? '') !== (executableOverride ?? '')) {
@@ -216,6 +224,76 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     };
   }
 
+  /**
+   * Reconstructs a built-in Agent command for the "Write in current directory" profile from
+   * persisted main-process state: the CLI runs right in the project checkout, no worktree.
+   * `null` keeps custom/extension adapters on the explicit native-review path.
+   */
+  public async resolveAutomaticProjectLaunch(input: {
+    readonly project: Project;
+    readonly nodeId: string;
+  }): Promise<AutomaticTerminalProjectLaunch | null> {
+    const configuration = this.#persistedAgentConfiguration(input.project.id, input.nodeId, {
+      profiles: ['project-write'],
+      profileLabel: '“Write in current directory”',
+    });
+    const currentProject = this.store.getProject(input.project.id);
+    if (
+      currentProject === undefined ||
+      currentProject.missing ||
+      currentProject.path !== input.project.path
+    ) {
+      throw new Error('The selected Agent project changed before the session started.');
+    }
+    const manifest = getBuiltInAgentManifest(configuration.adapterId);
+    if (manifest === undefined) return null;
+
+    const arguments_ = builtInAgentSessionArguments(
+      configuration.adapterId,
+      configuration.model,
+      'project-write',
+    );
+    if (arguments_ === null) return null;
+
+    const settings = this.getSettings();
+    const executableOverride = settings.agentExecutableOverrides[configuration.adapterId]?.trim();
+    const location = await locateAgentExecutable(manifest, {
+      ...(executableOverride === undefined || executableOverride === ''
+        ? {}
+        : { executable: executableOverride }),
+      cwd: currentProject.path,
+      // The user's login-shell PATH resolves the newest installed CLI, not the stale GUI PATH.
+      environment: environmentWithLoginShellPath(process.env, await loginShellPath()),
+    });
+    if (!location.available || location.executable === null) {
+      throw new Error(
+        `${manifest.name} is not available: ${location.reason ?? 'executable not found'}`,
+      );
+    }
+
+    // Re-read after the async gap so the launch always reflects the currently saved node.
+    const currentConfiguration = this.#persistedAgentConfiguration(input.project.id, input.nodeId, {
+      expectedAdapterId: configuration.adapterId,
+      profiles: ['project-write'],
+      profileLabel: '“Write in current directory”',
+    });
+    if (currentConfiguration.model !== configuration.model) {
+      throw new Error('The saved Agent model changed. Save and start the session again.');
+    }
+    const currentOverride =
+      this.getSettings().agentExecutableOverrides[configuration.adapterId]?.trim();
+    if ((currentOverride ?? '') !== (executableOverride ?? '')) {
+      throw new Error('The saved Agent executable changed. Save and start the session again.');
+    }
+    return {
+      executable: location.executable,
+      arguments: arguments_,
+      cwdRelative: '.',
+      environmentVariableNames: [],
+      adapterId: configuration.adapterId,
+    };
+  }
+
   public async assertCurrent(
     workspace: PreparedTerminalWorkspace,
     project: Project,
@@ -223,7 +301,11 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     const configuration = this.#persistedAgentConfiguration(
       project.id,
       workspace.ownership.taskId ?? '',
-      workspace.ownership.agentId,
+      {
+        expectedAdapterId: workspace.ownership.agentId,
+        profiles: ['worktree-write'],
+        profileLabel: '“Write in a worktree”',
+      },
     );
     this.#assertRecordedConfiguration(this.#boundRun(workspace), configuration);
     const currentProject = this.store.getProject(project.id);
@@ -372,9 +454,13 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
   #persistedAgentConfiguration(
     projectId: string,
     nodeId: string,
-    adapterId: string,
-  ): { readonly model: string | null } {
-    if (nodeId === '') throw new Error('The managed Agent worktree has no owning node.');
+    options: {
+      readonly expectedAdapterId?: string;
+      readonly profiles: readonly string[];
+      readonly profileLabel: string;
+    },
+  ): { readonly model: string | null; readonly adapterId: string } {
+    if (nodeId === '') throw new Error('The managed Agent session has no owning node.');
     assertPersistedAgentNodeMutable(this.store, projectId, nodeId);
     const stored = this.store.loadCanvas(projectId);
     if (stored === undefined) throw new Error('Save this canvas before starting an Agent session.');
@@ -384,20 +470,23 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     }
     const agent = synchronized.document.canonical.nodes.find((node) => node.id === nodeId);
     if (agent === undefined || agent.type !== 'agent') {
-      throw new Error('A managed Agent worktree requires an exact persisted Agent node.');
+      throw new Error('An Agent session requires an exact persisted Agent node.');
     }
     const settings = this.getSettings();
     const persistedAdapter = agent.data.adapterId ?? settings.defaultAgent;
     const profile = agent.data.permissionProfileId ?? settings.defaultPermissionProfile;
-    if (persistedAdapter !== adapterId) {
+    if (options.expectedAdapterId !== undefined && persistedAdapter !== options.expectedAdapterId) {
       throw new Error('The saved Agent adapter changed. Save and start the session again.');
     }
-    if (profile !== 'worktree-write') {
+    if (!options.profiles.includes(profile)) {
       throw new Error(
-        'The saved Agent no longer selects “Write in a worktree”. Save and start it again.',
+        `The saved Agent no longer selects ${options.profileLabel}. Save and start it again.`,
       );
     }
-    return { model: effectiveAgentModel(agent, settings, persistedAdapter) };
+    return {
+      model: effectiveAgentModel(agent, settings, persistedAdapter),
+      adapterId: persistedAdapter,
+    };
   }
 
   #assertRecordedConfiguration(

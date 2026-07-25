@@ -840,9 +840,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     workflowRevisionFingerprint,
     onError,
   });
+  // The legacy custom CLI stays out of every agent select; built-in and extension agents only.
   const runnableAgents = agents.filter(
     (agent): agent is typeof agent & { id: RunAdapterId } =>
-      agent.installed && isRunAdapterId(agent.id),
+      agent.installed && isRunAdapterId(agent.id) && agent.id !== 'custom',
   );
   const fallbackAdapter = isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'codex';
   const selectedAdapter = selectedNode ? (selectedNode.data.adapterId ?? fallbackAdapter) : 'codex';

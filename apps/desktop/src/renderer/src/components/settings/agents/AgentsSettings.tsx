@@ -333,10 +333,9 @@ export function AgentsSettings({
           >
             <option value="plan-read-only">Plan / read-only</option>
             <option value="worktree-write">Worktree write</option>
+            <option value="project-write">Write in current directory</option>
             <option value="docker-isolated">Docker isolated</option>
-            <option value="custom">Custom</option>
           </select>
-          <small>Set up the Custom profile in the Permissions centre.</small>
         </label>
         <EnvironmentAllowlistEditor
           name="process-environment-allowlist"

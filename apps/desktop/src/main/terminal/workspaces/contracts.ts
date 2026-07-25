@@ -16,6 +16,12 @@ export interface AutomaticTerminalAgentLaunch {
   readonly environmentVariableNames: readonly string[];
 }
 
+/** Automatic launch for a session that runs right in the project directory (no worktree). */
+export interface AutomaticTerminalProjectLaunch extends AutomaticTerminalAgentLaunch {
+  /** Adapter persisted on the owning Agent node — main-resolved, never renderer-supplied. */
+  readonly adapterId: string;
+}
+
 export interface TerminalWorkspaceManager {
   provision(input: {
     readonly project: Project;
@@ -29,6 +35,14 @@ export interface TerminalWorkspaceManager {
   resolveAutomaticAgentLaunch(
     workspace: PreparedTerminalWorkspace,
   ): Promise<AutomaticTerminalAgentLaunch | null>;
+  /**
+   * Reconstructs a built-in Agent command that runs in the project directory itself (the
+   * "Write in current directory" profile). `null` falls back to explicit native review.
+   */
+  resolveAutomaticProjectLaunch?(input: {
+    readonly project: Project;
+    readonly nodeId: string;
+  }): Promise<AutomaticTerminalProjectLaunch | null>;
   assertCurrent(workspace: PreparedTerminalWorkspace, project: Project): Promise<void>;
   markRunning(workspace: PreparedTerminalWorkspace, session: TerminalSessionView): Promise<void>;
   markFinished(workspace: PreparedTerminalWorkspace, session: TerminalSessionView): Promise<void>;
