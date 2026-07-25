@@ -186,6 +186,8 @@ describe('PreviewNodeFace', () => {
     expect(updateNodeData).toHaveBeenCalledWith('n1', {
       previewPort: 5173,
       url: undefined,
+      agentBrowserAccess: false,
+      agentBrowserInteraction: false,
     });
   });
 
@@ -197,6 +199,8 @@ describe('PreviewNodeFace', () => {
     expect(updateNodeData).toHaveBeenCalledWith('n1', {
       previewPort: undefined,
       url: undefined,
+      agentBrowserAccess: false,
+      agentBrowserInteraction: false,
     });
   });
 
@@ -300,6 +304,52 @@ describe('PreviewNodeFace', () => {
     ).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Allow agents to request browser actions'));
     expect(updateNodeData).toHaveBeenCalledWith('n1', {
+      agentBrowserInteraction: false,
+    });
+  });
+
+  it('offers agent observation for localhost previews, actions gated on it', () => {
+    renderFace('web-preview', { previewPort: 5173 });
+    fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+
+    const observe = screen.getByLabelText<HTMLInputElement>(
+      'Let connected agents observe this page',
+    );
+    expect(observe.disabled).toBe(false);
+    expect(
+      screen.getByLabelText<HTMLInputElement>('Allow agents to request browser actions').disabled,
+    ).toBe(true);
+    fireEvent.click(observe);
+    expect(updateNodeData).toHaveBeenCalledWith('n1', {
+      agentBrowserAccess: true,
+    });
+  });
+
+  it('explains what a local page shares and that actions include navigation', () => {
+    renderFace('web-preview', {
+      previewPort: 5173,
+      agentBrowserAccess: true,
+      agentBrowserInteraction: true,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+
+    expect(screen.getByText(/text, DOM outline, console, screenshots/i)).toBeTruthy();
+    expect(screen.getByText(/scrolling and same-app navigation are allowed/i)).toBeTruthy();
+  });
+
+  it('resets agent consent when the preview address changes', () => {
+    renderFace('web-preview', {
+      previewPort: 5173,
+      agentBrowserAccess: true,
+      agentBrowserInteraction: true,
+    });
+    const input = screen.getByLabelText('Preview address');
+    fireEvent.change(input, { target: { value: '4321' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(updateNodeData).toHaveBeenCalledWith('n1', {
+      previewPort: 4321,
+      url: undefined,
+      agentBrowserAccess: false,
       agentBrowserInteraction: false,
     });
   });
@@ -451,6 +501,8 @@ describe('PreviewNodeFace', () => {
       expect(updateNodeData).toHaveBeenCalledWith('n1', {
         previewPort: undefined,
         url: undefined,
+        agentBrowserAccess: false,
+        agentBrowserInteraction: false,
       });
     });
 

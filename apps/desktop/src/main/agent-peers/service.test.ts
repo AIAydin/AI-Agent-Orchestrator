@@ -97,6 +97,9 @@ function createFakePreviewBridge() {
         url: 'https://miro.com/app/board',
       }),
     ),
+    navigate: vi.fn<AgentPeersPreviewBridge['navigate']>(() =>
+      Promise.resolve({ url: 'http://localhost:5173/settings' }),
+    ),
     describeAction: vi.fn<AgentPeersPreviewBridge['describeAction']>(
       (_projectId, _nodeId, action) =>
         Promise.resolve({
@@ -410,6 +413,67 @@ describe('AgentPeersService', () => {
       action,
       'page-version-1',
     );
+  });
+
+  it('navigates only interaction-enabled previews and surfaces safe navigation errors', async () => {
+    const agent = agentNode('agent-a', 'Agent A');
+    const readOnly = previewNode('preview-read-only', 'Read-only board', true);
+    const interactive = previewNode('preview-interactive', 'Interactive board', true, true);
+    setCanvas(
+      [agent, readOnly, interactive],
+      [
+        contextEdge('edge-read-only', agent.id, readOnly.id),
+        contextEdge('edge-interactive', agent.id, interactive.id),
+      ],
+    );
+    const provision = await service.provision(PROJECT_ID, agent.id);
+    const token =
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
+
+    const denied = await fetchJson(`${provision.url}/v1/preview/navigate`, token, {
+      method: 'POST',
+      body: JSON.stringify({ previewId: readOnly.id, url: 'http://localhost:5173/settings' }),
+    });
+    expect(denied.status).toBe(403);
+    expect(denied.body['error']).toBe('preview-interaction-denied');
+    expect(previewBridge.navigate).not.toHaveBeenCalled();
+
+    const navigated = await fetchJson(`${provision.url}/v1/preview/navigate`, token, {
+      method: 'POST',
+      body: JSON.stringify({ previewId: interactive.id, url: 'http://localhost:5173/settings' }),
+    });
+    expect(navigated.status).toBe(200);
+    expect(navigated.body).toEqual({ url: 'http://localhost:5173/settings' });
+    expect(previewBridge.navigate).toHaveBeenCalledWith(
+      PROJECT_ID,
+      interactive.id,
+      'http://localhost:5173/settings',
+    );
+    expect(store.auditEvents).toContainEqual(
+      expect.objectContaining({ action: 'navigate', outcome: 'allowed' }),
+    );
+
+    previewBridge.navigate.mockRejectedValueOnce(new Error('preview-navigation-blocked'));
+    const blocked = await fetchJson(`${provision.url}/v1/preview/navigate`, token, {
+      method: 'POST',
+      body: JSON.stringify({ previewId: interactive.id, url: 'http://localhost:9999/' }),
+    });
+    expect(blocked.status).toBe(409);
+    expect(blocked.body['error']).toBe('preview-navigation-blocked');
+
+    previewBridge.navigate.mockRejectedValueOnce(new Error('ECONNRESET private detail'));
+    const masked = await fetchJson(`${provision.url}/v1/preview/navigate`, token, {
+      method: 'POST',
+      body: JSON.stringify({ previewId: interactive.id, url: 'http://localhost:5173/other' }),
+    });
+    expect(masked.status).toBe(409);
+    expect(masked.body['error']).toBe('preview-action-unavailable');
+
+    const invalid = await fetchJson(`${provision.url}/v1/preview/navigate`, token, {
+      method: 'POST',
+      body: JSON.stringify({ previewId: interactive.id }),
+    });
+    expect(invalid.status).toBe(400);
   });
 
   it('does not execute declined actions or retain typed text in the audit log', async () => {
