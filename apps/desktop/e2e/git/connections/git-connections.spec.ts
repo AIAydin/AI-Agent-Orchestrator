@@ -77,7 +77,10 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-git-connections-e2e-'));
   const sandboxRoot = await realpath(userDataDirectory);
   const localRemotePath = join(sandboxRoot, 'local-backup.git');
-  const fakeGhExecutable = join(sandboxRoot, 'fake-gh.mjs');
+  const fakeGhExecutable = join(
+    sandboxRoot,
+    process.platform === 'win32' ? 'fake-gh.cmd' : 'fake-gh.mjs',
+  );
   const fakeGhStatePath = join(sandboxRoot, 'fake-gh-state.json');
   const fakeGhLogPath = join(sandboxRoot, 'fake-gh.jsonl');
   const environment = preserveEnvironment(['FORGEBOARD_FAKE_GH_STATE', 'FORGEBOARD_FAKE_GH_LOG']);
@@ -250,7 +253,14 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
       });
       expect(nativeDialogText(approved)).toContain(fakeGhExecutable);
       expect(nativeDialogText(approved)).toContain(`${fakeGhExecutable} --version`);
-      await expect(settings.getByText('GitHub CLI ready')).toBeVisible();
+      try {
+        await expect(settings.getByText('GitHub CLI ready')).toBeVisible();
+      } catch (cause) {
+        throw new Error(
+          `The reviewed GitHub CLI did not become ready. Settings: ${JSON.stringify(await settings.textContent())}.`,
+          { cause },
+        );
+      }
       await expect(settings.locator('.git-connections-cli-status')).toContainText('Chosen file');
       expect(await readGhArguments(fakeGhLogPath)).toEqual([['--version']]);
     });

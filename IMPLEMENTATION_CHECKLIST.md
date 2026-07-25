@@ -2022,7 +2022,9 @@ unchecked when only a subset of their required behavior has proof.
   adapter and managed desktop Terminal sessions. Git remote configuration uses read/write staging
   handles for Windows durability flushes plus the existing write-through filesystem authority with
   bounded, identity-revalidated sharing retries for atomic commit and rollback replacement. The five
-  previously failing E2E scenarios passed locally. Structure (1,477 files), controls (860 files),
-  formatting, zero-warning lint, workspace typecheck, all 3,153 unit tests, all 333 integration
-  tests, three docs tests, seven
-  quality tests, and every production build passed.
+  previously failing E2E scenarios passed locally. Reviewed Windows `.cmd`/`.bat` GitHub CLI shims
+  now launch through a metacharacter-rejecting `cmd.exe` boundary while executable identity,
+  validation auditing, and the shell-free native-executable path remain intact; the full Git
+  connections E2E flow passed locally. Structure (1,479 files), controls (861 files), formatting,
+  zero-warning lint, workspace typecheck, all 3,155 unit tests, all 333 integration tests, three
+  docs tests, seven quality tests, and every production build passed.
