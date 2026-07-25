@@ -125,7 +125,13 @@ async function prepareAdapter(
     cwd,
     permissionProfile:
       custom === undefined
-        ? permissionProfile(input.permissionProfile, cwd, input.adapterId !== 'custom')
+        ? permissionProfile(
+            // Headless runs provision a worktree for every writable profile, so a
+            // "Write in current directory" node discloses as worktree-write here.
+            input.permissionProfile === 'project-write' ? 'worktree-write' : input.permissionProfile,
+            cwd,
+            input.adapterId !== 'custom',
+          )
         : providerBaseProfile(manifest, custom, cwd),
     contextAttachments: input.context.attachments,
     ...(configuredModel === undefined || configuredModel === '' ? {} : { model: configuredModel }),
@@ -398,7 +404,10 @@ function positiveContainerIdentity(value: number | undefined): number {
 }
 
 function permissionProfile(
-  requested: Exclude<AgentExecutionRequest['permissionProfile'], 'docker-isolated'>,
+  requested: Exclude<
+    AgentExecutionRequest['permissionProfile'],
+    'docker-isolated' | 'project-write'
+  >,
   cwd: string,
   providerPermissionEnforced = true,
 ): PermissionProfile {

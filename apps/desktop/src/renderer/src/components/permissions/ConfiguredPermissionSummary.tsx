@@ -75,6 +75,8 @@ function builtInSummary(profile: Exclude<PermissionProfile, 'custom'>): string {
       return 'The agent is asked to only read and plan. It starts after you approve the exact launch.';
     case 'worktree-write':
       return 'The agent works in its own worktree. You review changes before they reach the main branch.';
+    case 'project-write':
+      return 'The agent works right in your project folder. Changes land directly in your files.';
     case 'docker-isolated':
       return 'Runs in Docker without admin rights, limited to one worktree, with network and resource limits.';
   }
