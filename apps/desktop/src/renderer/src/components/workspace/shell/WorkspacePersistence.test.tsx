@@ -1070,7 +1070,7 @@ describe('Workspace extension node naming', () => {
     // Distinct, friendly names — never both carrying the raw template displayName.
     expect(new Set(titles).size).toBe(2);
     expect(titles).not.toContain('GitHub PR');
-    expect(titles).toEqual(['Hermes', 'Atlas']);
+    expect(titles).toEqual(['Atlas', 'Orion']);
   });
 });
 
