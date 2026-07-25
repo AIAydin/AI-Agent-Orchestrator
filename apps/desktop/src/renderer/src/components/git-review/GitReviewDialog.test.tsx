@@ -401,18 +401,12 @@ describe('GitReviewDialog', () => {
     expect(screen.getByRole('button', { name: /Review Abort/u })).toBeTruthy();
   });
 
-  it('opens only the current opaque review target through the native external handoff', async () => {
+  it('offers no external-open action from the review header', async () => {
     render(<GitReviewDialog target={primaryTarget} projectName="Workshop" onClose={vi.fn()} />);
     await screen.findByText('origin/feature/review');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open externally…' }));
-
-    await waitFor(() => expect(openExternalMock).toHaveBeenCalledWith(primaryTarget));
-    expect(
-      await screen.findByText(
-        /Opened the main project in your selected application on feature\/review/u,
-      ),
-    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Open externally/u })).toBeNull();
+    expect(openExternalMock).not.toHaveBeenCalled();
   });
 
   it('loads authoritative status, focuses close, and sends only bounded stage selections', async () => {

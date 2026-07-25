@@ -1,7 +1,6 @@
 import {
   CheckCircle2,
   CircleDashed,
-  ExternalLink,
   GitCompareArrows,
   LoaderCircle,
   RefreshCw,
@@ -126,7 +125,6 @@ export function GitReviewDialog({
   const [archivePlan, setArchivePlan] = useState<GitWorktreeArchivePlanView | null>(null);
   const [metadataBusy, setMetadataBusy] = useState(false);
   const [notice, setNotice] = useState<GitReviewNotice | null>(null);
-  const [externalOpenBusy, setExternalOpenBusy] = useState(false);
   const [reviewMode, setReviewMode] = useState<GitReviewMode>(
     target.kind === 'agent-worktree' ? 'base-comparison' : 'working-tree',
   );
@@ -148,15 +146,10 @@ export function GitReviewDialog({
   const readinessBusyLabel = deliveryReadinessBusyLabel(deliveryReadiness.busy);
   const busy =
     controller.busyLabel !== null ||
-    externalOpenBusy ||
     metadataBusy ||
     cleanupController.busyLabel !== null ||
     deliveryReadiness.busy !== null;
-  const busyLabel =
-    controller.busyLabel ??
-    cleanupController.busyLabel ??
-    readinessBusyLabel ??
-    (externalOpenBusy ? 'Waiting for confirmation…' : null);
+  const busyLabel = controller.busyLabel ?? cleanupController.busyLabel ?? readinessBusyLabel;
   const actionError = controller.error ?? cleanupController.error ?? deliveryReadiness.error;
   const cleanupRecoveryOnly = target.kind === 'agent-worktree' && cleanupRecovery;
   const deliveryReady =
@@ -322,27 +315,6 @@ export function GitReviewDialog({
     void deliveryReadiness.refresh();
   };
 
-  const openExternal = async () => {
-    setNotice(null);
-    setExternalOpenBusy(true);
-    try {
-      const result = unwrap(await window.forgeboard.git.lifecycle.openExternal(target));
-      setNotice(
-        gitReviewNotice(
-          result.opened
-            ? `Opened the ${result.targetKind === 'primary' ? 'main project' : 'agent workspace'} in ${result.application === 'selected' ? 'your selected application' : 'the system default'}${result.branch === null ? '' : ` on ${result.branch}`}.`
-            : 'Open cancelled. Nothing was launched.',
-          result.opened ? 'success' : 'neutral',
-        ),
-      );
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Could not open this workspace.';
-      setNotice(gitReviewNotice(message, 'warning'));
-      onError?.(message);
-    } finally {
-      setExternalOpenBusy(false);
-    }
-  };
 
   const confirmShipping = () => {
     if (shippingPlan === null) return;
@@ -523,14 +495,6 @@ export function GitReviewDialog({
                 : `Review changes in ${projectName}`}
             </h2>
           </span>
-          <button
-            className="button"
-            type="button"
-            disabled={busy}
-            onClick={() => void openExternal()}
-          >
-            <ExternalLink size={14} aria-hidden="true" /> Open externally…
-          </button>
           <WorkspaceTooltip
             content={busy ? 'Wait for the current Git action' : 'Refresh Git changes'}
           >

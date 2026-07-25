@@ -282,7 +282,6 @@ vi.mock('../../git-review/GitReviewDialog.js', () => ({
   ),
 }));
 vi.mock('../runs/RunApprovalDialog.js', () => ({ RunApprovalDialog: () => null }));
-vi.mock('../CheckApprovalDialog.js', () => ({ CheckApprovalDialog: () => null }));
 vi.mock('../previews/useWorkspacePreviews.js', () => ({
   useWorkspacePreviews: () => ({ sessions: {}, updateSession: vi.fn() }),
 }));
