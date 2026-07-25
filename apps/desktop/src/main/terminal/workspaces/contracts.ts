@@ -6,6 +6,8 @@ import type { TerminalSessionView, TerminalWorkspaceView } from '../../../shared
 export interface PreparedTerminalWorkspace {
   readonly ownership: WorktreeOwnership;
   readonly rootPath: string;
+  /** Where the session process runs: on the host (default) or inside a Docker container. */
+  readonly runtime?: 'host' | 'docker';
   readonly view: Extract<TerminalWorkspaceView, { kind: 'managed-agent-worktree' }>;
 }
 
@@ -21,6 +23,7 @@ export interface TerminalWorkspaceManager {
     readonly project: Project;
     readonly nodeId: string;
     readonly adapterId: string;
+    readonly runtime?: 'host' | 'docker';
   }): Promise<PreparedTerminalWorkspace>;
   /**
    * Reconstructs a built-in Agent command from persisted main-process state. `null` keeps custom

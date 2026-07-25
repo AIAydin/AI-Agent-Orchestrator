@@ -1256,6 +1256,7 @@ export class TerminalService {
       project,
       nodeId: pending.plan.nodeId,
       adapterId: pending.input.workspace.adapterId,
+      runtime: pending.input.workspace.runtime ?? 'host',
     });
     try {
       const automatic = await manager.resolveAutomaticAgentLaunch(workspace);
@@ -1315,6 +1316,10 @@ export class TerminalService {
     workspace: PreparedTerminalWorkspace,
   ): readonly string[] {
     if (pending.peerProvisionId === undefined) return [];
+    // Peer material (hub URL, config paths) is host-scoped and would dangle inside a container.
+    if ((workspace.runtime ?? 'host') === 'docker') {
+      throw new Error('Peer tools are not available in Docker isolated sessions yet.');
+    }
     const material = this.#peerProvider?.launchMaterialForProvision(pending.peerProvisionId);
     if (material === null || material === undefined) {
       throw new Error('Peer session expired. Start again.');

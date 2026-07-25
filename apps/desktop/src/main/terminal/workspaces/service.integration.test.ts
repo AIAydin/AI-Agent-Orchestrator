@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -110,6 +110,83 @@ describe('ManagedTerminalWorkspaceService', () => {
     expect(fixture.store.getRun(second.view.runId)?.worktreeState).toBe('cleaned');
     await expect(realpath(second.rootPath)).rejects.toThrow();
   });
+
+  it('gates Docker-isolated sessions on the persisted profile and Docker settings', async () => {
+    const fixture = await createFixture({ 'agent-two': 'docker-isolated' });
+    const service = new ManagedTerminalWorkspaceService(fixture.store, () => fixture.settings, {
+      repositories: fixture.repositories,
+      worktrees: new WorktreeService(fixture.repositories),
+      now: () => new Date(NOW),
+    });
+
+    await expect(
+      service.provision({
+        project: fixture.project,
+        nodeId: 'agent-one',
+        adapterId: 'claude',
+        runtime: 'docker',
+      }),
+    ).rejects.toThrow(/Docker isolated/u);
+    await expect(
+      service.provision({
+        project: fixture.project,
+        nodeId: 'agent-two',
+        adapterId: 'claude',
+        runtime: 'host',
+      }),
+    ).rejects.toThrow(/Write in a worktree/u);
+    await expect(
+      service.provision({
+        project: fixture.project,
+        nodeId: 'agent-two',
+        adapterId: 'claude',
+        runtime: 'docker',
+      }),
+    ).rejects.toThrow(/Turn on Docker/u);
+  });
+
+  it('launches a Docker-isolated session as docker run with the worktree bind-mounted', async () => {
+    if (process.platform === 'win32') return;
+    const fixture = await createFixture({ 'agent-two': 'docker-isolated' });
+    const dockerExecutable = await fakeDockerBinary();
+    Object.assign(fixture.settings, {
+      dockerEnabled: true,
+      dockerExecutable,
+      dockerImage: 'acme/agents:1',
+      dockerCpuLimit: 2,
+      dockerMemoryMb: 4096,
+      dockerMountHostCredentials: false,
+    });
+    const service = new ManagedTerminalWorkspaceService(fixture.store, () => fixture.settings, {
+      repositories: fixture.repositories,
+      worktrees: new WorktreeService(fixture.repositories),
+      now: () => new Date(NOW),
+    });
+
+    const workspace = await service.provision({
+      project: fixture.project,
+      nodeId: 'agent-two',
+      adapterId: 'claude',
+      runtime: 'docker',
+    });
+    expect(workspace.runtime).toBe('docker');
+    expect(fixture.store.getRun(workspace.view.runId)?.permissionProfile).toBe('docker-isolated');
+
+    const launch = await service.resolveAutomaticAgentLaunch(workspace);
+    expect(launch).not.toBeNull();
+    expect(launch?.executable).toBe(await realpath(dockerExecutable));
+    expect(launch?.arguments[0]).toBe('run');
+    expect(launch?.arguments).toContain(
+      `type=bind,source=${workspace.rootPath},target=/workspace`,
+    );
+    expect(launch?.arguments.slice(-4)).toEqual([
+      'acme/agents:1',
+      'claude',
+      '--model',
+      'claude-test-model',
+    ]);
+    await service.discard(workspace);
+  });
 });
 
 interface Fixture {
@@ -120,7 +197,9 @@ interface Fixture {
   readonly store: MemoryWorkspaceStore;
 }
 
-async function createFixture(): Promise<Fixture> {
+async function createFixture(
+  profiles: Readonly<Record<string, string>> = {},
+): Promise<Fixture> {
   const root = await realpath(
     await mkdtemp(path.join(os.tmpdir(), 'forgeboard-agent-workspaces-')),
   );
@@ -147,7 +226,7 @@ async function createFixture(): Promise<Fixture> {
     project,
     settings,
     repositories: new RepositoryService(),
-    store: new MemoryWorkspaceStore(project, canvas()),
+    store: new MemoryWorkspaceStore(project, canvas(profiles)),
   };
 }
 
@@ -220,7 +299,7 @@ function projectRecord(repository: string): Project {
   };
 }
 
-function canvas(): CanvasDocument {
+function canvas(profiles: Readonly<Record<string, string>> = {}): CanvasDocument {
   return {
     id: 'canvas-1',
     projectId: PROJECT_ID,
@@ -238,7 +317,7 @@ function canvas(): CanvasDocument {
         collapsed: false,
         color: '#445566',
         adapterId: 'claude',
-        permissionProfile: 'worktree-write',
+        permissionProfile: profiles[id] ?? 'worktree-write',
         prompt: '',
         contextAttachmentIds: [],
       },
@@ -247,6 +326,23 @@ function canvas(): CanvasDocument {
     viewport: { x: 0, y: 0, zoom: 1 },
     updatedAt: NOW,
   };
+}
+
+async function fakeDockerBinary(): Promise<string> {
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'forgeboard-docker-bin-')));
+  roots.push(root);
+  const executable = path.join(root, 'docker');
+  await writeFile(
+    executable,
+    `#!/bin/sh
+if [ "$1" = "version" ]; then printf '27.5.1'; exit 0; fi
+if [ "$1" = "image" ] && [ "$2" = "inspect" ]; then printf 'sha256:abc'; exit 0; fi
+exit 19
+`,
+    { mode: 0o700 },
+  );
+  await chmod(executable, 0o700);
+  return executable;
 }
 
 function session(

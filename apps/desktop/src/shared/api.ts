@@ -103,6 +103,8 @@ import type {
   CollaborationUpdateAwarenessInput,
 } from './collaboration/index.js';
 import type {
+  DockerLocalList,
+  DockerLocalListInput,
   DockerPullResult,
   DockerReadiness,
   DockerReadinessInput,
@@ -350,6 +352,7 @@ export interface ForgeboardApi {
   docker: {
     check(input: DockerReadinessInput): Promise<IpcResult<DockerReadiness | null>>;
     pull(input: DockerReadinessInput): Promise<IpcResult<DockerPullResult>>;
+    listLocal(input: DockerLocalListInput): Promise<IpcResult<DockerLocalList>>;
   };
   projects: {
     recent(): Promise<IpcResult<Project[]>>;

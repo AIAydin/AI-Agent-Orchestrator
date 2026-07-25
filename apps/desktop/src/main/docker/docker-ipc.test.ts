@@ -338,6 +338,37 @@ describe('DockerIpcService', () => {
     await fixture.service.dispose();
   });
 
+  it('lists local images and containers without opening a native dialog', async () => {
+    const operations = createOperations();
+    const fixture = createFixture({ operations });
+
+    const result = await requiredHandler(IPC_CHANNELS.dockerListLocal)(liveEvent(), {
+      dockerExecutable: '/selected/bin/docker',
+    });
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        daemonAvailable: true,
+        images: [{ reference: 'node:22-bookworm', imageId: 'sha256:aa' }],
+        containers: [{ name: 'dev-box', image: 'acme/agents:1', state: 'running' }],
+      },
+    });
+    expect(operations.list).toHaveBeenCalledWith('/selected/bin/docker');
+    expect(fixture.showMessageBox).not.toHaveBeenCalled();
+    expect(fixture.appendAudit).toHaveBeenCalledWith(
+      'docker',
+      'list-local',
+      'allowed',
+      expect.objectContaining({ imageCount: 1, containerCount: 1 }),
+    );
+
+    const invalid = await requiredHandler(IPC_CHANNELS.dockerListLocal)(liveEvent(), {
+      dockerExecutable: '   ',
+    });
+    expect(invalid).toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
+    await fixture.service.dispose();
+  });
+
   it('cannot authorize Settings after shutdown invalidates evidence during revalidation', async () => {
     electronMock.fromWebContents.mockReturnValue({ isDestroyed: () => false });
     const operations = createOperations();
@@ -396,6 +427,11 @@ function createOperations() {
     }),
     pull: vi.fn<DockerOperations['pull']>(async (_configuration, _permit, beforeCommand) => {
       await beforeCommand();
+    }),
+    list: vi.fn<DockerOperations['list']>().mockResolvedValue({
+      daemonAvailable: true,
+      images: [{ reference: 'node:22-bookworm', imageId: 'sha256:aa' }],
+      containers: [{ name: 'dev-box', image: 'acme/agents:1', state: 'running' }],
     }),
   } satisfies DockerOperations;
 }

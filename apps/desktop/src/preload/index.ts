@@ -31,7 +31,11 @@ import {
   SettingsRepairEvidenceSchema,
   SettingsRepairSummarySchema,
 } from '../shared/settings/repair/contracts.js';
-import { DockerPullResultSchema, DockerReadinessSchema } from '../shared/docker/contracts.js';
+import {
+  DockerLocalListSchema,
+  DockerPullResultSchema,
+  DockerReadinessSchema,
+} from '../shared/docker/contracts.js';
 import {
   GitCommitPlanViewSchema,
   GitCommitResultViewSchema,
@@ -195,6 +199,8 @@ const api: ForgeboardApi = {
     check: (input) =>
       invokeValidated(IPC_CHANNELS.dockerCheck, DockerReadinessSchema.nullable(), input),
     pull: (input) => invokeValidated(IPC_CHANNELS.dockerPull, DockerPullResultSchema, input),
+    listLocal: (input) =>
+      invokeValidated(IPC_CHANNELS.dockerListLocal, DockerLocalListSchema, input),
   },
   projects: {
     recent: () => ipcRenderer.invoke(IPC_CHANNELS.projectsRecent),

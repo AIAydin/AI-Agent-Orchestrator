@@ -23,7 +23,8 @@ describe('integration action UI presence', () => {
 
     expect(screen.getByRole('button', { name: 'Browse' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Check Docker' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Pull image…' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sync images from Docker' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Get default image' })).toBeTruthy();
     expect(screen.getByText('Docker profile not checked yet')).toBeTruthy();
   });
 });

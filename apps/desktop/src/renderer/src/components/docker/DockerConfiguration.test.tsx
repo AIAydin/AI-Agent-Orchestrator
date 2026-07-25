@@ -8,6 +8,85 @@ import { DockerConfiguration } from './DockerConfiguration.js';
 
 afterEach(cleanup);
 
+describe('DockerConfiguration image picker', () => {
+  it('syncs images and containers from the local daemon and autofills the default entrypoint', async () => {
+    const listLocal = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        value: {
+          daemonAvailable: true,
+          images: [{ reference: 'acme/agents:1' }],
+          containers: [{ name: 'dev-box', image: 'acme/tools:2', state: 'running' }],
+        },
+      }),
+    );
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        docker: { check: vi.fn(), pull: vi.fn(), listLocal },
+        projects: { pickExecutable: vi.fn() },
+      },
+    });
+    const onChange = vi.fn();
+    render(
+      <DockerConfiguration
+        value={{ dockerExecutable: 'docker', dockerImage: '', dockerContainerExecutable: '' }}
+        onChange={onChange}
+        onError={(message) => {
+          throw new Error(message);
+        }}
+      />,
+    );
+
+    await screen.findByRole('option', { name: 'acme/agents:1' });
+    expect(listLocal).toHaveBeenCalledWith({ dockerExecutable: 'docker' });
+    expect(screen.getByRole('option', { name: 'node:22-bookworm — default' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'dev-box — acme/tools:2' })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Container image'), {
+      target: { value: 'node:22-bookworm' },
+    });
+    expect(onChange).toHaveBeenCalledWith({
+      dockerExecutable: 'docker',
+      dockerImage: 'node:22-bookworm',
+      dockerContainerExecutable: '/usr/local/bin/node',
+    });
+  });
+
+  it('keeps the picker usable with only the default image when Docker is unreachable', async () => {
+    const listLocal = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        value: {
+          daemonAvailable: false,
+          images: [],
+          containers: [],
+          reason: 'Docker is not running. Start it and sync again.',
+        },
+      }),
+    );
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        docker: { check: vi.fn(), pull: vi.fn(), listLocal },
+        projects: { pickExecutable: vi.fn() },
+      },
+    });
+    render(
+      <DockerConfiguration
+        value={{ dockerExecutable: 'docker', dockerImage: '', dockerContainerExecutable: '' }}
+        onChange={vi.fn()}
+        onError={(message) => {
+          throw new Error(message);
+        }}
+      />,
+    );
+
+    await screen.findByText('Docker is not running. Start it and sync again.');
+    expect(screen.getByRole('option', { name: 'node:22-bookworm — default' })).toBeTruthy();
+  });
+});
+
 describe('DockerConfiguration readiness evidence', () => {
   it('does not emit a completed check after the configuration changed externally', async () => {
     const pending = deferred<DockerReadiness>();

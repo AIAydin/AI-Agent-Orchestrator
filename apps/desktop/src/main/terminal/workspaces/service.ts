@@ -16,6 +16,7 @@ import {
   type TerminalSessionView,
 } from '../../../shared/terminal/index.js';
 import { synchronizeCanvasDocument } from '../../../shared/canvas/adapter.js';
+import { resolveDockerSessionLaunch } from '../../docker/docker-session.js';
 import type { LocalStore, StoredRunRecord } from '../../storage.js';
 import { assertPersistedAgentNodeMutable } from '../../runs/context/persisted-agent-context.js';
 import type {
@@ -62,11 +63,14 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     readonly project: Project;
     readonly nodeId: string;
     readonly adapterId: string;
+    readonly runtime?: 'host' | 'docker';
   }): Promise<PreparedTerminalWorkspace> {
+    const runtime = input.runtime ?? 'host';
     const configuration = this.#persistedAgentConfiguration(
       input.project.id,
       input.nodeId,
       input.adapterId,
+      runtime,
     );
     const currentProject = this.store.getProject(input.project.id);
     if (
@@ -105,7 +109,7 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       nodeId: input.nodeId,
       adapterId: input.adapterId,
       model: configuration.model,
-      permissionProfile: 'worktree-write',
+      permissionProfile: runtime === 'docker' ? 'docker-isolated' : 'worktree-write',
       providerSessionId: null,
       resumeSupported: null,
       resumeCapabilitySource: null,
@@ -146,6 +150,7 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     const workspace: PreparedTerminalWorkspace = {
       ownership: provisioned.ownership,
       rootPath: provisioned.ownership.worktreePath,
+      runtime,
       view: {
         kind: 'managed-agent-worktree',
         runId,
@@ -156,6 +161,7 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       projectId: currentProject.id,
       nodeId: input.nodeId,
       adapterId: input.adapterId,
+      runtime,
       runId,
       worktreeId: provisioned.ownership.id,
       branch: provisioned.ownership.branch,
@@ -167,13 +173,18 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
   public async resolveAutomaticAgentLaunch(
     workspace: PreparedTerminalWorkspace,
   ): Promise<AutomaticTerminalAgentLaunch | null> {
+    const runtime = workspace.runtime ?? 'host';
     const record = this.#boundRun(workspace);
     const configuration = this.#persistedAgentConfiguration(
       record.projectId,
       record.nodeId,
       record.adapterId,
+      runtime,
     );
     this.#assertRecordedConfiguration(record, configuration);
+    if (runtime === 'docker') {
+      return await this.#resolveDockerAgentLaunch(workspace, record, configuration);
+    }
     const manifest = getBuiltInAgentManifest(record.adapterId);
     if (manifest === undefined) return null;
 
@@ -202,6 +213,7 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       record.projectId,
       record.nodeId,
       record.adapterId,
+      'host',
     );
     this.#assertRecordedConfiguration(record, currentConfiguration);
     const currentOverride = this.getSettings().agentExecutableOverrides[record.adapterId]?.trim();
@@ -216,6 +228,37 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     };
   }
 
+  /**
+   * A Docker-isolated session never falls back to the host CLI: the launch is the docker CLI with
+   * the worktree bind-mounted, or a terse thrown error. The agent CLI runs inside the container.
+   */
+  async #resolveDockerAgentLaunch(
+    workspace: PreparedTerminalWorkspace,
+    record: StoredRunRecord,
+    configuration: { readonly model: string | null },
+  ): Promise<AutomaticTerminalAgentLaunch> {
+    const launch = await resolveDockerSessionLaunch({
+      settings: this.getSettings(),
+      adapterId: record.adapterId,
+      model: configuration.model,
+      worktreePath: workspace.rootPath,
+      containerName: `forgeboard-agent-${this.#createId()}`,
+    });
+    const currentConfiguration = this.#persistedAgentConfiguration(
+      record.projectId,
+      record.nodeId,
+      record.adapterId,
+      'docker',
+    );
+    this.#assertRecordedConfiguration(record, currentConfiguration);
+    return {
+      executable: launch.executable,
+      arguments: [...launch.arguments],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+    };
+  }
+
   public async assertCurrent(
     workspace: PreparedTerminalWorkspace,
     project: Project,
@@ -224,6 +267,7 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       project.id,
       workspace.ownership.taskId ?? '',
       workspace.ownership.agentId,
+      workspace.runtime ?? 'host',
     );
     this.#assertRecordedConfiguration(this.#boundRun(workspace), configuration);
     const currentProject = this.store.getProject(project.id);
@@ -373,6 +417,7 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     projectId: string,
     nodeId: string,
     adapterId: string,
+    runtime: 'host' | 'docker',
   ): { readonly model: string | null } {
     if (nodeId === '') throw new Error('The managed Agent worktree has no owning node.');
     assertPersistedAgentNodeMutable(this.store, projectId, nodeId);
@@ -392,7 +437,16 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     if (persistedAdapter !== adapterId) {
       throw new Error('The saved Agent adapter changed. Save and start the session again.');
     }
-    if (profile !== 'worktree-write') {
+    if (runtime === 'docker') {
+      if (profile !== 'docker-isolated') {
+        throw new Error(
+          'The saved Agent no longer selects “Docker isolated”. Save and start it again.',
+        );
+      }
+      if (!settings.dockerEnabled) {
+        throw new Error('Turn on Docker in Settings to use Docker isolated.');
+      }
+    } else if (profile !== 'worktree-write') {
       throw new Error(
         'The saved Agent no longer selects “Write in a worktree”. Save and start it again.',
       );

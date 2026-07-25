@@ -20,7 +20,8 @@ const TerminalManagedBranchSchema = z
 /**
  * Path-free renderer request for the root that a terminal launch should use. Ordinary Terminal
  * nodes omit this field and remain rooted in the selected project. Agent nodes may request a
- * managed worktree, but Electron main resolves and authorizes the real path.
+ * managed worktree, but Electron main resolves and authorizes the real path. `runtime: 'docker'`
+ * asks main to run the CLI inside a container with the worktree bind-mounted; omitted means host.
  */
 export const TerminalWorkspaceRequestSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('project') }).strict(),
@@ -28,6 +29,7 @@ export const TerminalWorkspaceRequestSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('managed-agent-worktree'),
       adapterId: TerminalAgentAdapterIdSchema,
+      runtime: z.enum(['host', 'docker']).optional(),
     })
     .strict(),
 ]);

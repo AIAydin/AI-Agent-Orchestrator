@@ -86,6 +86,11 @@ export function AgentSessionNode({
   const model = effectiveNodeModel(agent, data.model, settings.agentDefaultModels[adapter]);
   const profile: PermissionProfile = data.permissionProfile ?? 'worktree-write';
   const launch = agent ? agentSessionLaunch(agent, model, profile, peerMaterial) : null;
+  const launchedProfile: PermissionProfile =
+    launch?.configuration.workspace?.kind === 'managed-agent-worktree' &&
+    launch.configuration.workspace.runtime === 'docker'
+      ? 'docker-isolated'
+      : 'worktree-write';
   const recordedWorkspaceRunRef = useRef<string | null>(null);
   const recordManagedWorkspace = (session: TerminalSessionView | null): void => {
     if (
@@ -100,7 +105,7 @@ export function AgentSessionNode({
       branch: session.workspace.branch,
       worktreeId: undefined,
       worktreeRecordedActive: true,
-      lastRunPermissionProfile: 'worktree-write',
+      lastRunPermissionProfile: launchedProfile,
     });
   };
 
@@ -180,6 +185,15 @@ export function AgentSessionNode({
   const provisionAndRelaunch = (): void => {
     if (provisioningRef.current) return;
     provisioningRef.current = true;
+    // Docker sessions launch without peer material (it is host-scoped), so no grant is minted.
+    if (profile === 'docker-isolated') {
+      setPeerMaterial(null);
+      setPeerHint(null);
+      pendingStartRef.current = true;
+      setProvisionAttempt((count) => count + 1);
+      provisioningRef.current = false;
+      return;
+    }
     void (async () => {
       try {
         // Main-process launch authority reads the SAVED canvas; a node that only
