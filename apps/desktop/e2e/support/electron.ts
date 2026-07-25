@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { access, rm } from 'node:fs/promises';
+import { access, readFile, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -54,7 +54,11 @@ export async function launchDesktop(
   delete environment.ELECTRON_RENDERER_URL;
   delete environment.ELECTRON_RUN_AS_NODE;
   Object.assign(environment, options.environment);
-  if (process.platform === 'win32') environment.FORGEBOARD_E2E_STARTUP_TRACE = '1';
+  const startupTracePath = join(userDataDirectory, 'startup-trace.log');
+  if (process.platform === 'win32') {
+    environment.FORGEBOARD_E2E_STARTUP_TRACE = '1';
+    environment.FORGEBOARD_E2E_STARTUP_TRACE_PATH = startupTracePath;
+  }
 
   const app = await electron.launch({
     executablePath: require('electron') as string,
@@ -80,7 +84,11 @@ export async function launchDesktop(
     return { app, page };
   } catch (error) {
     await closeElectronAfterTest(app);
-    const detail = startupDiagnostics.join('').trim().slice(-8_192);
+    const trace = await readFile(startupTracePath, 'utf8').catch(() => '');
+    const detail = [startupDiagnostics.join('').trim(), trace.trim()]
+      .filter((entry) => entry.length > 0)
+      .join('\n')
+      .slice(-8_192);
     throw new Error(
       `${error instanceof Error ? error.message : 'Electron did not open a window.'}` +
         (detail.length === 0 ? ' No Electron startup diagnostics were emitted.' : `\n${detail}`),

@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
@@ -29,6 +30,7 @@ let closeCoordinator: CloseCoordinator | null = null;
 let quitReady = false;
 let quitAttempt: Promise<boolean> | null = null;
 const approvedWindowCloses = new WeakSet<BrowserWindow>();
+traceE2eStartup('main-entry');
 protocol.registerSchemesAsPrivileged([
   {
     scheme: PROJECT_VIDEO_SCHEME,
@@ -40,10 +42,15 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ]);
+traceE2eStartup('scheme-registered');
 app.setName(PRODUCT.name);
 const packagedSmokeProfile = configurePackagedSmokeProfile(app, process.argv);
 
+traceE2eStartup('single-instance-lock-requested');
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
+traceE2eStartup(
+  hasSingleInstanceLock ? 'single-instance-lock-acquired' : 'single-instance-lock-lost',
+);
 if (!hasSingleInstanceLock) app.quit();
 
 app.on('second-instance', () => {
@@ -181,6 +188,14 @@ void app
   });
 
 function traceE2eStartup(stage: string): void {
+  const tracePath = process.env['FORGEBOARD_E2E_STARTUP_TRACE_PATH'];
+  if (tracePath !== undefined) {
+    try {
+      appendFileSync(tracePath, `${stage}\n`, { encoding: 'utf8' });
+    } catch {
+      // Diagnostics must never alter product startup behavior.
+    }
+  }
   if (process.env['FORGEBOARD_E2E_STARTUP_TRACE'] !== '1') return;
   process.stderr.write(`[forgeboard-e2e-startup] ${stage}\n`);
 }
