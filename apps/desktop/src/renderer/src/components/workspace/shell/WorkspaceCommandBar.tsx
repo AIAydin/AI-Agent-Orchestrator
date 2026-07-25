@@ -141,8 +141,8 @@ export function WorkspaceCommandBar({
         collaborationEnabled={collaborationEnabled}
         sharingStatus={sharingStatus}
       />
-      <span className={`autosave-state ${saveState}`}>
-        <CircleDot size={12} />
+      <span className={`autosave-state ${saveState}`} role="status" aria-label="Save status">
+        <CircleDot size={12} aria-hidden="true" />
         {saveState === 'saved'
           ? 'Saved locally'
           : saveState === 'saving'
