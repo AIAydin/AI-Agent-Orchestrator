@@ -165,7 +165,12 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
       });
       traceE2eDatabaseStartup('database-staging-cleanup-completed');
     }
-    databasePath ??= assertDirectDatabasePath(options.databasePath, canonicalUserData);
+    databasePath ??= assertDirectDatabasePath(
+      options.databasePath,
+      options.userDataPath,
+      canonicalUserData,
+      platform,
+    );
     await protectDatabaseBoundary(databasePath, platform, windowsSecurity, windowsSid, getUserId);
     traceE2eDatabaseStartup('database-file-boundary-prepared');
     return databasePath;
@@ -624,15 +629,27 @@ async function cleanupAttemptDirectory(stagingDirectory: string): Promise<void> 
   await rm(stagingDirectory, { recursive: true, force: true });
 }
 
-function assertDirectDatabasePath(databasePath: string, canonicalUserData: string): string {
+function assertDirectDatabasePath(
+  databasePath: string,
+  requestedUserData: string,
+  canonicalUserData: string,
+  platform: NodeJS.Platform,
+): string {
   if (databasePath.includes('\0')) throw new Error('Forgeboard rejected the database path.');
   const normalized = resolve(databasePath);
-  if (dirname(normalized) !== canonicalUserData || basename(normalized) !== 'forgeboard.sqlite') {
+  if (
+    !sameRequestedPath(dirname(normalized), resolve(requestedUserData), platform) ||
+    basename(normalized) !== 'forgeboard.sqlite'
+  ) {
     throw new Error(
       'The Forgeboard database must be directly inside its canonical user data folder.',
     );
   }
-  return normalized;
+  return join(canonicalUserData, 'forgeboard.sqlite');
+}
+
+function sameRequestedPath(left: string, right: string, platform: NodeJS.Platform): boolean {
+  return platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right;
 }
 
 async function optionalLstat(path: string): Promise<Stats | undefined> {
