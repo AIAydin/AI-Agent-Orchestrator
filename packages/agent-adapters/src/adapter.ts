@@ -1085,17 +1085,14 @@ export function resolveWindowsBatchLaunch(
   if (!path.win32.isAbsolute(commandProcessor) || /["&|<>^%!\r\n\0]/u.test(commandProcessor)) {
     throw new Error('The Windows command processor path is invalid.');
   }
-  // `cmd /s /c` strips the first and last quotes from a command line that begins with a quoted
-  // executable. Prefixing the reviewed batch invocation with `call` preserves those path quotes
-  // and still propagates the shim's exit code.
-  const commandLine = [
-    'call',
-    `"${executable}"`,
-    ...arguments_.map((argument) => `"${argument}"`),
-  ].join(' ');
+  // `cmd /s /c` strips the outer pair while preserving the quoted executable path. This is the
+  // documented Windows batch form and works for both ordinary child processes and interactive PTYs.
+  const commandLine = [`""${executable}"`, ...arguments_.map((argument) => `"${argument}"`)].join(
+    ' ',
+  );
   return {
     executable: commandProcessor,
-    arguments: ['/d', '/s', '/v:off', '/c', commandLine],
+    arguments: ['/d', '/s', '/v:off', '/c', `${commandLine}"`],
     // Node's default Windows argv encoder follows the C runtime rules. cmd.exe uses different
     // quote parsing, so pass this already-validated command line without a second escaping layer.
     windowsVerbatimArguments: true,

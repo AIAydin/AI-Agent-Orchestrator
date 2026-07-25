@@ -145,19 +145,11 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         title: 'Add Git remote?',
         buttons: ['Cancel', 'Add remote'],
       });
-      await expect
-        .poll(() => gitRemoteUrl(projectPath, 'origin'), {
-          message: 'The approved local Git mutation should finish before the UI refreshes.',
-          timeout: 20_000,
-        })
-        .toBe(FIRST_NETWORK_URL);
-      const connectionMessages = await settings
-        .locator('.git-connections-notice, [role="alert"]')
-        .allTextContents();
       await expect(
         settings.getByRole('button', { name: 'Remove origin' }),
-        `Git connection result: ${connectionMessages.join(' | ')}`,
-      ).toBeVisible();
+        'The approved local Git mutation should settle in Settings before an external Git reader opens the config.',
+      ).toBeVisible({ timeout: 20_000 });
+      expect(gitRemoteUrl(projectPath, 'origin')).toBe(FIRST_NETWORK_URL);
     });
 
     await test.step('simple remote replacement changes only the reviewed URL', async () => {
@@ -173,7 +165,8 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         title: 'Replace Git remote?',
         buttons: ['Cancel', 'Replace remote'],
       });
-      await expect.poll(() => gitRemoteUrl(projectPath, 'origin')).toBe(REPLACEMENT_NETWORK_URL);
+      await expect(settings).toContainText('Replaced remote origin.', { timeout: 20_000 });
+      expect(gitRemoteUrl(projectPath, 'origin')).toBe(REPLACEMENT_NETWORK_URL);
     });
 
     await test.step('local picker paths stay native-only and the selected local remote is added', async () => {
@@ -201,9 +194,10 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         buttons: ['Cancel', 'Add remote'],
       });
       expect(nativeDialogText(approved)).toContain(localRemotePath);
-      await expect
-        .poll(() => gitRemoteUrl(projectPath, 'local-backup'))
-        .toBe(await realpath(localRemotePath));
+      await expect(settings.getByRole('button', { name: 'Remove local-backup' })).toBeVisible({
+        timeout: 20_000,
+      });
+      expect(gitRemoteUrl(projectPath, 'local-backup')).toBe(await realpath(localRemotePath));
     });
 
     await test.step('removal discloses and deletes only the exact managed tracking refs', async () => {
@@ -219,8 +213,11 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         title: 'Remove Git remote?',
         buttons: ['Cancel', 'Remove remote'],
       });
-      await expect.poll(() => gitRemoteUrl(projectPath, 'origin')).toBeNull();
-      await expect.poll(() => gitRef(projectPath, TRACKING_REF)).toBeNull();
+      await expect(settings.getByRole('button', { name: 'Remove origin' })).toBeHidden({
+        timeout: 20_000,
+      });
+      expect(gitRemoteUrl(projectPath, 'origin')).toBeNull();
+      expect(gitRef(projectPath, TRACKING_REF)).toBeNull();
       expect(gitRemoteUrl(projectPath, 'local-backup')).toBe(await realpath(localRemotePath));
     });
 
