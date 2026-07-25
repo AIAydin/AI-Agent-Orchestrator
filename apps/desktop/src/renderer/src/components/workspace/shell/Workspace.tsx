@@ -31,7 +31,7 @@ import {
 } from '../../../lib/keyboard/keyboard-preset.js';
 import {
   NODE_DEFINITIONS,
-  NODE_KINDS,
+  TEMPLATE_NODE_KINDS,
   type NodeKind,
   type WorkshopNode,
   type WorkshopNodeData,
@@ -845,6 +845,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       agent.installed && isRunAdapterId(agent.id),
   );
   const fallbackAdapter = isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'codex';
+  const addDefaultAgentNode = useCallback(() => {
+    const preferred = runnableAgents.some((agent) => agent.id === fallbackAdapter)
+      ? fallbackAdapter
+      : (runnableAgents[0]?.id ?? fallbackAdapter);
+    addAgentNode(preferred);
+  }, [addAgentNode, fallbackAdapter, runnableAgents]);
   const selectedAdapter = selectedNode ? (selectedNode.data.adapterId ?? fallbackAdapter) : 'codex';
   const selectedAgent = runnableAgents.find((agent) => agent.id === selectedAdapter);
   const selectedModel = effectiveNodeModel(
@@ -1125,7 +1131,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   }, [workflowDecisionCount]);
 
   const searchTerm = search.toLowerCase();
-  const filteredTemplates = NODE_KINDS.filter((kind) =>
+  const filteredTemplates = TEMPLATE_NODE_KINDS.filter((kind) =>
     nodeRegistry.resolve({ kind }).label.toLowerCase().includes(searchTerm),
   );
   const filteredExtensionTemplates = extensionTemplates.filter(({ extension, definition }) =>
@@ -1274,6 +1280,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     workflowStartBusy,
     addNode,
     addAgentNode,
+    addDefaultAgentNode,
     addExtensionNode,
     fitCanvas: () =>
       void instance?.fitView({
@@ -1531,6 +1538,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
                 onUpdateEdgeType={updateEdgeType}
                 onUpdateEdgeData={updateEdgeData}
                 onAddNode={addNode}
+                onAddAgent={addDefaultAgentNode}
                 onAddExtensionNode={addExtensionNode}
                 collaborationAwareness={collaborationCanvas.awareness}
                 onCollaborationCursorMove={collaborationCanvas.updateCursor}

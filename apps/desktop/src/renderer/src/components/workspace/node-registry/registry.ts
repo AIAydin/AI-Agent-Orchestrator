@@ -47,6 +47,22 @@ export const NODE_KINDS = [
 export type BuiltInNodeKind = (typeof NODE_KINDS)[number];
 export type NodeKind = BuiltInNodeKind | 'extension';
 
+/**
+ * Kinds offered as templates in the rail and pickers. Every other kind in `NODE_KINDS` stays
+ * parseable so saved canvases keep rendering, but can no longer be created: agents come from
+ * the Agents list, and task/file/diff/review-gate/git-pr/diagram/group-frame are retired.
+ */
+export const TEMPLATE_NODE_KINDS = [
+  'brief',
+  'video',
+  'terminal',
+  'web-preview',
+  'mobile-preview',
+  'test',
+  'whiteboard',
+  'note-image',
+] as const satisfies readonly BuiltInNodeKind[];
+
 export interface SharedNodeBehaviors {
   readonly resizable: true;
   readonly collapsible: true;
