@@ -5,7 +5,12 @@
   min-height: 0;
   background: var(--canvas);
 }
-.canvas-region .react-flow__viewport {
+/* Promote the viewport to its own compositor layer only while actively
+   panning or zooming (`canvas-navigating`, toggled by WorkspaceCanvas). A
+   permanent `will-change: transform` kept node content rasterized at stale
+   scales, which is what made every node look blurry after zooming. At rest
+   the layer demotes and Chromium re-rasterizes crisply at the final zoom. */
+.canvas-region.canvas-navigating .react-flow__viewport {
   will-change: transform;
 }
 .react-flow__pane {
@@ -427,21 +432,80 @@
   font-size: var(--text-2xs);
   font-weight: 700;
 }
+/* Connection affordances: the sending side (right) is a filled dot, the
+   receiving side (left) an open ring, each with a short stem showing where a
+   wire leaves or lands. Subtle at rest, prominent on hover and while a
+   connection is being dragged. */
 .node-handle {
-  width: 8px !important;
-  height: 8px !important;
+  width: 9px !important;
+  height: 9px !important;
+  opacity: 0.55;
+  transition:
+    opacity 0.14s ease,
+    box-shadow 0.14s ease,
+    scale 0.14s ease;
+}
+.node-handle.source {
   border: 2px solid var(--surface-raised) !important;
   background: var(--node-accent) !important;
 }
+.node-handle.target {
+  border: 2px solid var(--node-accent) !important;
+  background: var(--surface-raised) !important;
+}
+.node-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--node-accent);
+  transform: translateY(-50%);
+}
+.node-handle.source::after {
+  left: 100%;
+}
+.node-handle.target::after {
+  right: 100%;
+}
+.canvas-node:hover .node-handle,
+.node-handle.connectingfrom,
+.node-handle.connectingto,
+.node-handle.connectionindicator {
+  opacity: 1;
+}
+.node-handle:hover,
+.node-handle.connectingfrom,
+.node-handle.connectingto,
+.node-handle.connectionindicator {
+  scale: 1.35;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--node-accent) 26%, transparent);
+}
+/* Resizing works from every edge and corner: keep the controls above node
+   faces (webviews, terminals) and give the hairline edge controls a real
+   grab area beyond their 1px visual. */
 .canvas-node-resize-line {
+  z-index: 24;
   border-color: var(--node-accent) !important;
 }
+.canvas-node-resize-line::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
 .canvas-node-resize-handle {
+  z-index: 25;
   width: 8px !important;
   height: 8px !important;
   border: 1px solid var(--surface-raised) !important;
   border-radius: 2px !important;
   background: var(--node-accent) !important;
+}
+.canvas-node-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
 }
 
 /* Node-header inline rename + details popover (settings / comments / history). Additive block:

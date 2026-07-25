@@ -363,6 +363,8 @@ describe('Workspace Git review targeting', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -603,6 +605,8 @@ function workspaceElement(onError: (message: string) => void) {
       }}
       onClose={vi.fn()}
       onProjectUpdated={vi.fn()}
+      onSwitchProject={vi.fn()}
+      onCreateProject={vi.fn()}
       onOpenSettings={vi.fn()}
       onError={onError}
     />

@@ -52,6 +52,17 @@ describe('WorkspaceCommandBar', () => {
     expect(screen.getByRole('button', { name: 'Show project sidebar' })).toBeTruthy();
   });
 
+  it('mirrors the live persistence state in the save indicator', () => {
+    const { rerender } = render(<WorkspaceCommandBar {...commandBarProps()} saveState="saving" />);
+    expect(screen.getByRole('status', { name: 'Save status' }).textContent).toBe('Saving…');
+
+    rerender(<WorkspaceCommandBar {...commandBarProps()} saveState="saved" />);
+    expect(screen.getByRole('status', { name: 'Save status' }).textContent).toBe('Saved locally');
+
+    rerender(<WorkspaceCommandBar {...commandBarProps()} saveState="error" />);
+    expect(screen.getByRole('status', { name: 'Save status' }).textContent).toBe('Save failed');
+  });
+
   it('omits workflow run actions while describing live workflow status', () => {
     render(<WorkspaceCommandBar {...commandBarProps()} workflowStatus="waiting-for-approval" />);
 
@@ -81,6 +92,8 @@ function commandBarProps() {
     collaborationEnabled: false,
     sharingStatus: 'not-connected' as const,
     projectSidebarOpen: true,
+    onSwitchProject: callback,
+    onNewProject: callback,
     onCloseProject: callback,
     onToggleProjectSidebar: callback,
     onUndo: callback,

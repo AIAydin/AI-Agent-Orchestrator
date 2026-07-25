@@ -20,7 +20,11 @@ import {
 } from '@xyflow/react';
 import { PanelBottomOpen } from 'lucide-react';
 
-import type { CanvasDocument, RunAdapterId } from '../../../../../shared/application/contracts.js';
+import type {
+  CanvasDocument,
+  Project,
+  RunAdapterId,
+} from '../../../../../shared/application/contracts.js';
 import { emptyCanvasHistory } from '../../../../../shared/canvas/history/contracts.js';
 import type { CollaborationMetadataSnapshot } from '../../../../../shared/collaboration/index.js';
 import { FileDocumentSchema } from '../../../../../shared/files/contracts.js';
@@ -45,6 +49,7 @@ import {
   extensionTemplateKey,
 } from '../../extensions/extension-nodes.js';
 import { GitReviewDialog } from '../../git-review/GitReviewDialog.js';
+import { ProjectDialog } from '../../onboarding/ProjectDialog.js';
 import { permissionProfileUnavailableReason } from '../../permissions/permission-profile-ui.js';
 import { CheckApprovalDialog } from '../CheckApprovalDialog.js';
 import { RunApprovalDialog } from '../runs/RunApprovalDialog.js';
@@ -66,6 +71,10 @@ import {
   type CanvasKeyboardMoveSummary,
 } from '../canvas/interactions/keyboard-navigation.js';
 import { projectGroupDisplay } from '../canvas/interactions/groups/group-display.js';
+import {
+  canvasPlacementObstacles,
+  freeCanvasPosition,
+} from '../canvas/interactions/auto-placement.js';
 import {
   fitAutomaticGroupFrames,
   frameIdsClaimingMembers,
@@ -145,6 +154,9 @@ import { isTextEntryTarget, workflowDecisionIsCurrent } from './runtime/workspac
 
 const LOCKED_CONNECTION_ACTIVITY = 'Unlock locked nodes before changing their connections.';
 
+/** Where a node lands when it is added without an explicit drop position. */
+const DEFAULT_NODE_ANCHOR = { x: 220, y: 150 } as const;
+
 export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
   function Workspace(props, ref) {
     return (
@@ -163,6 +175,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     extensionDiscovery,
     onClose,
     onProjectUpdated,
+    onSwitchProject,
+    onCreateProject,
     onOpenSettings,
     onError,
   },
@@ -179,6 +193,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [workflowDecision, setWorkflowDecision] = useState<WorkflowDecisionTarget | null>(null);
   const [initializingGit, setInitializingGit] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [instance, setInstance] = useState<ReactFlowInstance<WorkshopNode, WorkshopEdge> | null>(
     null,
@@ -444,6 +459,22 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     if (await flushCanvas()) onClose();
   }, [flushCanvas, onClose]);
 
+  const switchProject = useCallback(
+    async (target: Project) => {
+      if (target.id === project.id) return;
+      if (await flushCanvas()) await onSwitchProject(target);
+    },
+    [flushCanvas, onSwitchProject, project.id],
+  );
+
+  const createProject = useCallback(
+    async (input: { parentPath: string; name: string; initializeGit: boolean }) => {
+      setNewProjectOpen(false);
+      if (await flushCanvas()) await onCreateProject(input);
+    },
+    [flushCanvas, onCreateProject],
+  );
+
   const initializeGit = useCallback(async () => {
     setInitializingGit(true);
     try {
@@ -624,7 +655,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       const definition = NODE_DEFINITIONS[kind];
       const id = crypto.randomUUID();
       const currentNodes = nodesRef.current;
-      const offset = currentNodes.length * 24;
+      const dimensions = initialWorkshopNodeDimensions(kind);
       const titlesInUse = new Set(currentNodes.map((node) => node.data.title));
       pendingNodeSelection.current = id;
       setNodes((items) => [
@@ -633,8 +664,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           id,
           type: 'workshop',
           selected: true,
-          position: position ?? { x: 220 + offset, y: 150 + offset },
-          ...initialWorkshopNodeDimensions(kind),
+          position:
+            position ??
+            freeCanvasPosition(
+              DEFAULT_NODE_ANCHOR,
+              dimensions,
+              canvasPlacementObstacles(currentNodes),
+            ),
+          ...dimensions,
           data: {
             kind,
             title: assignNodeName(titlesInUse),
@@ -686,8 +723,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       const { extension, definition } = template;
       const binding = createExtensionNodeBinding(extension, definition);
       const id = crypto.randomUUID();
-      const offset = nodes.length * 24;
-      const titlesInUse = new Set(nodesRef.current.map((node) => node.data.title));
+      const currentNodes = nodesRef.current;
+      const dimensions = initialWorkshopNodeDimensions('extension');
+      const titlesInUse = new Set(currentNodes.map((node) => node.data.title));
       pendingNodeSelection.current = id;
       setNodes((items) => [
         ...items.map((node) => ({ ...node, selected: false })),
@@ -695,8 +733,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           id,
           type: 'workshop',
           selected: true,
-          position: position ?? { x: 220 + offset, y: 150 + offset },
-          ...initialWorkshopNodeDimensions('extension'),
+          position:
+            position ??
+            freeCanvasPosition(
+              DEFAULT_NODE_ANCHOR,
+              dimensions,
+              canvasPlacementObstacles(currentNodes),
+            ),
+          ...dimensions,
           data: {
             kind: 'extension',
             title: assignNodeName(titlesInUse),
@@ -722,7 +766,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         [`Added ${definition.displayName} extension node.`, ...items].slice(0, 30),
       );
     },
-    [collaborationCanvas.graphReadOnly, nodes.length, record, reportCollaborationReadOnly],
+    [collaborationCanvas.graphReadOnly, record, reportCollaborationReadOnly],
   );
 
   const attachProjectFileContext = useCallback(
@@ -1342,6 +1386,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         collaborationEnabled={settings.collaborationEnabled}
         sharingStatus={collaborationCanvas.connectionStatus}
         projectSidebarOpen={!sidebarLayout.rail.collapsed}
+        onSwitchProject={(target) => void switchProject(target)}
+        onNewProject={() => setNewProjectOpen(true)}
         onCloseProject={() => void closeProject()}
         onToggleProjectSidebar={sidebarLayout.rail.toggleCollapsed}
         onUndo={undo}
@@ -1585,6 +1631,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       )}
       {paletteOpen && (
         <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />
+      )}
+      {newProjectOpen && (
+        <ProjectDialog
+          mode="create"
+          onClose={() => setNewProjectOpen(false)}
+          onCreate={(input) => void createProject(input)}
+          onClone={() => undefined}
+        />
       )}
       <VoiceCommandControl
         settings={settings}

@@ -383,6 +383,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={onClose}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -413,6 +415,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -452,6 +456,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -503,6 +509,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -636,6 +644,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -712,6 +722,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -756,6 +768,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -800,6 +814,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -844,6 +860,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -888,6 +906,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -950,6 +970,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -1018,6 +1040,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -1055,6 +1079,8 @@ describe('Workspace extension node naming', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -1088,6 +1114,8 @@ function renderWorkspace(): void {
       }}
       onClose={vi.fn()}
       onProjectUpdated={vi.fn()}
+      onSwitchProject={vi.fn()}
+      onCreateProject={vi.fn()}
       onOpenSettings={vi.fn()}
       onError={vi.fn()}
     />,

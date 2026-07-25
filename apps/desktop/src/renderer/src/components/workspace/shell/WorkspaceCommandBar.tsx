@@ -1,5 +1,4 @@
 import {
-  ChevronDown,
   CircleDot,
   Command,
   GitCompareArrows,
@@ -12,7 +11,7 @@ import {
 } from 'lucide-react';
 
 import type { AgentDetection, Project } from '../../../../../shared/application/contracts.js';
-import { BrandMark } from '../../shell/BrandMark.js';
+import { ProjectSwitcher } from './ProjectSwitcher.js';
 import {
   WorkspaceStatusIndicators,
   type WorkspaceSharingStatus,
@@ -32,6 +31,8 @@ interface WorkspaceCommandBarProps {
   collaborationEnabled: boolean;
   sharingStatus: WorkspaceSharingStatus;
   projectSidebarOpen: boolean;
+  onSwitchProject: (project: Project) => void;
+  onNewProject: () => void;
   onCloseProject: () => void;
   onToggleProjectSidebar: () => void;
   onUndo: () => void;
@@ -55,6 +56,8 @@ export function WorkspaceCommandBar({
   collaborationEnabled,
   sharingStatus,
   projectSidebarOpen,
+  onSwitchProject,
+  onNewProject,
   onCloseProject,
   onToggleProjectSidebar,
   onUndo,
@@ -67,14 +70,13 @@ export function WorkspaceCommandBar({
   return (
     <header className="command-bar">
       <div className="window-drag-space" />
-      <button className="project-switcher" type="button" onClick={onCloseProject}>
-        <BrandMark size={24} />
-        <span>
-          <strong>{project.name}</strong>
-          <small>{canvasName ?? 'Loading canvas…'}</small>
-        </span>
-        <ChevronDown size={14} />
-      </button>
+      <ProjectSwitcher
+        project={project}
+        canvasName={canvasName}
+        onSwitchProject={onSwitchProject}
+        onNewProject={onNewProject}
+        onCloseProject={onCloseProject}
+      />
       <WorkspaceTooltip
         content={projectSidebarOpen ? 'Hide the project sidebar' : 'Show the project sidebar'}
       >
@@ -142,8 +144,8 @@ export function WorkspaceCommandBar({
         collaborationEnabled={collaborationEnabled}
         sharingStatus={sharingStatus}
       />
-      <span className={`autosave-state ${saveState}`}>
-        <CircleDot size={12} />
+      <span className={`autosave-state ${saveState}`} role="status" aria-label="Save status">
+        <CircleDot size={12} aria-hidden="true" />
         {saveState === 'saved'
           ? 'Saved locally'
           : saveState === 'saving'
