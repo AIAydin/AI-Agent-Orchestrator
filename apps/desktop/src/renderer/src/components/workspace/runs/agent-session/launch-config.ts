@@ -43,12 +43,15 @@ export function agentSessionLaunch(
   peers: AgentSessionPeerLaunchMaterial | null = null,
 ): AgentSessionLaunch {
   const executable = agent.executable ?? '';
+  // Peer material is host-scoped; a Docker session's CLI runs inside a container where it would
+  // dangle, so it never reaches the launch command for the Docker profile.
+  const activePeers = profile === 'docker-isolated' ? null : peers;
   const args = builtInAgentSessionArguments(
     agent.id,
     model,
     profile,
-    peers?.extraArguments ?? [],
-  ) ?? [...(peers?.extraArguments ?? [])];
+    activePeers?.extraArguments ?? [],
+  ) ?? [...(activePeers?.extraArguments ?? [])];
   let enforced = false;
   if (agent.id === 'claude') {
     if (profile === 'plan-read-only') {
@@ -59,7 +62,7 @@ export function agentSessionLaunch(
       enforced = true;
     }
   }
-  if (profile === 'worktree-write') enforced = true;
+  if (profile === 'worktree-write' || profile === 'docker-isolated') enforced = true;
   return {
     configuration: {
       executable,
@@ -73,8 +76,16 @@ export function agentSessionLaunch(
               adapterId: agent.id,
             },
           }
-        : {}),
-      ...(peers !== null ? { peerProvisionId: peers.provisionId } : {}),
+        : profile === 'docker-isolated'
+          ? {
+              workspace: {
+                kind: 'managed-agent-worktree' as const,
+                adapterId: agent.id,
+                runtime: 'docker' as const,
+              },
+            }
+          : {}),
+      ...(activePeers !== null ? { peerProvisionId: activePeers.provisionId } : {}),
     },
     profileNote: enforced
       ? null
