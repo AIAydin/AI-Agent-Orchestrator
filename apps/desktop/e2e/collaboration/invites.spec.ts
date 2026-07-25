@@ -308,7 +308,7 @@ async function configureIdentity(
   server: CollaborationServerFixture,
   identity: { displayName: string; subject: string },
 ): Promise<void> {
-  await settings.getByText('Server and advanced options').click();
+  await settings.getByText('Advanced', { exact: true }).click();
   await settings.getByRole('checkbox', { name: /Enable collaboration/u }).check();
   await settings.getByLabel('Collaboration server URL').fill(server.webSocketUrl);
   await settings

@@ -90,33 +90,24 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await page.getByRole('button', { name: 'Settings' }).click();
       const settings = page.locator('.settings-modal');
       await expect(settings.getByRole('heading', { name: 'Settings' })).toBeVisible();
-      await expect(
-        settings.getByText(
-          'Change how Forgeboard works here. Unavailable features are clearly labeled.',
-        ),
-      ).toBeVisible();
+      await expect(settings.getByText('Change how Forgeboard works here.')).toBeVisible();
 
       await settings.getByRole('button', { name: 'dark', exact: true }).click();
       await settings.getByRole('button', { name: 'compact', exact: true }).click();
       await settings.getByRole('checkbox', { name: /Reduce motion/ }).check();
 
-      await settings.getByRole('button', { name: 'Extensions', exact: true }).click();
-      await expect(settings.getByRole('heading', { name: 'Local extensions' })).toBeVisible();
-      await expect(settings.getByText('Data-only by design')).toBeVisible();
-      await expect(
-        settings.getByText('No extensions installed yet', { exact: true }),
-      ).toBeVisible();
-      await expect(settings.getByRole('button', { name: /Choose extension folder/ })).toBeVisible();
+      await expect(settings.getByRole('button', { name: 'Extensions', exact: true })).toHaveCount(
+        0,
+      );
+      await expect(settings.getByRole('button', { name: 'Checks', exact: true })).toHaveCount(0);
 
       await settings.getByRole('button', { name: /Agents & runtime/ }).click();
       await settings.getByLabel('Default agent').selectOption('codex');
+
+      await settings.getByRole('button', { name: 'Permissions', exact: true }).click();
       await settings.getByLabel('Default permission profile').selectOption('plan-read-only');
-      await settings
-        .getByLabel('Environment variable names allowed into processes')
-        .fill('PATH, HOME, LANG, CI');
 
       await settings.getByRole('button', { name: /Git & previews/ }).click();
-      await settings.getByLabel('Branch prefix').fill('team/agents/');
       await settings.getByLabel('Preview port start').fill('42000');
       await settings.getByLabel('Preview port end').fill('42099');
       await expect(settings.getByRole('heading', { name: /^Collaboration$/u })).toHaveCount(0);

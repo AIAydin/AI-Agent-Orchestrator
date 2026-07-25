@@ -117,50 +117,14 @@ test('Codex connects through provider OAuth UI, refreshes after restart, and nev
     await page.getByRole('button', { name: 'Settings' }).click();
     const settings = page.getByRole('dialog', { name: 'Settings' });
     await settings.getByRole('button', { name: /Agents & runtime/ }).click();
-    const settingsCard = settings.getByRole('article').filter({ hasText: 'Codex CLI' });
 
-    await test.step('restart is passive and requires an explicit reviewed refresh', async () => {
-      await expect(settingsCard.getByText('Needs refresh')).toBeVisible();
-      await expect(settingsCard.getByRole('button', { name: 'Connect with OpenAI' })).toBeVisible();
+    await test.step('restart is passive and settings keep only plain detection status', async () => {
+      await expect(
+        settings.getByRole('region', { name: 'Detected agent CLIs' }),
+      ).toBeVisible();
+      await expect(settings.getByRole('button', { name: 'Connect with OpenAI' })).toHaveCount(0);
+      await expect(settings.getByLabel('Executable override')).toHaveCount(0);
       expect(await readFixtureInvocations(executable)).toEqual(beforeRestart);
-
-      const dialogIndex = await queueProviderDialogResponse(electronApp!, 1);
-      await settingsCard.getByRole('button', { name: 'Refresh' }).click();
-      const dialog = await waitForProviderDialog(electronApp!, dialogIndex);
-      expectProviderDisclosure(dialog, {
-        title: 'Refresh status OpenAI Codex',
-        actionButton: 'Refresh status',
-        executable,
-        actionArguments: ['login', 'status'],
-        followUpArguments: null,
-      });
-      await expect(settingsCard.getByText('Connected')).toBeVisible({ timeout: 20_000 });
-    });
-
-    await test.step('disconnect and reconnect are explicit provider-owned operations', async () => {
-      let dialogIndex = await queueProviderDialogResponse(electronApp!, 1);
-      await settingsCard.getByRole('button', { name: 'Disconnect' }).click();
-      let dialog = await waitForProviderDialog(electronApp!, dialogIndex);
-      expectProviderDisclosure(dialog, {
-        title: 'Disconnect OpenAI Codex',
-        actionButton: 'Disconnect',
-        executable,
-        actionArguments: ['logout'],
-        followUpArguments: ['login', 'status'],
-      });
-      await expect(settingsCard.getByText('Not connected')).toBeVisible({ timeout: 20_000 });
-
-      dialogIndex = await queueProviderDialogResponse(electronApp!, 1);
-      await settingsCard.getByRole('button', { name: 'Connect with OpenAI' }).click();
-      dialog = await waitForProviderDialog(electronApp!, dialogIndex);
-      expectProviderDisclosure(dialog, {
-        title: 'Connect OpenAI Codex',
-        actionButton: 'Connect',
-        executable,
-        actionArguments: ['login'],
-        followUpArguments: ['login', 'status'],
-      });
-      await expect(settingsCard.getByText('Connected')).toBeVisible({ timeout: 20_000 });
       await expect
         .poll(async () => await readFixtureState(executable))
         .toEqual({
@@ -171,26 +135,9 @@ test('Codex connects through provider OAuth UI, refreshes after restart, and nev
 
     await expectNoFixtureSecrets(page);
     await settings.getByRole('button', { name: 'Close settings' }).click();
-    await page.getByRole('button', { name: /Explore the safe demo/i }).click();
-    const auditTab = page.getByRole('tab', { name: 'History' });
-    await auditTab.click();
-    const auditPanel = page.getByRole('tabpanel', { name: 'History' });
-    await expect(auditPanel.getByText('provider-connection').first()).toBeVisible();
-    await expect(auditPanel.getByText('connect').first()).toBeVisible();
     await expectNoFixtureSecrets(page);
 
     expect((await readFixtureInvocations(executable)).map((entry) => entry.arguments)).toEqual([
-      ['--version'],
-      ['--help'],
-      ['login'],
-      ['login', 'status'],
-      ['--version'],
-      ['--help'],
-      ['login', 'status'],
-      ['--version'],
-      ['--help'],
-      ['logout'],
-      ['login', 'status'],
       ['--version'],
       ['--help'],
       ['login'],
