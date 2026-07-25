@@ -147,22 +147,8 @@ function ProjectTemplates({
 }: ProjectTemplatesProps) {
   return (
     <>
-      <section className="repository-summary">
-        <header>
-          <GitBranch size={14} />
-          <strong>{project.health.branch ?? 'Git not set up yet'}</strong>
-          <span
-            className={project.health.dirty ? 'dirty-dot' : 'clean-dot'}
-            role="img"
-            aria-label={
-              project.health.dirty
-                ? 'Project has changes not yet recorded in Git'
-                : 'All project changes are recorded in Git'
-            }
-          />
-        </header>
-        <small>{project.path}</small>
-        {!project.health.isGitRepository && (
+      {!project.health.isGitRepository && (
+        <section className="repository-summary">
           <div className="repository-initialize">
             <p>
               Set up Git so agents can work in their own copies and you can review their changes.
@@ -173,15 +159,8 @@ function ProjectTemplates({
             </button>
             <small>Your files stay exactly as they are.</small>
           </div>
-        )}
-        {project.health.frameworks.length > 0 && (
-          <div>
-            {project.health.frameworks.map((framework) => (
-              <span key={framework}>{framework}</span>
-            ))}
-          </div>
-        )}
-      </section>
+        </section>
+      )}
       <section className="template-section">
         <header>
           <h2>Agents</h2>
