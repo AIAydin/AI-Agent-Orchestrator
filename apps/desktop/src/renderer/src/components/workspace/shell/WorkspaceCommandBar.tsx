@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import type { AgentDetection, Project } from '../../../../../shared/application/contracts.js';
+import { BrandMark } from '../../shell/BrandMark.js';
 import {
   WorkspaceStatusIndicators,
   type WorkspaceSharingStatus,
@@ -67,7 +68,7 @@ export function WorkspaceCommandBar({
     <header className="command-bar">
       <div className="window-drag-space" />
       <button className="project-switcher" type="button" onClick={onCloseProject}>
-        <span className="brand-mark tiny">F</span>
+        <BrandMark size={24} />
         <span>
           <strong>{project.name}</strong>
           <small>{canvasName ?? 'Loading canvas…'}</small>

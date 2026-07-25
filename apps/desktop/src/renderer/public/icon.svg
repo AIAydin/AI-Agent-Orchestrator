@@ -1,17 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Forgeboard">
   <rect x="48" y="48" width="928" height="928" rx="224" fill="#171b18" />
+  <path d="M372 468h216a62 62 0 0 1 0 124H372Z" fill="#dda45e" />
   <path
-    d="M245 218h238c35 0 63 28 63 63v98c0 35-28 63-63 63H245c-35 0-63-28-63-63v-98c0-35 28-63 63-63Z"
-    fill="#d99a4e"
+    d="M356 726V402a104 104 0 0 1 104-104h208"
+    fill="none"
+    stroke="#f3f4f2"
+    stroke-width="124"
+    stroke-linecap="round"
   />
-  <path
-    d="M245 496h98c35 0 63 28 63 63v184c0 35-28 63-63 63h-98c-35 0-63-28-63-63V559c0-35 28-63 63-63Z"
-    fill="#f3f4f2"
-  />
-  <path
-    d="M498 496h281c35 0 63 28 63 63v184c0 35-28 63-63 63H498c-35 0-63-28-63-63V559c0-35 28-63 63-63Z"
-    fill="#d99a4e"
-  />
-  <path d="M608 218h171c35 0 63 28 63 63v98c0 35-28 63-63 63H608V218Z" fill="#f3f4f2" />
-  <circle cx="608" cy="442" r="36" fill="#70b889" />
 </svg>
