@@ -1,8 +1,7 @@
 .workspace-project-tree {
   display: grid;
   /* minmax(0, 1fr) + min-width guards keep any child's intrinsic width (long
-     agent titles in the attach select, long file names) from pushing the whole
-     section wider than the rail. */
+     file names) from pushing the whole section wider than the rail. */
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   max-width: 100%;
@@ -154,44 +153,6 @@
   gap: 6px;
   color: var(--red);
   font-size: var(--text-xs);
-}
-
-.workspace-project-tree-attach {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  min-width: 0;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface-subtle);
-}
-
-.workspace-project-tree-attach label {
-  display: grid;
-  gap: 4px;
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-}
-
-.workspace-project-tree-attach select,
-.workspace-project-tree-attach button {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 30px;
-  font-size: var(--text-xs);
-}
-
-.workspace-project-tree-attach p {
-  margin: 0;
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-}
-
-.workspace-project-tree-attach p[role='alert'] {
-  color: var(--red);
 }
 
 .workspace-project-tree footer {

@@ -132,6 +132,26 @@ describe('Welcome moved-project recovery', () => {
     expect(screen.queryByText('Missing folder')).toBeNull();
   });
 
+  it('caps the recent list at five and reveals the rest on demand', () => {
+    const recent = Array.from({ length: 8 }, (_, index) => ({
+      ...missingProject,
+      missing: false,
+      id: `${PROJECT_ID.slice(0, -1)}${index}`,
+      name: `Project ${index}`,
+      path: `/repos/project-${index}`,
+    }));
+    render(<Welcome {...props({ recent })} />);
+
+    expect(screen.getByText('Project 4')).toBeTruthy();
+    expect(screen.queryByText('Project 5')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show 3 more' }));
+    expect(screen.getByText('Project 7')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show less' }));
+    expect(screen.queryByText('Project 5')).toBeNull();
+  });
+
   it('does not show a confirmation or mutate when native selection fails', async () => {
     const onError = vi.fn();
     const onConfirmMoved = vi.fn(() => Promise.resolve());

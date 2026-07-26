@@ -9,7 +9,6 @@ import type { WorkshopNode } from '../../canvas/CanvasNode.js';
 import { AgentContextDropZone } from '../AgentContextDropZone.js';
 import type { WorkspaceContextDragPayload } from '../contracts.js';
 import { linkProjectFileToAgent } from '../linking.js';
-import { FileContextTargetPicker } from '../targets/FileContextTargetPicker.js';
 import { WorkspaceProjectTree } from '../WorkspaceProjectTree.js';
 
 const PROJECT_ID = '70000000-0000-4000-8000-000000000001';
@@ -33,30 +32,6 @@ describe('project-file to Agent context UI workflow', () => {
     expect(await screen.findByText('docs/brief.md')).toBeTruthy();
     expect(screen.getByText('1/256')).toBeTruthy();
   });
-
-  it('attaches a keyboard-selected project-tree file to the chosen Agent', async () => {
-    render(<TreeToSelectedAgentHarness />);
-    fireEvent.click(await screen.findByRole('treeitem', { name: 'Expand folder docs' }));
-    fireEvent.click(
-      await screen.findByRole('treeitem', {
-        name: 'File docs/brief.md',
-      }),
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Attach selected file' }));
-
-    expect(await screen.findByText('docs/brief.md')).toBeTruthy();
-    expect(screen.getByText('1/256')).toBeTruthy();
-  });
-
-  it('attaches a configured File node to an Agent through the keyboard-accessible picker', async () => {
-    render(<FileNodeToAgentHarness />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Attach saved file' }));
-
-    expect(await screen.findByText('src/context.ts')).toBeTruthy();
-    expect(screen.getByText('1/256')).toBeTruthy();
-  });
 });
 
 function TreeToSelectedAgentHarness() {
@@ -77,37 +52,6 @@ function TreeToSelectedAgentHarness() {
           search: vi.fn(),
           read: vi.fn(),
         }}
-        agentTargets={nodes}
-        readOnly={false}
-        onAttach={onAttach}
-      />
-      <AgentContextDropZone
-        agent={agent}
-        nodes={nodes}
-        readOnly={false}
-        onAttach={(payload) => onAttach(agent.id, payload)}
-        onRemove={vi.fn()}
-      />
-    </>
-  );
-}
-
-function FileNodeToAgentHarness() {
-  const [nodes, setNodes] = useState<WorkshopNode[]>([fileNode(), agentNode()]);
-  const source = nodes.find((node) => node.id === 'file-1')!;
-  const agent = nodes.find((node) => node.id === 'agent-1')!;
-  const onAttach = (targetNodeId: string, payload: WorkspaceContextDragPayload) => {
-    setNodes(linkedNodes(nodes, payload, document(payload), targetNodeId));
-    return Promise.resolve();
-  };
-  return (
-    <>
-      <FileContextTargetPicker
-        projectId={PROJECT_ID}
-        source={source}
-        nodes={nodes}
-        readOnly={false}
-        onAttach={onAttach}
       />
       <AgentContextDropZone
         agent={agent}
@@ -199,29 +143,6 @@ function agentNode(): WorkshopNode {
       collapsed: false,
       color: '#445566',
       contextAttachmentIds: [],
-    },
-  };
-}
-
-function fileNode(): WorkshopNode {
-  return {
-    id: 'file-1',
-    type: 'workshop',
-    position: { x: 0, y: 0 },
-    data: {
-      kind: 'file',
-      title: 'context.ts',
-      description: 'File',
-      status: 'idle',
-      locked: false,
-      collapsed: false,
-      color: '#667788',
-      file: {
-        projectId: PROJECT_ID,
-        relativePath: 'src/context.ts',
-        kind: 'file',
-        missing: false,
-      },
     },
   };
 }

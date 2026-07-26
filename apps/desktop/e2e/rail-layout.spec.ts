@@ -45,13 +45,6 @@ test('the project rail stays bounded and can give its space back to the canvas',
     if ((await firstFile.count()) > 0) await firstFile.click();
     await page.waitForTimeout(300);
 
-    // A long agent title must not widen the attach panel past the rail.
-    await page.evaluate(() => {
-      const option = document.querySelector('.workspace-project-tree-attach select option');
-      if (option) option.textContent = 'An agent title that is far wider than the project rail';
-    });
-    await page.waitForTimeout(200);
-
     const overflows = await page.evaluate(() => {
       const rail = document.querySelector('.project-rail');
       if (!rail) return ['missing .project-rail'];

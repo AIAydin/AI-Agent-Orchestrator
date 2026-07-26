@@ -487,7 +487,7 @@ describe('SetupWizard', () => {
     await waitFor(() => expect(onSkip).toHaveBeenCalledTimes(1));
   });
 
-  it('blocks invalid environment names and explains that secret values are not persisted', async () => {
+  it('blocks invalid environment names and explains that secret values are not persisted', () => {
     render(
       <SetupWizard
         settings={settings}
