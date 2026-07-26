@@ -21,8 +21,8 @@ interface ByteRange {
 /**
  * Chromium's media stack fetches <video> sources with Range requests —
  * `bytes=0-` up front and tail ranges for MP4s whose index sits at the end of
- * the file. Proxying those through `net.fetch(file://…)` answers 200 with the
- * whole body, which makes such files fail to load or seek. This serves the
+ * the file. Proxying those through a fetch of the `file://` URL answers 200
+ * with the whole body, which makes such files fail to load or seek. This serves the
  * ranges directly from disk instead.
  */
 export async function videoPlaybackResponse(

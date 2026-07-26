@@ -385,6 +385,7 @@ describe('SettingsPanel draft transactions', () => {
     expect([...profile.options].map((option) => option.value)).toEqual([
       'plan-read-only',
       'worktree-write',
+      'project-write',
       'docker-isolated',
     ]);
     expect(screen.getByRole('heading', { name: 'Saved approvals' })).toBeTruthy();
