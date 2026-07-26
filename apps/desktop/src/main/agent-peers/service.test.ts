@@ -913,6 +913,69 @@ describe('AgentPeersService', () => {
     await expect(service.resetForPrivacy()).resolves.toBeUndefined();
   });
 
+  // A provision that never binds to a session has no `releaseSession` trigger of its own: expiry
+  // is the only thing that ever reclaims it, so expiry has to be a cleanup route too. Otherwise
+  // the artifacts it wrote (for gemini/opencode, a key in a file inside the user's project repo)
+  // survive until app shutdown -- and outlive the app entirely if it is killed rather than quit.
+  it('runs the cleanup of a provision that expires without ever binding a session', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    const abandoned = await service.provision(PROJECT_ID, a.id);
+    const cleanup = vi.fn(() => Promise.resolve());
+    service.registerCleanup(abandoned.provisionId, cleanup);
+
+    clock += 5 * 60_000 + 1;
+    await service.provision(PROJECT_ID, a.id);
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    // The token is gone too, so nothing is left pointing at the reclaimed provision.
+    expect(service.environmentForProvision(abandoned.provisionId)).toBeNull();
+
+    await service.dispose();
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not run the cleanup of a bound session that has simply been running a long time', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    const provision = await service.provision(PROJECT_ID, a.id);
+    service.bindSession(provision.provisionId, 'session-a');
+    const cleanup = vi.fn(() => Promise.resolve());
+    service.registerCleanup(provision.provisionId, cleanup);
+
+    clock += 60 * 60_000;
+    await service.provision(PROJECT_ID, a.id);
+
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it('runs a cleanup registered for an already-reclaimed provision immediately', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    const abandoned = await service.provision(PROJECT_ID, a.id);
+    clock += 5 * 60_000 + 1;
+    await service.provision(PROJECT_ID, a.id);
+
+    const cleanup = vi.fn(() => Promise.resolve());
+    service.registerCleanup(abandoned.provisionId, cleanup);
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('a rejecting cleanup does not throw out of expiry reclamation', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    await service.provision(PROJECT_ID, a.id);
+    const abandoned = await service.provision(PROJECT_ID, a.id);
+    service.registerCleanup(abandoned.provisionId, () => Promise.reject(new Error('boom')));
+
+    clock += 5 * 60_000 + 1;
+    expect(() =>
+      service.registerCleanup('unknown-provision', () => Promise.reject(new Error('x'))),
+    ).not.toThrow();
+    await expect(service.provision(PROJECT_ID, a.id)).resolves.toBeDefined();
+  });
+
   it('releaseSession followed by dispose does not double-run that provision cleanup', async () => {
     const a = agentNode('agent-a', 'Agent A');
     setCanvas([a], []);

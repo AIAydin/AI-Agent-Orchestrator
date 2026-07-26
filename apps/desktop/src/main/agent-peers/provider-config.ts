@@ -9,6 +9,10 @@ import { app } from 'electron';
  * is appended to the CLI argv the renderer builds; `cleanup` is registered with the peer-hub so
  * every on-disk artifact this module wrote is undone when the session/provision tears down (see
  * `AgentPeersService.registerCleanup`/`releaseSession`).
+ *
+ * `cleanup` is idempotent and never rejects: several teardown routes can fire for one session
+ * (PTY exit, terminate, unbound-provision expiry, app quit), and none of them may be blocked by
+ * a cleanup failure.
  */
 export interface ProviderPeerMaterial {
   readonly available: boolean;
@@ -38,6 +42,9 @@ const NO_HINT_UNAVAILABLE = 'Peer tools unavailable for this agent.';
 const PROVISION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const INVALID_PROVISION_ID_HINT =
   'Peer tools unavailable: provision directory name is not a safe token.';
+
+/** Prefix of every JSON object key this module writes into a shared project-root config file. */
+const AUTHORED_KEY_PREFIX = 'forgeboard-';
 
 /** Validates the provision id before it is used in a filename or JSON key. Returns `null` --
  * rather than sanitizing -- so a path-hostile value is rejected outright instead of silently
@@ -249,28 +256,43 @@ function tomlString(value: string): string {
  * file or another session's entry. The supported model is still one gemini peer session per
  * project at a time; running two concurrently is unsupported (both shims end up registered,
  * i.e. cross-wired) but is now safe from data loss.
+ *
+ * Because the file lives in the user's repo and a hard-killed app never gets to run `cleanup()`,
+ * every write also sweeps LEAKED sibling entries -- see `sweepStaleAuthoredEntries`.
  */
 async function writeGeminiMaterial(
   input: WriteProviderPeerMaterialInput,
 ): Promise<ProviderPeerMaterial> {
   const provisionId = resolveProvisionId(input.provisionDir);
   if (provisionId === null) return unavailableMaterial(INVALID_PROVISION_ID_HINT);
-  const entryKey = `forgeboard-${provisionId}`;
-  const settingsPath = join(input.projectRoot, '.gemini', 'settings.json');
-  const entry = {
-    command: process.execPath,
-    args: [shimEntryPath()],
-    env: { ELECTRON_RUN_AS_NODE: '1' },
-  };
-  const existedBefore = await mergeJsonEntry(settingsPath, 'mcpServers', entryKey, entry);
-  return {
-    available: true,
-    hint: null,
-    extraArguments: [],
-    cleanup: async () => {
-      await cleanupJsonEntry(settingsPath, 'mcpServers', entryKey, existedBefore);
+  return await writeSharedJsonMaterial({
+    path: join(input.projectRoot, '.gemini', 'settings.json'),
+    containerKey: 'mcpServers',
+    entryKey: `${AUTHORED_KEY_PREFIX}${provisionId}`,
+    entryValue: {
+      command: process.execPath,
+      args: [shimEntryPath()],
+      env: { ELECTRON_RUN_AS_NODE: '1' },
     },
-  };
+    isAuthoredEntry: isGeminiAuthoredEntry,
+  });
+}
+
+/**
+ * Recognises an `mcpServers` entry with the exact shape `writeGeminiMaterial` writes, so the
+ * stale sweep can never delete a key the user happens to have named `forgeboard-*` themselves.
+ * The shim path is matched by SUFFIX, not equality: a leaked entry points at whatever checkout
+ * wrote it, which is usually not the one running now.
+ */
+function isGeminiAuthoredEntry(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (typeof value['command'] !== 'string') return false;
+  const args = value['args'];
+  if (!Array.isArray(args) || args.length !== 1) return false;
+  const [entryPoint] = args as unknown[];
+  if (typeof entryPoint !== 'string' || !isShimEntryPoint(entryPoint)) return false;
+  const environment = value['env'];
+  return isRecord(environment) && environment['ELECTRON_RUN_AS_NODE'] === '1';
 }
 
 // ---------------------------------------------------------------------------------------
@@ -296,33 +318,144 @@ async function writeGeminiMaterial(
  * and never destroys the file or another session's entry. One opencode peer session per project
  * at a time is the supported model; concurrent sessions cross-wire (unsupported) but can no
  * longer corrupt this file.
+ *
+ * Because the file lives in the user's repo and a hard-killed app never gets to run `cleanup()`,
+ * every write also sweeps LEAKED sibling entries -- see `sweepStaleAuthoredEntries`.
  */
 async function writeOpencodeMaterial(
   input: WriteProviderPeerMaterialInput,
 ): Promise<ProviderPeerMaterial> {
   const provisionId = resolveProvisionId(input.provisionDir);
   if (provisionId === null) return unavailableMaterial(INVALID_PROVISION_ID_HINT);
-  const entryKey = `forgeboard-${provisionId}`;
-  const configPath = join(input.projectRoot, 'opencode.json');
-  const entry = {
-    type: 'local',
-    command: [process.execPath, shimEntryPath()],
-    environment: { ELECTRON_RUN_AS_NODE: '1' },
-  };
-  const existedBefore = await mergeJsonEntry(configPath, 'mcp', entryKey, entry);
-  return {
-    available: true,
-    hint: null,
-    extraArguments: [],
-    cleanup: async () => {
-      await cleanupJsonEntry(configPath, 'mcp', entryKey, existedBefore);
+  return await writeSharedJsonMaterial({
+    path: join(input.projectRoot, 'opencode.json'),
+    containerKey: 'mcp',
+    entryKey: `${AUTHORED_KEY_PREFIX}${provisionId}`,
+    entryValue: {
+      type: 'local',
+      command: [process.execPath, shimEntryPath()],
+      environment: { ELECTRON_RUN_AS_NODE: '1' },
     },
-  };
+    isAuthoredEntry: isOpencodeAuthoredEntry,
+  });
+}
+
+/** The opencode counterpart of `isGeminiAuthoredEntry` -- see there for why this exists. */
+function isOpencodeAuthoredEntry(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value['type'] !== 'local') return false;
+  const command = value['command'];
+  if (!Array.isArray(command) || command.length !== 2) return false;
+  const [executable, entryPoint] = command as unknown[];
+  if (typeof executable !== 'string') return false;
+  if (typeof entryPoint !== 'string' || !isShimEntryPoint(entryPoint)) return false;
+  const environment = value['environment'];
+  return isRecord(environment) && environment['ELECTRON_RUN_AS_NODE'] === '1';
+}
+
+/** Every path `shimEntryPath()` can ever produce ends in one of these: `peer-mcp/dist/main.js`
+ * in dev, `peer-mcp/main.js` when packaged. Matching the tail (not the whole path) is what lets
+ * the sweep recognise an entry written by a DIFFERENT checkout or a previous install. */
+const SHIM_ENTRY_SUFFIXES = ['/peer-mcp/dist/main.js', '/peer-mcp/main.js'] as const;
+
+function isShimEntryPoint(value: string): boolean {
+  const normalized = value.replaceAll('\\', '/');
+  return SHIM_ENTRY_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
 }
 
 // ---------------------------------------------------------------------------------------
 // Shared JSON merge/cleanup helpers (gemini, opencode)
 // ---------------------------------------------------------------------------------------
+
+/**
+ * One provider's registration in a shared project-root JSON config file: which file, which
+ * container object inside it, our provision-scoped key, the entry we write, and the predicate
+ * that recognises an entry THIS module authored (used by the stale sweep).
+ */
+interface SharedJsonEntryPlan {
+  readonly path: string;
+  readonly containerKey: string;
+  readonly entryKey: string;
+  readonly entryValue: unknown;
+  readonly isAuthoredEntry: (value: unknown) => boolean;
+}
+
+/** The pre-write state of a shared config file, captured once at registration time so cleanup
+ * can put the file back exactly as it found it -- including deleting a file we created. */
+interface SharedJsonBaseline {
+  /** The file was present on disk before our write (regardless of whether it parsed). */
+  readonly existed: boolean;
+  /** The file parsed as a JSON object. Only then may `raw` be restored verbatim. */
+  readonly parsed: boolean;
+  /** Original bytes, so a restore is byte-identical (indentation, key order, trailing newline). */
+  readonly raw: string | null;
+  /** Parsed original, or `{}` when the file was absent or unparseable. */
+  readonly value: Record<string, unknown>;
+}
+
+/** A baseline plus the one judgement that can only be made at registration time: whether the
+ * container object was the user's to begin with, or something Forgeboard introduced. */
+interface SharedJsonRegistration extends SharedJsonBaseline {
+  /** The container key existed and held something other than Forgeboard's own entries, so
+   * cleanup must leave the key in place even after emptying it. */
+  readonly containerWasTheirs: boolean;
+}
+
+/**
+ * Entry keys registered by THIS app instance and not yet cleaned up.
+ *
+ * The stale sweep exists because a config entry lives in the user's git repo while its owning
+ * process may die without ever running `cleanup()` (SIGKILL, power loss, a crash before the
+ * quit handlers run). Nothing on disk distinguishes "a concurrent session is using this" from
+ * "a dead session leaked this" -- only this in-memory set does, and it is authoritative exactly
+ * because a leaked entry by definition belongs to a process that no longer exists.
+ */
+const liveEntryKeys = new Set<string>();
+
+/**
+ * Shared config files THIS app instance created, i.e. they did not exist before it first wrote
+ * one. Tracked per file rather than per provision because the session that created the file is
+ * often not the last one to leave: with three sessions sharing one project root, the creator's
+ * cleanup runs first and the third session's cleanup is the one that finds the file empty. An
+ * entry is dropped again the moment the file is removed.
+ */
+const filesCreatedByThisInstance = new Set<string>();
+
+/**
+ * Top-level keys that hold no user data and that the provider CLI itself may add to a file we
+ * created (opencode writes `$schema` into `opencode.json` when it normalises it). They are only
+ * ever treated as disposable when the file did NOT exist before Forgeboard wrote it -- in that
+ * case a file containing nothing but these plus our now-empty container is pure Forgeboard
+ * residue, and removing it restores the project to its pre-Forgeboard state.
+ */
+const DISPOSABLE_METADATA_KEYS: ReadonlySet<string> = new Set(['$schema']);
+
+/** In-flight tail of the read-modify-write chain for each shared config file. */
+const fileOperationQueues = new Map<string, Promise<void>>();
+
+/**
+ * Serialises every read-modify-write of one shared config file.
+ *
+ * Registration and cleanup both re-read the whole file, edit one key, and write it back. Two of
+ * those interleaved (two provisions racing on one project root, or a cleanup landing mid-write)
+ * would let the later write clobber the earlier one's entry. The queue is per path, so unrelated
+ * projects never wait on each other, and a rejection is absorbed so one failure cannot poison
+ * the chain for every later caller.
+ */
+async function withFileLock<T>(path: string, operation: () => Promise<T>): Promise<T> {
+  const previous = fileOperationQueues.get(path) ?? Promise.resolve();
+  const settled = previous.then(operation, operation);
+  const tail = settled.then(
+    () => undefined,
+    () => undefined,
+  );
+  fileOperationQueues.set(path, tail);
+  try {
+    return await settled;
+  } finally {
+    if (fileOperationQueues.get(path) === tail) fileOperationQueues.delete(path);
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -337,77 +470,196 @@ function isEnoent(error: unknown): boolean {
   );
 }
 
+/** Structural equality for parsed JSON, ignoring key order (which `JSON.stringify` would not). */
+function deepEqualJson(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right)) return false;
+    return (
+      left.length === right.length && left.every((item, index) => deepEqualJson(item, right[index]))
+    );
+  }
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const keys = Object.keys(left);
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => Object.hasOwn(right, key) && deepEqualJson(left[key], right[key]))
+  );
+}
+
 /** Reads `path` as a JSON object, tolerating a missing or invalid file by treating it as `{}`.
  * `existed` reflects only whether the file was present on disk -- never whether it parsed --
  * so cleanup can tell "we created this file" from "this file pre-existed but was broken" and
  * never delete something it didn't create. */
-async function readJsonObject(
-  path: string,
-): Promise<{ existed: boolean; value: Record<string, unknown> }> {
+async function readJsonObject(path: string): Promise<SharedJsonBaseline> {
   let raw: string;
   try {
     raw = await readFile(path, 'utf8');
   } catch (error) {
-    if (isEnoent(error)) return { existed: false, value: {} };
+    if (isEnoent(error)) return { existed: false, parsed: false, raw: null, value: {} };
     throw error;
   }
   try {
     const parsed: unknown = JSON.parse(raw);
-    return { existed: true, value: isRecord(parsed) ? parsed : {} };
+    return isRecord(parsed)
+      ? { existed: true, parsed: true, raw, value: parsed }
+      : { existed: true, parsed: false, raw, value: {} };
   } catch {
-    return { existed: true, value: {} };
+    return { existed: true, parsed: false, raw, value: {} };
   }
 }
 
-/** Merges `{ [containerKey]: { [entryKey]: entryValue } }` into the JSON object at `path`,
- * preserving every other top-level and sibling key. Returns whether the file already existed
- * before this write, so cleanup knows whether it is allowed to delete it later. */
-async function mergeJsonEntry(
-  path: string,
-  containerKey: string,
-  entryKey: string,
-  entryValue: unknown,
-): Promise<boolean> {
-  const { existed, value } = await readJsonObject(path);
-  const container = isRecord(value[containerKey]) ? { ...value[containerKey] } : {};
-  container[entryKey] = entryValue;
-  const merged = { ...value, [containerKey]: container };
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(merged, null, 2)}\n`, { mode: 0o600 });
-  return existed;
+/** Registers one provision's entry in a shared project-root config file and hands back the
+ * matching cleanup. The cleanup is memoised (`runOnce`) so the several teardown routes that can
+ * all fire for one session -- PTY exit, terminate, provision expiry, app quit -- collapse into a
+ * single idempotent run, and it never rejects. */
+async function writeSharedJsonMaterial(plan: SharedJsonEntryPlan): Promise<ProviderPeerMaterial> {
+  const baseline = await mergeJsonEntry(plan);
+  return {
+    available: true,
+    hint: null,
+    extraArguments: [],
+    cleanup: runOnce(async () => {
+      await cleanupJsonEntry(plan, baseline);
+    }),
+  };
 }
 
-/** Removes only `[containerKey][entryKey]` from the JSON object at `path`. If the file did not
- * exist before our write (`existedBefore === false`) and removing our entry leaves the object
- * empty, the file is deleted; otherwise the reduced object is written back, leaving every
- * unrelated key -- including other entries in the same container -- untouched. Best-effort and
- * fully async: every failure is caught here so a broken cleanup can never escape and block the
- * peer-hub's teardown. */
+/** Collapses repeat invocations into the first run's promise. */
+function runOnce(run: () => Promise<void>): () => Promise<void> {
+  let started: Promise<void> | null = null;
+  return () => {
+    started ??= run();
+    return started;
+  };
+}
+
+/**
+ * Whether `container[key]` is an entry THIS module wrote: the key carries our `forgeboard-`
+ * prefix followed by a well-formed provision id, AND the value has the exact shape the provider's
+ * writer produces. A user's own MCP server -- including one they chose to name
+ * `forgeboard-something` -- fails the shape test, so nothing the app did not author is ever
+ * classified as ours.
+ */
+function isAuthoredEntry(
+  container: Record<string, unknown>,
+  key: string,
+  plan: SharedJsonEntryPlan,
+): boolean {
+  if (!key.startsWith(AUTHORED_KEY_PREFIX)) return false;
+  if (!PROVISION_ID_PATTERN.test(key.slice(AUTHORED_KEY_PREFIX.length))) return false;
+  return plan.isAuthoredEntry(container[key]);
+}
+
+/**
+ * Deletes every LEAKED Forgeboard entry from `container`, in place: one we authored, that is not
+ * our own key, and that no live provision of this app instance owns (`liveEntryKeys`). Only an
+ * entry whose owning process is gone can satisfy all three.
+ */
+function sweepStaleAuthoredEntries(
+  container: Record<string, unknown>,
+  plan: SharedJsonEntryPlan,
+): void {
+  for (const key of Object.keys(container)) {
+    if (key === plan.entryKey) continue;
+    if (liveEntryKeys.has(key)) continue;
+    if (!isAuthoredEntry(container, key, plan)) continue;
+    delete container[key];
+  }
+}
+
+/** True when the container object held user content before we touched it. An absent container is
+ * ours (we are about to create it); an empty one is treated as the user's, since an empty
+ * `"mcp": {}` they wrote is indistinguishable from one they merely left behind. */
+function containerBelongsToUser(
+  baseline: Record<string, unknown>,
+  plan: SharedJsonEntryPlan,
+): boolean {
+  const container = baseline[plan.containerKey];
+  if (!isRecord(container)) return false;
+  const keys = Object.keys(container);
+  return keys.length === 0 || keys.some((key) => !isAuthoredEntry(container, key, plan));
+}
+
+/** Merges `{ [containerKey]: { [entryKey]: entryValue } }` into the JSON object at `plan.path`,
+ * sweeping leaked sibling entries on the way through and preserving every other top-level and
+ * sibling key. Returns the file's pre-write state so cleanup can restore it exactly. */
+async function mergeJsonEntry(plan: SharedJsonEntryPlan): Promise<SharedJsonRegistration> {
+  return await withFileLock(plan.path, async () => {
+    const baseline = await readJsonObject(plan.path);
+    const containerWasTheirs = containerBelongsToUser(baseline.value, plan);
+    const existingContainer = baseline.value[plan.containerKey];
+    const container = isRecord(existingContainer) ? { ...existingContainer } : {};
+    sweepStaleAuthoredEntries(container, plan);
+    container[plan.entryKey] = plan.entryValue;
+    liveEntryKeys.add(plan.entryKey);
+    if (!baseline.existed) filesCreatedByThisInstance.add(plan.path);
+    const merged = { ...baseline.value, [plan.containerKey]: container };
+    await mkdir(dirname(plan.path), { recursive: true });
+    await writeFile(plan.path, `${JSON.stringify(merged, null, 2)}\n`, { mode: 0o600 });
+    return { ...baseline, containerWasTheirs };
+  });
+}
+
+/**
+ * Removes only `[containerKey][entryKey]` from the JSON object at `plan.path` and then restores
+ * as much of the pre-session state as is still ours to restore:
+ *
+ * - the file is one this app instance created and nothing but Forgeboard residue is left (an
+ *   empty container, plus metadata-only keys such as a `$schema` pointer the CLI added on its
+ *   own) -- the file is deleted, since that IS its pre-Forgeboard state;
+ * - what remains is semantically identical to the baseline -- the original bytes are written
+ *   back verbatim, so a pre-existing user file ends up byte-identical to how we found it;
+ * - anything else (another session's entry, edits made while we ran, entries the sweep removed)
+ *   -- the reduced object is serialised, leaving every unrelated key untouched.
+ *
+ * Best-effort and fully async: every failure is caught here so a broken cleanup can never escape
+ * and block the peer-hub's teardown.
+ */
 async function cleanupJsonEntry(
-  path: string,
-  containerKey: string,
-  entryKey: string,
-  existedBefore: boolean,
+  plan: SharedJsonEntryPlan,
+  baseline: SharedJsonRegistration,
 ): Promise<void> {
+  liveEntryKeys.delete(plan.entryKey);
   try {
-    const { existed, value } = await readJsonObject(path);
-    if (!existed) return;
-    const container = isRecord(value[containerKey]) ? { ...value[containerKey] } : {};
-    delete container[entryKey];
-    const next: Record<string, unknown> = { ...value };
-    if (Object.keys(container).length === 0) {
-      delete next[containerKey];
-    } else {
-      next[containerKey] = container;
-    }
-    if (!existedBefore && Object.keys(next).length === 0) {
-      await unlinkBestEffort(path);
-      return;
-    }
-    await writeFile(path, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+    await withFileLock(plan.path, async () => {
+      const current = await readJsonObject(plan.path);
+      if (!current.existed) return;
+      const currentContainer = current.value[plan.containerKey];
+      const container = isRecord(currentContainer) ? { ...currentContainer } : {};
+      delete container[plan.entryKey];
+      const next: Record<string, unknown> = { ...current.value };
+      // A container key the user already had stays, even when empty: removing it would be an
+      // edit to their file, not a cleanup of ours.
+      if (Object.keys(container).length === 0 && !baseline.containerWasTheirs) {
+        delete next[plan.containerKey];
+      } else {
+        next[plan.containerKey] = container;
+      }
+      const weCreatedTheFile = !baseline.existed || filesCreatedByThisInstance.has(plan.path);
+      if (weCreatedTheFile && isForgeboardResidueOnly(next, plan.containerKey)) {
+        await unlinkBestEffort(plan.path);
+        filesCreatedByThisInstance.delete(plan.path);
+        return;
+      }
+      if (baseline.parsed && baseline.raw !== null && deepEqualJson(next, baseline.value)) {
+        await writeFile(plan.path, baseline.raw);
+        return;
+      }
+      await writeFile(plan.path, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+    });
   } catch {
     // Best-effort: a cleanup failure must never block hub teardown.
   }
+}
+
+/** True when `value` holds no content worth keeping: at most an empty container plus
+ * metadata-only keys. Only ever consulted for a file Forgeboard itself created. */
+function isForgeboardResidueOnly(value: Record<string, unknown>, containerKey: string): boolean {
+  return Object.entries(value).every(([key, entry]) => {
+    if (key === containerKey) return isRecord(entry) && Object.keys(entry).length === 0;
+    return DISPOSABLE_METADATA_KEYS.has(key) && typeof entry === 'string';
+  });
 }
 
 async function unlinkBestEffort(path: string): Promise<void> {
