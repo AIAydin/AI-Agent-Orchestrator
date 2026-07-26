@@ -55,7 +55,7 @@ export function useCommandReadiness(
               : ({
                   phase: 'unavailable',
                   message:
-                    'Forgeboard can’t check this command right now. Reopen Forgeboard before saving it.',
+                    'Artemis can’t check this command right now. Reopen Artemis before saving it.',
                 } satisfies CommandReadinessStatus)
             : ({ phase: 'not-configured' } satisfies CommandReadinessStatus),
         ]),
@@ -98,7 +98,7 @@ export function useCommandReadiness(
                 message:
                   error instanceof Error && error.message.trim() !== ''
                     ? error.message
-                    : 'Forgeboard could not check this command.',
+                    : 'Artemis could not check this command.',
               },
             }));
           },

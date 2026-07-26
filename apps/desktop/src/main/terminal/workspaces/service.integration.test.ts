@@ -279,7 +279,7 @@ async function createFixture(profiles: Readonly<Record<string, string>> = {}): P
   roots.push(root);
   const repository = path.join(root, 'repository');
   await git(root, ['init', '-b', 'main', repository]);
-  await git(repository, ['config', 'user.name', 'Forgeboard Test']);
+  await git(repository, ['config', 'user.name', 'Artemis Test']);
   await git(repository, ['config', 'user.email', 'forgeboard@example.invalid']);
   await writeFile(path.join(repository, 'README.md'), '# fixture\n');
   await git(repository, ['add', '--', 'README.md']);

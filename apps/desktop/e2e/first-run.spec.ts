@@ -32,7 +32,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
         name: 'Ready to build without wiring config files?',
       });
       await expect(setup).toBeVisible();
-      await expect(setup.getByText('No Forgeboard cloud')).toBeVisible();
+      await expect(setup.getByText('No Artemis cloud')).toBeVisible();
       await expect(setup.getByText('Local by default')).toBeVisible();
       await expect(setup.getByText('Changes stay reviewable')).toBeVisible();
       await setup.getByRole('button', { name: 'Use safe defaults' }).click();
@@ -40,7 +40,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
     });
 
     await test.step('the production window starts with a hardened renderer and welcome UI', async () => {
-      await expect(page).toHaveTitle('Forgeboard');
+      await expect(page).toHaveTitle('Artemis');
       await expect(
         page.getByRole('heading', {
           name: /Build software in a visual workshop/i,
@@ -66,7 +66,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
 
       const security = await firstSession.app.evaluate(({ BrowserWindow }) => {
         const window = BrowserWindow.getAllWindows()[0];
-        if (!window) throw new Error('Forgeboard did not create its main window.');
+        if (!window) throw new Error('Artemis did not create its main window.');
         const webContents = window.webContents as typeof window.webContents & {
           getLastWebPreferences(): {
             allowRunningInsecureContent?: boolean;
@@ -98,7 +98,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await page.getByRole('button', { name: 'Settings' }).click();
       const settings = page.locator('.settings-modal');
       await expect(settings.getByRole('heading', { name: 'Settings' })).toBeVisible();
-      await expect(settings.getByText('Change how Forgeboard works here.')).toBeVisible();
+      await expect(settings.getByText('Change how Artemis works here.')).toBeVisible();
 
       await settings.getByRole('button', { name: 'dark', exact: true }).click();
       await settings.getByRole('button', { name: 'compact', exact: true }).click();
@@ -143,7 +143,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
 
     await test.step('the safe local demo opens without an account or network', async () => {
       await page.getByRole('button', { name: /Explore the safe demo/i }).click();
-      await expect(page.locator('.project-switcher')).toContainText('forgeboard-demo');
+      await expect(page.locator('.project-switcher')).toContainText('artemis-demo');
       await expect(page.locator('.canvas-title')).toContainText('0 nodes · 0 connections');
     });
 
@@ -159,7 +159,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       const details = await openCanvasNodeDetails(releasePlan);
       await details
         .getByLabel('Description')
-        .fill('A local-only release plan configured entirely from the Forgeboard UI.');
+        .fill('A local-only release plan configured entirely from the Artemis UI.');
       await details.getByRole('button', { name: 'Close node details' }).click();
       await runCanvasNodeContextAction(page, releasePlan, 'Lock');
       await expect(releasePlan.locator('[aria-label="Locked"]')).toBeVisible();
@@ -530,7 +530,7 @@ async function approveNextPrivacyDeletion(electronApp: ElectronApplication): Pro
           }
         | undefined;
       if (
-        options?.title !== 'Delete all local Forgeboard data?' ||
+        options?.title !== 'Delete all local Artemis data?' ||
         JSON.stringify(options.buttons) !== JSON.stringify(['Cancel', 'Delete all local data']) ||
         options.defaultId !== 0 ||
         options.cancelId !== 0

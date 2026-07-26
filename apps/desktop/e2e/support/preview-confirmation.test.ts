@@ -192,8 +192,8 @@ function previewBinding(
 ): NativePreviewConfirmationBinding {
   return {
     action,
-    projectRoot: '/tmp/forgeboard-demo',
-    cwd: '/tmp/forgeboard-demo',
+    projectRoot: '/tmp/artemis-demo',
+    cwd: '/tmp/artemis-demo',
     source: 'Literal preview command configured on this canvas node in the UI',
     executable: '/usr/bin/node',
     executableSha256: 'a'.repeat(64),
@@ -221,7 +221,7 @@ function nativeOptions(binding: NativePreviewConfirmationBinding): Record<string
       `Loopback port range: ${String(binding.portRange.start)}-${String(binding.portRange.end)}`,
       `Trusted loopback hosts: ${binding.trustedHosts.join(', ')}`,
       '',
-      'Forgeboard will start this local process without a shell. The process itself can still access resources allowed by your operating system.',
+      'Artemis will start this local process without a shell. The process itself can still access resources allowed by your operating system.',
     ].join('\n'),
     buttons: ['Cancel', restart ? 'Restart preview' : 'Start preview'],
     defaultId: 0,

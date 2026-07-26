@@ -102,7 +102,7 @@ function assertReleaseInfo(
         : ['unsigned-development', 'signed-not-notarized', 'signed-and-notarized'];
   if (
     info?.schemaVersion !== 1 ||
-    info.product !== 'Forgeboard' ||
+    info.product !== 'Artemis' ||
     !VERSION.test(info.version) ||
     info.platform !== platform ||
     info.architecture !== architecture ||
@@ -126,15 +126,15 @@ function platformArtifacts(
   const target = `${platform}-${architecture}`;
   if (target === 'darwin-arm64' || target === 'darwin-x64') {
     return [
-      `Forgeboard-${version}-mac-${architecture}.dmg`,
-      `Forgeboard-${version}-mac-${architecture}.zip`,
+      `Artemis-${version}-mac-${architecture}.dmg`,
+      `Artemis-${version}-mac-${architecture}.zip`,
     ];
   }
   if (target === 'win32-x64') {
-    return [`Forgeboard-${version}-windows-x64-setup.exe`];
+    return [`Artemis-${version}-windows-x64-setup.exe`];
   }
   if (target === 'linux-x64') {
-    return [`Forgeboard-${version}-linux-x86_64.AppImage`, `forgeboard_${version}_amd64.deb`];
+    return [`Artemis-${version}-linux-x86_64.AppImage`, `forgeboard_${version}_amd64.deb`];
   }
   throw new Error(`Installer integrity verification is unsupported on ${target}.`);
 }

@@ -5,10 +5,10 @@ export const PACKAGED_SMOKE_PROFILE_FILE = '.forgeboard-smoke-profile.json';
 export const PACKAGED_SMOKE_ROOT_ARGUMENT = '--forgeboard-smoke-root=';
 export const PACKAGED_SMOKE_TOKEN_ARGUMENT = '--forgeboard-smoke-token=';
 export const PACKAGED_SMOKE_HEADING = 'Ready to build without wiring config files?';
-export const PACKAGED_SMOKE_ACTION = 'Set up Forgeboard';
+export const PACKAGED_SMOKE_ACTION = 'Set up Artemis';
 export const PACKAGED_SMOKE_SAFE_DEFAULTS_ACTION = 'Use safe defaults';
 export const PACKAGED_SMOKE_DEMO_ACTION = 'Explore the safe demo';
-export const PACKAGED_SMOKE_DEMO_PROJECT_NAME = 'forgeboard-demo';
+export const PACKAGED_SMOKE_DEMO_PROJECT_NAME = 'artemis-demo';
 export const PACKAGED_SMOKE_CANVAS_NAME = 'Workshop';
 
 export const PackagedSmokeProfileFileSchema = z

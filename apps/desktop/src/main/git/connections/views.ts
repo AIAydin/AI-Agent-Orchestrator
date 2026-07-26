@@ -94,7 +94,7 @@ export function gitConnectionRemoteView(
       management === 'managed-simple'
         ? null
         : !mutableName
-          ? "This remote's name contains characters Forgeboard cannot safely edit, so it is read-only here."
+          ? "This remote's name contains characters Artemis cannot safely edit, so it is read-only here."
           : management === 'effective-only'
             ? 'This remote comes from inherited or unclear Git settings, so it is read-only here.'
             : 'This remote uses advanced settings. It can be removed only after you review the exact change.',

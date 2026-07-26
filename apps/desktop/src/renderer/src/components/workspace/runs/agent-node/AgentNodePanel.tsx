@@ -207,7 +207,7 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
             />
             <small id={modelHelpId}>
               {modelSelectionSupported
-                ? 'Overrides the Settings default for this node. Forgeboard binds the exact model into the next launch.'
+                ? 'Overrides the Settings default for this node. Artemis binds the exact model into the next launch.'
                 : `${selectedAgent?.label ?? 'This adapter'} doesn't support model selection. It uses its own default.`}
             </small>
           </label>
@@ -239,7 +239,7 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
           {selectedAdapter === 'custom' &&
           !permissionProfileNeedsDocker(selectedPermission, settings) ? (
             <small>
-              A custom agent runs like any program here — Forgeboard shows what it will do but
+              A custom agent runs like any program here — Artemis shows what it will do but
               can&apos;t wall it off. A worktree protects your main folder; Docker adds a hard
               boundary.
             </small>

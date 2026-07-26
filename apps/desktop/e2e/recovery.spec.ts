@@ -145,7 +145,7 @@ async function openDataSettings(page: Page) {
 async function openOnlyRecentProject(page: Page): Promise<void> {
   await expect(page.locator('.recent-list button')).toHaveCount(1);
   await page.locator('.recent-list button').click();
-  await expect(page.locator('.project-switcher')).toContainText('forgeboard-demo');
+  await expect(page.locator('.project-switcher')).toContainText('artemis-demo');
 }
 
 async function approveNativeConfirmations(electronApp: ElectronApplication): Promise<void> {

@@ -30,7 +30,7 @@ export function dockerPullDisclosure(
       { label: 'Program expected in the container', value: input.containerExecutable },
     ],
     warning:
-      'Docker may contact the sign-in and storage servers that belong to this exact image. Forgeboard does not share your folders, passwords, or keys with the downloaded image.',
+      'Docker may contact the sign-in and storage servers that belong to this exact image. Artemis does not share your folders, passwords, or keys with the downloaded image.',
   };
 }
 
@@ -53,8 +53,8 @@ export function gitCloneDisclosure(
     details: [{ label: 'Destination folder', value: path.resolve(destinationPath) }],
     warning:
       remote.endpoint === 'local-filesystem'
-        ? 'This source is on this computer. Forgeboard still asks for approval every time, because cloning creates new files in the destination folder.'
-        : 'Git may use the sign-in details already saved on this computer or in Git. Forgeboard never stores passwords, and it refuses remote addresses that contain them.',
+        ? 'This source is on this computer. Artemis still asks for approval every time, because cloning creates new files in the destination folder.'
+        : 'Git may use the sign-in details already saved on this computer or in Git. Artemis never stores passwords, and it refuses remote addresses that contain them.',
   };
 }
 

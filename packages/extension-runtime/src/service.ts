@@ -501,7 +501,7 @@ export class LocalExtensionService {
         await rename(tombstone, root).catch(() => undefined);
         throw new ExtensionRuntimeError(
           'RESOURCE_INVALID',
-          'Forgeboard could not safely purge the managed extension registry.',
+          'Artemis could not safely purge the managed extension registry.',
           { cause: error },
         );
       }

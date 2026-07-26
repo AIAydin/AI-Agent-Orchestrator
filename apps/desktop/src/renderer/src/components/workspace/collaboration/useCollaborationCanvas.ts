@@ -176,7 +176,7 @@ export function useCollaborationCanvas({
         reportOnce(
           lastErrorRef,
           onErrorRef.current,
-          'Forgeboard could not save a recovery copy of the shared canvas.',
+          'Artemis could not save a recovery copy of the shared canvas.',
         ),
       );
   }, []);
@@ -204,7 +204,7 @@ export function useCollaborationCanvas({
         reportOnce(
           lastErrorRef,
           onErrorRef.current,
-          'Forgeboard could not read the shared canvas to save a recovery copy.',
+          'Artemis could not read the shared canvas to save a recovery copy.',
         ),
       );
   }, [checkpointSnapshot]);
@@ -225,7 +225,7 @@ export function useCollaborationCanvas({
             reportOnce(
               lastErrorRef,
               onErrorRef.current,
-              'Sharing paused because changes made on this device while Forgeboard was closed clash with changes made by others in the shared canvas.',
+              'Sharing paused because changes made on this device while Artemis was closed clash with changes made by others in the shared canvas.',
             );
             return false;
           }
@@ -547,7 +547,7 @@ export function useCollaborationCanvas({
         reportOnce(
           lastErrorRef,
           onErrorRef.current,
-          'Forgeboard could not show your cursor and selection to others.',
+          'Artemis could not show your cursor and selection to others.',
         ),
       );
   }, [enabled]);
@@ -701,7 +701,7 @@ export function useCollaborationCanvas({
           reportOnce(
             lastErrorRef,
             onErrorRef.current,
-            'Forgeboard could not read the shared canvas data.',
+            'Artemis could not read the shared canvas data.',
           );
         }
       }
@@ -806,7 +806,7 @@ export function useCollaborationCanvas({
           reportOnce(
             lastErrorRef,
             onErrorRef.current,
-            'Forgeboard could not check whether sharing is connected.',
+            'Artemis could not check whether sharing is connected.',
           );
         }
       });
@@ -884,7 +884,7 @@ export function useCollaborationCanvas({
           reportOnce(
             lastErrorRef,
             onErrorRef.current,
-            'Forgeboard could not restore your offline shared changes.',
+            'Artemis could not restore your offline shared changes.',
           );
         }
       })
@@ -992,7 +992,7 @@ export function useCollaborationCanvas({
                 lastErrorRef,
                 onErrorRef.current,
                 result.ok
-                  ? 'Forgeboard could not send your canvas changes to the shared canvas.'
+                  ? 'Artemis could not send your canvas changes to the shared canvas.'
                   : result.error.message,
               );
             }
@@ -1006,7 +1006,7 @@ export function useCollaborationCanvas({
             reportOnce(
               lastErrorRef,
               onErrorRef.current,
-              'Forgeboard could not share your canvas changes.',
+              'Artemis could not share your canvas changes.',
             );
           });
       } catch {
@@ -1094,7 +1094,7 @@ export function useCollaborationCanvas({
               reportOnce(
                 lastErrorRef,
                 onErrorRef.current,
-                'Forgeboard could not send your comment to the shared canvas.',
+                'Artemis could not send your comment to the shared canvas.',
               );
               finish(null);
               return;
@@ -1123,7 +1123,7 @@ export function useCollaborationCanvas({
             reportOnce(
               lastErrorRef,
               onErrorRef.current,
-              'Forgeboard could not create your shared comment.',
+              'Artemis could not create your shared comment.',
             );
             finish(null);
           });
@@ -1189,11 +1189,7 @@ export function useCollaborationCanvas({
         lastErrorRef.current = null;
         return !jsonValuesEqual(rejectedCommentsRef.current.get(comment.id), comment);
       } catch {
-        reportOnce(
-          lastErrorRef,
-          onErrorRef.current,
-          'Forgeboard could not delete the saved comment.',
-        );
+        reportOnce(lastErrorRef, onErrorRef.current, 'Artemis could not delete the saved comment.');
         return false;
       }
     },

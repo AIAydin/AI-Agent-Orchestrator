@@ -150,7 +150,7 @@ export function useGitDeliveryReadiness(
         if (isCurrent(expected) && requestVersionRef.current === requestVersion) {
           const message = readinessErrorMessage(
             cause,
-            "Forgeboard couldn't load the delivery status for this agent's workspace. Try again.",
+            "Artemis couldn't load the delivery status for this agent's workspace. Try again.",
           );
           setState((current) =>
             current.activation === expected ? { ...current, view: null, error: message } : current,
@@ -291,11 +291,7 @@ export function useGitDeliveryReadiness(
         if (!isCurrent(activation)) return false;
         return await refreshFor(activation, managedTarget, false);
       } catch (cause) {
-        setCurrentError(
-          activation,
-          cause,
-          "Forgeboard couldn't save the required checks. Try again.",
-        );
+        setCurrentError(activation, cause, "Artemis couldn't save the required checks. Try again.");
         return false;
       } finally {
         endOperation(activation, token);
@@ -373,7 +369,7 @@ export function useGitDeliveryReadiness(
         await refreshFor(activation, managedTarget, false);
         return isCurrent(activation) ? notice : undefined;
       } catch (cause) {
-        setCurrentError(activation, cause, "Forgeboard couldn't run this check. Try again.");
+        setCurrentError(activation, cause, "Artemis couldn't run this check. Try again.");
         if (isCurrent(activation)) await refreshFor(activation, managedTarget, false);
         return undefined;
       } finally {
@@ -432,7 +428,7 @@ export function useGitDeliveryReadiness(
       setCurrentError(
         activation,
         cause,
-        "Forgeboard couldn't record the quality approval. Try again.",
+        "Artemis couldn't record the quality approval. Try again.",
       );
       return undefined;
     } finally {

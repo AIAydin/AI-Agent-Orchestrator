@@ -84,7 +84,7 @@ export function PrivacySettings({
       <SettingsRepairHistory onError={onError} onNotice={setNotice} />
       <SettingsSection
         title="Connections to other tools"
-        description="Forgeboard has no telemetry or model proxy, and solo mode makes no outbound connections by default. Provider, collaboration, Git, and update actions connect only after you configure or approve them."
+        description="Artemis has no telemetry or model proxy, and solo mode makes no outbound connections by default. Provider, collaboration, Git, and update actions connect only after you configure or approve them."
       >
         <div className="privacy-integrations">
           <div>
@@ -96,8 +96,8 @@ export function PrivacySettings({
               <strong>GitHub CLI</strong>
               <small>
                 Optional GitHub sign-in on this computer. Actions run only after you review them;
-                Forgeboard never stores your token. Pushing code uses your existing Git credentials
-                or SSH setup.
+                Artemis never stores your token. Pushing code uses your existing Git credentials or
+                SSH setup.
               </small>
             </span>
             <span className="status-chip">On demand</span>
@@ -124,7 +124,7 @@ export function PrivacySettings({
       </SettingsSection>
       <SettingsSection
         title="Local storage"
-        description="Everything Forgeboard saves stays on this computer — no tracking and no hidden cloud service."
+        description="Everything Artemis saves stays on this computer — no tracking and no hidden cloud service."
       >
         <InfoPath icon={<HardDrive size={16} />} label="App data" value={info.dataDirectory} />
         <InfoPath
@@ -420,7 +420,7 @@ export function PrivacySettings({
       </SettingsSection>
       <SettingsSection
         title="Delete local data"
-        description="Stops running agents, checks, and previews, then deletes your settings, projects, canvases, snapshots, history, extensions, and every backup Forgeboard has recorded — even in folders you no longer use. If a backup file is missing you can cancel or skip it; a skipped copy may still exist outside Forgeboard. Project folders and agent worktrees stay on disk."
+        description="Stops running agents, checks, and previews, then deletes your settings, projects, canvases, snapshots, history, extensions, and every backup Artemis has recorded — even in folders you no longer use. If a backup file is missing you can cancel or skip it; a skipped copy may still exist outside Artemis. Project folders and agent worktrees stay on disk."
       >
         <div className="danger-zone">
           <label>
@@ -465,7 +465,7 @@ function BackupHealthSummary({ health }: { health: BackupHealth }) {
       {health.lastError ? `${health.lastError} ` : ''}
       {health.lastVerifiedAt === null
         ? 'No verified backup on record.'
-        : `Last verified backup created ${formatDate(health.lastVerifiedAt)} · ${formatBytes(health.lastVerifiedSizeBytes ?? 0)} · checksum ${health.lastVerifiedSha256Prefix}… · ${health.verifiedBackupCount} on record. History only — Forgeboard does not keep watching these files.`}
+        : `Last verified backup created ${formatDate(health.lastVerifiedAt)} · ${formatBytes(health.lastVerifiedSizeBytes ?? 0)} · checksum ${health.lastVerifiedSha256Prefix}… · ${health.verifiedBackupCount} on record. History only — Artemis does not keep watching these files.`}
     </small>
   );
 }

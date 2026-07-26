@@ -78,14 +78,14 @@ describe('RepositoryService and GitExecutor', () => {
     const executor = new GitExecutor();
     const result = await executor.run([
       '-c',
-      'user.name=Forgeboard Author',
+      'user.name=Artemis Author',
       '-c',
       'user.email=author@example.invalid',
       'var',
       'GIT_AUTHOR_IDENT',
     ]);
 
-    expect(result.stdout).toMatch(/^Forgeboard Author <author@example\.invalid> /u);
+    expect(result.stdout).toMatch(/^Artemis Author <author@example\.invalid> /u);
     await expect(executor.run(['var', '-l'])).rejects.toMatchObject({
       code: 'EXTERNAL_DRIVER_BLOCKED',
     });

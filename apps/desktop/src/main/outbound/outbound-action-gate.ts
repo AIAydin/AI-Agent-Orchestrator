@@ -129,12 +129,12 @@ const EXECUTION_PERMIT: OutboundExecutionPermit = Object.freeze({
 
 export function assertOutboundExecutionPermit(permit: OutboundExecutionPermit): void {
   if (permit !== EXECUTION_PERMIT) {
-    throw new Error('Forgeboard-owned outbound execution requires a gate-issued permit.');
+    throw new Error('Artemis-owned outbound execution requires a gate-issued permit.');
   }
 }
 
 /**
- * The single main-process authorization boundary for Forgeboard-owned external sends.
+ * The single main-process authorization boundary for Artemis-owned external sends.
  *
  * Agent, check, preview, and user terminal subprocess capabilities do not pass through this gate:
  * those have their own exact execution approvals and may contact providers chosen by the user.

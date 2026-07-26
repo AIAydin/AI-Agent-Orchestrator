@@ -15,7 +15,7 @@ describe('update contracts', () => {
       id: 12,
       version: '1.2.3',
       tagName: 'v1.2.3',
-      name: 'Forgeboard 1.2.3',
+      name: 'Artemis 1.2.3',
       url: 'https://github.com/AIAydin/AI-Agent-Orchestrator/releases/tag/v1.2.3',
       publishedAt: '2026-07-17T12:00:00.000Z',
       prerelease: false,

@@ -96,7 +96,7 @@ export async function smokeExecutable(
   options: CommandOptions = {},
 ): Promise<void> {
   if (!(await isFile(executable))) {
-    throw new Error(`Installed Forgeboard executable is missing: ${executable}`);
+    throw new Error(`Installed Artemis executable is missing: ${executable}`);
   }
   const profile = await createIsolatedSmokeProfile(userDataDirectory);
   const environment: NodeJS.ProcessEnv = {

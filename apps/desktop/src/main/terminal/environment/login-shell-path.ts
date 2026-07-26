@@ -15,7 +15,7 @@ let cached: { readonly value: string | null; readonly at: number } | null = null
  * PATH as the user's login shell computes it. A Finder/Dock-launched Electron app inherits a
  * minimal GUI PATH (`/usr/bin:/bin:…`), so resolving CLI binaries against `process.env.PATH`
  * can pin an old install (e.g. `/usr/local/bin/claude`) while the user's real shell — and the
- * PTY sessions Forgeboard spawns through `<shell> -l -c` — would find the newest one. Returns
+ * PTY sessions Artemis spawns through `<shell> -l -c` — would find the newest one. Returns
  * `null` on Windows, on failure, or when the shell reports an empty PATH.
  */
 export async function loginShellPath(now: () => number = Date.now): Promise<string | null> {

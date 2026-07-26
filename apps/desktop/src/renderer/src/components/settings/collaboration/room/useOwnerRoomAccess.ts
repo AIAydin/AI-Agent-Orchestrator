@@ -71,7 +71,7 @@ export function useOwnerRoomAccess(options: OwnerRoomAccessOptions) {
       options.setMessage(labels.success);
       return result.value;
     } catch {
-      options.setMessage('Forgeboard could not validate the collaboration response.');
+      options.setMessage('Artemis could not validate the collaboration response.');
       return null;
     } finally {
       options.endOperation();

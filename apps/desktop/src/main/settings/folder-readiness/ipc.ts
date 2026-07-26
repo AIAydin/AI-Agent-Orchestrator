@@ -71,7 +71,7 @@ export class FolderReadinessIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid folder readiness request.'
+            ? 'Artemis rejected an invalid folder readiness request.'
             : error instanceof Error
               ? error.message
               : 'The folder readiness check failed.',

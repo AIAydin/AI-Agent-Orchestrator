@@ -101,7 +101,7 @@ export function expectProviderDisclosure(
   expect(detail).toContain('"PATH"');
   expect(detail).toContain('Provider: OpenAI Codex');
   expect(detail).toContain('Network disclosure: Codex opens and owns its official sign-in flow');
-  expect(detail).toContain('Forgeboard does not receive or store OAuth tokens');
+  expect(detail).toContain('Artemis does not receive or store OAuth tokens');
 }
 
 async function dialogCount(app: ElectronApplication): Promise<number> {

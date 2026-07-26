@@ -26,7 +26,7 @@ describe('ProviderConnectionService', () => {
       expect(review.environmentVariableNames).toEqual(
         ['HOME', 'LANG', 'PATH', 'TERM'].filter((name) => process.env[name] !== undefined),
       );
-      expect(review.providerDisclosure).toContain('Forgeboard never receives or stores');
+      expect(review.providerDisclosure).toContain('Artemis never receives or stores');
       return Promise.resolve('approved');
     });
 

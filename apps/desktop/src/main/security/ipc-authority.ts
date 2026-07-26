@@ -1,9 +1,9 @@
 import type { IpcMainInvokeEvent } from 'electron';
 
-/** Rejects destroyed renderers and every frame except the active Forgeboard main frame. */
+/** Rejects destroyed renderers and every frame except the active Artemis main frame. */
 export function assertLiveMainFrame(
   event: IpcMainInvokeEvent,
-  operation = 'Forgeboard request',
+  operation = 'Artemis request',
 ): void {
   if (
     event.sender.isDestroyed() ||
@@ -11,6 +11,6 @@ export function assertLiveMainFrame(
     event.senderFrame.detached === true ||
     event.senderFrame !== event.sender.mainFrame
   ) {
-    throw new Error(`${operation} requires the active Forgeboard main frame.`);
+    throw new Error(`${operation} requires the active Artemis main frame.`);
   }
 }

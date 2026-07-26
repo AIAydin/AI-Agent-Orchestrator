@@ -403,7 +403,7 @@ export class DockerIpcService {
     this.#assertLiveMainFrame(event);
     const parent = BrowserWindow.fromWebContents(event.sender);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error(`A live Forgeboard window is required to ${action}.`);
+      throw new Error(`A live Artemis window is required to ${action}.`);
     }
     return parent;
   }
@@ -412,20 +412,20 @@ export class DockerIpcService {
     this.#assertAvailable();
     this.#assertLiveMainFrame(event);
     if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
-      throw new Error('The originating Forgeboard window changed or closed.');
+      throw new Error('The originating Artemis window changed or closed.');
     }
   }
 
   #assertLiveMainFrame(event: IpcMainInvokeEvent): void {
-    if (event.sender.isDestroyed()) throw new Error('The originating Forgeboard window is closed.');
+    if (event.sender.isDestroyed()) throw new Error('The originating Artemis window is closed.');
     if (event.senderFrame !== event.sender.mainFrame) {
-      throw new Error('Docker operations are allowed only from the main Forgeboard frame.');
+      throw new Error('Docker operations are allowed only from the main Artemis frame.');
     }
   }
 
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The Docker service has been disposed.');
-    if (this.#paused) throw new Error('Docker operations are paused while Forgeboard quits.');
+    if (this.#paused) throw new Error('Docker operations are paused while Artemis quits.');
   }
 
   #nowMs(): number {
@@ -473,7 +473,7 @@ export class DockerIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid Docker request.'
+            ? 'Artemis rejected an invalid Docker request.'
             : error instanceof Error
               ? error.message
               : 'The Docker operation failed.',

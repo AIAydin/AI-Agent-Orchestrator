@@ -119,7 +119,7 @@ export function GitAgentComparisonPanel({
       <header className="git-agent-comparison-controls">
         <span>
           <strong>Compare committed code from two agents</strong>
-          <small>Forgeboard resolves both runs to their own saved worktrees.</small>
+          <small>Artemis resolves both runs to their own saved worktrees.</small>
         </span>
         <label>
           Other agent run

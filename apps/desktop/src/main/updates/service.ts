@@ -216,7 +216,7 @@ export class UpdateIpcService {
       response = await this.dialog.showMessageBox(parent, {
         type: 'warning',
         title: 'Open release in your system browser?',
-        message: `Open Forgeboard ${release.version} on GitHub?`,
+        message: `Open Artemis ${release.version} on GitHub?`,
         detail: release.url,
         buttons: ['Cancel', 'Open release'],
         defaultId: 0,
@@ -280,7 +280,7 @@ export class UpdateIpcService {
     assertLiveMainFrame(event, `Update ${action}`);
     const parent = BrowserWindow.fromWebContents(event.sender);
     if (parent === null || parent.isDestroyed())
-      throw new Error(`A live Forgeboard window is required to ${action}.`);
+      throw new Error(`A live Artemis window is required to ${action}.`);
     return parent;
   }
 
@@ -288,7 +288,7 @@ export class UpdateIpcService {
     if (this.#disposed) throw new Error('The update service has been disposed.');
     assertLiveMainFrame(event, 'Update operation');
     if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
-      throw new Error('The originating Forgeboard window changed or closed.');
+      throw new Error('The originating Artemis window changed or closed.');
     }
   }
 
@@ -304,7 +304,7 @@ export class UpdateIpcService {
           ok: false,
           error: {
             code: 'INVALID_REQUEST',
-            message: 'Forgeboard rejected an invalid update request.',
+            message: 'Artemis rejected an invalid update request.',
           },
         };
       }
@@ -387,7 +387,7 @@ function toRelease(entry: z.infer<typeof GitHubReleaseSchema>): UpdateRelease | 
     id: entry.id,
     version,
     tagName: entry.tag_name,
-    name: entry.name?.trim() || `Forgeboard ${version}`,
+    name: entry.name?.trim() || `Artemis ${version}`,
     url: url.toString(),
     publishedAt: entry.published_at,
     prerelease: entry.prerelease,
@@ -397,8 +397,8 @@ function toRelease(entry: z.infer<typeof GitHubReleaseSchema>): UpdateRelease | 
 function updateDisclosure(channel: 'stable' | 'prerelease'): OutboundActionDisclosure {
   return {
     action: 'update-check',
-    title: 'Check GitHub for Forgeboard updates?',
-    summary: `Contact the official Forgeboard release feed for the ${channel} channel?`,
+    title: 'Check GitHub for Artemis updates?',
+    summary: `Contact the official Artemis release feed for the ${channel} channel?`,
     confirmLabel: 'Check for updates',
     destination: {
       kind: 'release-server',
@@ -408,7 +408,7 @@ function updateDisclosure(channel: 'stable' | 'prerelease'): OutboundActionDiscl
     },
     details: [{ label: 'Update channel', value: channel }],
     warning:
-      'Forgeboard sends no repository data, prompts, credentials, identifiers, or telemetry. GitHub receives the ordinary network metadata required for this single request.',
+      'Artemis sends no repository data, prompts, credentials, identifiers, or telemetry. GitHub receives the ordinary network metadata required for this single request.',
   };
 }
 
@@ -426,7 +426,7 @@ function normalizeVersion(version: string): string {
       version.trim(),
     )?.[1] ?? null;
   if (parsed === null)
-    throw new Error('The running Forgeboard version is not valid semantic versioning.');
+    throw new Error('The running Artemis version is not valid semantic versioning.');
   return parsed;
 }
 

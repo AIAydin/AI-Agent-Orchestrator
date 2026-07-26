@@ -35,7 +35,7 @@ export type TerminalPtyFactory = (
 
 /**
  * The essential, well-known environment variables an interactive program needs simply to function —
- * inherited from Forgeboard's own process. Without them the child is spawned with an empty
+ * inherited from Artemis's own process. Without them the child is spawned with an empty
  * environment: no PATH means `#!/usr/bin/env node` launchers (codex, and most CLI tools) exit
  * immediately with "env: node: No such file or directory", and no HOME means CLIs cannot find their
  * config or credentials. This is base infrastructure, not the reviewed environment allowlist: the
@@ -95,7 +95,7 @@ export function baseTerminalEnvironment(): Record<string, string> {
 }
 
 /**
- * The user's full environment for agent sessions — everything the Forgeboard process inherited,
+ * The user's full environment for agent sessions — everything the Artemis process inherited,
  * so the launched CLI behaves exactly like in the user's own terminal (auth, config, session
  * resume, MCP servers). Only the hard-blocked injection vectors (`DYLD_*`, `LD_*`,
  * `NODE_OPTIONS`, …) and NUL-containing values are excluded; those are app/loader concerns a
@@ -294,7 +294,7 @@ export async function ensureNodePtySpawnHelper(): Promise<void> {
     }
   }
   throw new Error(
-    'Forgeboard cannot start terminals because a required component is missing. Reinstall Forgeboard.',
+    'Artemis cannot start terminals because a required component is missing. Reinstall Artemis.',
   );
 }
 

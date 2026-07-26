@@ -38,7 +38,7 @@ function gitConnectionMessage(review: GitConnectionNativeReview): MessageBoxOpti
     `New location: ${targetDescription(plan.target)}`,
     configurationImpact(review),
     '',
-    'This change is local only — nothing is fetched, pushed, or sent over the network, and Forgeboard does not check that the location works.',
+    'This change is local only — nothing is fetched, pushed, or sent over the network, and Artemis does not check that the location works.',
   ];
   if (plan.removal !== null) {
     details.push('', `Remote settings to remove (${String(plan.before?.entries.length ?? 0)}):`);
@@ -86,9 +86,9 @@ function gitHubCliMessage(review: GitHubCliSelectionReview): MessageBoxOptions {
     '',
     candidate === null
       ? 'No GitHub CLI program was found on this computer. Confirming removes your saved custom choice, and GitHub features stay unavailable until the gh program is installed.'
-      : 'If you confirm, Forgeboard runs only the exact program file above, with just the --version flag, and applies the change only if the file is unchanged and answers as the GitHub CLI.',
+      : 'If you confirm, Artemis runs only the exact program file above, with just the --version flag, and applies the change only if the file is unchanged and answers as the GitHub CLI.',
     '',
-    'This check stays on this computer: Forgeboard sends no repository data or sign-in tokens to the version command. The program you choose is trusted local code and runs with your permissions.',
+    'This check stays on this computer: Artemis sends no repository data or sign-in tokens to the version command. The program you choose is trusted local code and runs with your permissions.',
   ];
   return {
     type: 'warning',

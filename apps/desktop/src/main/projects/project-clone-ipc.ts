@@ -23,7 +23,7 @@ import type { ProjectCloneAuthorization, ProjectService } from './project-servic
 type ProjectCloneOperations = Pick<ProjectService, 'clone'>;
 type DataOperationRunner = <Value>(operation: () => Promise<Value>) => Promise<Value>;
 
-/** Owner-aware IPC boundary for the Forgeboard-owned Git clone external send. */
+/** Owner-aware IPC boundary for the Artemis-owned Git clone external send. */
 export class ProjectCloneIpcService {
   readonly #operations = new Set<Promise<unknown>>();
   readonly #ownerIds = new WeakMap<WebContents, string>();
@@ -88,7 +88,7 @@ export class ProjectCloneIpcService {
           parent.isDestroyed() ||
           BrowserWindow.fromWebContents(event.sender) !== parent
         ) {
-          throw new Error('The Forgeboard window changed or closed before the clone could finish.');
+          throw new Error('The Artemis window changed or closed before the clone could finish.');
         }
       };
       const authorization: ProjectCloneAuthorization = {
@@ -116,7 +116,7 @@ export class ProjectCloneIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard could not understand this clone request.'
+            ? 'Artemis could not understand this clone request.'
             : error instanceof Error
               ? error.message
               : 'The clone failed. Try again.',
@@ -142,7 +142,7 @@ export class ProjectCloneIpcService {
     this.#assertLiveMainFrame(event);
     const parent = BrowserWindow.fromWebContents(event.sender);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('Forgeboard needs an open window to confirm the clone.');
+      throw new Error('Artemis needs an open window to confirm the clone.');
     }
     return parent;
   }
@@ -150,17 +150,17 @@ export class ProjectCloneIpcService {
   #assertLiveMainFrame(event: IpcMainInvokeEvent): void {
     this.#assertLiveOwner(event.sender);
     if (event.senderFrame !== event.sender.mainFrame) {
-      throw new Error('Cloning is only allowed from the main Forgeboard window.');
+      throw new Error('Cloning is only allowed from the main Artemis window.');
     }
   }
 
   #assertLiveOwner(owner: WebContents): void {
-    if (owner.isDestroyed()) throw new Error('The Forgeboard window is closed.');
+    if (owner.isDestroyed()) throw new Error('The Artemis window is closed.');
   }
 
   #assertAvailable(): void {
-    if (this.#disposed) throw new Error('Forgeboard is closing, so cloning cannot start.');
-    if (this.#paused) throw new Error('Cloning is paused while Forgeboard is closing.');
+    if (this.#disposed) throw new Error('Artemis is closing, so cloning cannot start.');
+    if (this.#paused) throw new Error('Cloning is paused while Artemis is closing.');
   }
 
   async #drain(): Promise<void> {

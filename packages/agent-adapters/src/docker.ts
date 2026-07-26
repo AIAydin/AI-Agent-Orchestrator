@@ -564,7 +564,7 @@ function dockerPermissionProfile(
     networkAllowed
       ? 'Docker bridge networking is enabled by explicit approval.'
       : 'Docker networking is disabled.',
-    'Forgeboard adds no host credential, Docker socket, SSH agent, keychain, or extra host-path mounts.',
+    'Artemis adds no host credential, Docker socket, SSH agent, keychain, or extra host-path mounts.',
   ].join(' ');
   return {
     id: `docker-${writable ? 'read-write' : 'read-only'}`,
@@ -940,14 +940,14 @@ export async function detectDockerRuntime(
     inspectedImage = parseInspectedDockerImage(image.stdout);
     if (inspectedImage.os !== 'linux') {
       throw new DockerLaunchValidationError(
-        `The configured image targets ${inspectedImage.os}, but Forgeboard Docker isolation requires a Linux image.`,
+        `The configured image targets ${inspectedImage.os}, but Artemis Docker isolation requires a Linux image.`,
       );
     }
     if (inspectedImage.declaredVolumes.length > 0) {
       const visibleVolumes = inspectedImage.declaredVolumes.slice(0, 8).join(', ');
       const suffix = inspectedImage.declaredVolumes.length > 8 ? ', ...' : '';
       throw new DockerLaunchValidationError(
-        `The configured image declares Docker volumes (${uiSafeText(visibleVolumes, 512)}${suffix}); use an image with no declared volumes so Forgeboard can enforce its exact storage policy.`,
+        `The configured image declares Docker volumes (${uiSafeText(visibleVolumes, 512)}${suffix}); use an image with no declared volumes so Artemis can enforce its exact storage policy.`,
       );
     }
   } catch (error) {

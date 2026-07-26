@@ -24,7 +24,7 @@ describe('Linux installer smoke preflight', () => {
     const exists = vi.fn(() => Promise.resolve(true));
 
     await expect(assertNoPreExistingLinuxInstall(run, exists)).rejects.toThrow(
-      'pre-existing Forgeboard path',
+      'pre-existing Artemis path',
     );
     expect(run).not.toHaveBeenCalled();
   });

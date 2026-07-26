@@ -195,7 +195,7 @@ export function CustomPermissionProfileEditor({
         </div>
         <p className="permission-caution">
           <AlertTriangle size={15} aria-hidden="true" />
-          When allowed, the agent can open these files in its worktree on its own. Forgeboard still
+          When allowed, the agent can open these files in its worktree on its own. Artemis still
           never attaches ignored or sensitive files to a prompt without your per-file approval. On
           this computer these choices are requests to the agent, not blocks enforced by the
           operating system.

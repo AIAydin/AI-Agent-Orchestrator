@@ -211,8 +211,8 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
             ))}
           </select>
           <small id={`node-${props.nodeId}-diff-review-target-description`}>
-            Finished agent runs whose project copy is still available. Forgeboard checks the exact
-            run before opening; interrupted cleanups open in recovery only.
+            Finished agent runs whose project copy is still available. Artemis checks the exact run
+            before opening; interrupted cleanups open in recovery only.
           </small>
         </label>
 
@@ -334,7 +334,7 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         Refresh summary
       </button>
       <small className="diff-review-boundary-note">
-        Only your target and display settings are saved. Forgeboard re-checks the real folders every
+        Only your target and display settings are saved. Artemis re-checks the real folders every
         time.
       </small>
     </section>

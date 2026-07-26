@@ -107,7 +107,7 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
 
       <p className="recovery-guidance">
         The one-time model install contacts Hugging Face only after a native approval. Once
-        installed, Forgeboard disables remote model loading and performs transcription offline.
+        installed, Artemis disables remote model loading and performs transcription offline.
       </p>
       {message && <p role="status">{message}</p>}
     </SettingsSection>

@@ -21,7 +21,7 @@ export function ExecutableAllowlistEditor({
     <fieldset className="permission-list-editor">
       <legend>Programs allowed to start the agent</legend>
       <p>
-        Enter each program's exact full path. Forgeboard checks the program that starts the agent —
+        Enter each program's exact full path. Artemis checks the program that starts the agent —
         programs the agent starts afterward are not covered.
       </p>
       {values.length === 0 ? (

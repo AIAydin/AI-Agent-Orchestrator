@@ -30,13 +30,13 @@ export function normalizeFileDomainError(cause: unknown): FileDomainError {
       case 'PATH_ESCAPE':
         return new FileDomainError(
           'PATH_OUTSIDE_PROJECT',
-          'Forgeboard blocked a path outside the selected project.',
+          'Artemis blocked a path outside the selected project.',
         );
       case 'DEVICE_PATH':
       case 'INVALID_PATH':
         return new FileDomainError(
           'INVALID_REQUEST',
-          'Forgeboard blocked an invalid local file path.',
+          'Artemis blocked an invalid local file path.',
         );
     }
   }
@@ -48,10 +48,10 @@ export function normalizeFileDomainError(cause: unknown): FileDomainError {
   if (code === 'ELOOP') {
     return new FileDomainError(
       'SYMLINK_BLOCKED',
-      'Forgeboard cannot open symbolic links (file shortcuts) in the editor.',
+      'Artemis cannot open symbolic links (file shortcuts) in the editor.',
     );
   }
-  return new FileDomainError('IO_ERROR', 'Forgeboard could not complete the local file operation.');
+  return new FileDomainError('IO_ERROR', 'Artemis could not complete the local file operation.');
 }
 
 export async function fileDomainBoundary<T>(operation: () => Promise<T>): Promise<T> {

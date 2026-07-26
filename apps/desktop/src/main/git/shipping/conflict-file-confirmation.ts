@@ -15,7 +15,7 @@ export function conflictFileConfirmation(plan: PendingConflictFileResolution): M
       `Resolved content SHA-256: ${plan.resolvedSha256}`,
       `Resolved size: ${String(plan.sizeBytes)} bytes`,
       '',
-      'Forgeboard will refuse if the operation, conflicted path, file content, or workspace changed after review.',
+      'Artemis will refuse if the operation, conflicted path, file content, or workspace changed after review.',
       'The exact reviewed UTF-8 content will replace this one file and Git will stage that path. Nothing is committed automatically.',
     ].join('\n'),
     buttons: ['Cancel', 'Apply and stage resolution'],

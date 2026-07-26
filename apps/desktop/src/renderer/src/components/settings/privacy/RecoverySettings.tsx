@@ -217,7 +217,7 @@ export function RecoverySettings({
             <p>
               {restorePlan.snapshot.nodeCount} nodes and {restorePlan.snapshot.edgeCount}{' '}
               connections from {formatDate(restorePlan.snapshot.createdAt)}. If your current canvas
-              differs, Forgeboard saves it as another snapshot first.
+              differs, Artemis saves it as another snapshot first.
             </p>
             <dl>
               <div>
@@ -264,7 +264,7 @@ export function RecoverySettings({
 
       <SettingsSection
         title="Import local data"
-        description="Bring in a Forgeboard export file. You'll review exactly what it contains and confirm before anything changes."
+        description="Bring in a Artemis export file. You'll review exactly what it contains and confirm before anything changes."
       >
         <p className="recovery-guidance">
           Export files never include your project files or extension folders, so keep copies of
@@ -296,7 +296,7 @@ export function RecoverySettings({
                 ? 'Close the open project before importing'
                 : busy
                   ? 'Wait for the current recovery action to finish'
-                  : 'Choose and review a Forgeboard export file'
+                  : 'Choose and review a Artemis export file'
             }
           >
             <button

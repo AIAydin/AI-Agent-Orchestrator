@@ -20,7 +20,7 @@ export interface BundledGitRuntime {
 let cachedRuntime: BundledGitRuntime | undefined;
 
 /**
- * Resolve Forgeboard's packaged Git distribution. The result is process-owned and is never
+ * Resolve Artemis's packaged Git distribution. The result is process-owned and is never
  * influenced by repository content, renderer input, imported settings, or the host PATH.
  */
 export function bundledGitRuntime(): BundledGitRuntime {
@@ -54,7 +54,7 @@ export async function verifyBundledGit(): Promise<string> {
   });
   const version = result.stdout.trim();
   if (!/^git version \d+\./u.test(version)) {
-    throw new Error('Forgeboard bundled Git returned an invalid version response.');
+    throw new Error('Artemis bundled Git returned an invalid version response.');
   }
   return version;
 }

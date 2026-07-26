@@ -10,7 +10,6 @@ import {
   type Project,
 } from '../../../../shared/application/contracts.js';
 import type { DockerReadiness } from '../../../../shared/docker/contracts.js';
-import type { AgentReadinessResult } from '../../../../shared/readiness/contracts.js';
 import type { ProviderConnectionStatus } from '../../../../shared/provider-connections/index.js';
 import type {
   CommandReadinessRequest,
@@ -203,40 +202,6 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('SetupWizard', () => {
-  it('guides Codex onboarding through official provider sign-in with advanced CLI controls folded', async () => {
-    providerGet.mockImplementation(({ providerId }) =>
-      Promise.resolve({
-        ok: true,
-        value: {
-          schemaVersion: 1,
-          providerId,
-          state: 'disconnected',
-          checkedAt: null,
-          reason: 'Not signed in.',
-        },
-      }),
-    );
-    render(
-      <SetupWizard
-        settings={settings}
-        agents={agents}
-        onComplete={() => Promise.resolve()}
-        onSkip={() => Promise.resolve()}
-        onError={(message) => {
-          throw new Error(message);
-        }}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    fireEvent.click(screen.getByRole('radio', { name: /OpenAI Codex CLI/i }));
-    expect(await screen.findByRole('button', { name: 'Connect with OpenAI' })).toBeTruthy();
-    expect(screen.getByText(/connect Codex CLI here/i)).toBeTruthy();
-    expect(screen.getByText(/official sign-in opens in your browser/i)).toBeTruthy();
-    expect(screen.getByText('Advanced').closest('details')?.open).toBe(false);
-    expect(screen.getByRole('button', { name: /Continue/ }).hasAttribute('disabled')).toBe(true);
-  });
-
   it('adopts detected project scripts and passively validates them before completion', async () => {
     const onComplete = vi.fn<(settings: AppSettings) => Promise<void>>(() => Promise.resolve());
     render(
@@ -252,8 +217,7 @@ describe('SetupWizard', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    await continueFromAgentStep();
+    fireEvent.click(screen.getByRole('button', { name: /Set up Artemis/ }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
 
     expect(screen.getByLabelText<HTMLSelectElement>('Project for command suggestions').value).toBe(
@@ -285,10 +249,10 @@ describe('SetupWizard', () => {
         name: /Start with|Find your|Review before|Get help/u,
       }),
     ).toHaveLength(4);
-    expect(
-      screen.getByRole<HTMLButtonElement>('button', { name: /Open Forgeboard/ }).disabled,
-    ).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: /Open Forgeboard/ }));
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: /Open Artemis/ }).disabled).toBe(
+      false,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Open Artemis/ }));
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
     expect(onComplete.mock.calls[0]?.[0]).toMatchObject({
@@ -311,7 +275,7 @@ describe('SetupWizard', () => {
           projectName: null,
           checkedAt: '2026-07-15T18:00:00.000Z',
           reason:
-            'The configured executable was not found. Use Browse or install the dependency and reopen Forgeboard.',
+            'The configured executable was not found. Use Browse or install the dependency and reopen Artemis.',
           warning: null,
         },
       }),
@@ -328,19 +292,18 @@ describe('SetupWizard', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    await continueFromAgentStep();
+    fireEvent.click(screen.getByRole('button', { name: /Set up Artemis/ }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     fireEvent.change(screen.getByLabelText('Development server executable'), {
       target: { value: 'missing-preview-tool' },
     });
 
     expect(await screen.findAllByText(/configured executable was not found/u)).toHaveLength(2);
-    expect(screen.getByText(/install it and reopen Forgeboard, or use Browse/u)).toBeTruthy();
+    expect(screen.getByText(/install it and reopen Artemis, or use Browse/u)).toBeTruthy();
     expect(screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ }).disabled).toBe(true);
   });
 
-  it('completes agent, Docker, preview, and worktree setup entirely through controls', async () => {
+  it('completes Docker, preview, and worktree setup entirely through controls', async () => {
     pickExecutable
       .mockResolvedValueOnce({ ok: true, value: '/usr/local/bin/pnpm' })
       .mockResolvedValueOnce({ ok: true, value: '/usr/local/bin/node' });
@@ -357,13 +320,7 @@ describe('SetupWizard', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    fireEvent.click(screen.getByRole('radio', { name: /OpenAI Codex CLI/ }));
-    await screen.findByText('Connected');
-    const agentContinue = screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ });
-    await waitFor(() => expect(agentContinue.disabled).toBe(false));
-    fireEvent.click(agentContinue);
-
+    fireEvent.click(screen.getByRole('button', { name: /Set up Artemis/ }));
     fireEvent.click(screen.getByRole('radio', { name: /Docker isolated/ }));
     await screen.findByRole('option', { name: readyDocker.image });
     fireEvent.change(screen.getByLabelText('Container image'), {
@@ -428,7 +385,7 @@ describe('SetupWizard', () => {
       ),
     );
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Open Forgeboard/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Open Artemis/ }));
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
     expect(onComplete.mock.calls[0]?.[0]).toMatchObject({
@@ -449,74 +406,6 @@ describe('SetupWizard', () => {
       dockerContainerExecutable: readyDocker.containerExecutable,
     });
     expect(pickExecutable).toHaveBeenCalledTimes(2);
-  });
-
-  it('remediates a missing selected CLI and validates the unsaved override before continuing', async () => {
-    const missingCodex: AgentDetection = {
-      ...agents[0]!,
-      installed: false,
-      executable: null,
-      version: null,
-    };
-    const readiness: AgentReadinessResult = {
-      schemaVersion: 1,
-      agentId: 'codex',
-      state: 'ready',
-      ready: true,
-      source: 'override',
-      executable: '/canonical/bin/codex',
-      version: '2.1.0',
-      checkedAt: '2026-07-15T17:00:00.000Z',
-      reason: null,
-      warnings: [],
-    };
-    const checkAgentReadiness = vi.fn(() => Promise.resolve(readiness));
-    pickExecutable.mockResolvedValueOnce({
-      ok: true,
-      value: '/chosen/bin/codex',
-    });
-    const onComplete = vi.fn<(settings: AppSettings) => Promise<void>>(() => Promise.resolve());
-    render(
-      <SetupWizard
-        settings={settings}
-        agents={[missingCodex]}
-        checkAgentReadiness={checkAgentReadiness}
-        onComplete={onComplete}
-        onSkip={() => Promise.resolve()}
-        onError={(message) => {
-          throw new Error(message);
-        }}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    fireEvent.click(screen.getByRole('radio', { name: /OpenAI Codex CLI/ }));
-    expect(screen.getByText(/Install OpenAI Codex CLI/u)).toBeTruthy();
-    const continueButton = screen.getByRole<HTMLButtonElement>('button', {
-      name: /Continue/,
-    });
-    expect(continueButton.disabled).toBe(true);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
-    await waitFor(() =>
-      expect(screen.getByLabelText<HTMLInputElement>(/Executable override/).value).toBe(
-        '/chosen/bin/codex',
-      ),
-    );
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Check OpenAI Codex CLI again',
-      }),
-    );
-
-    await screen.findByText('Selected executable is ready');
-    expect(checkAgentReadiness).toHaveBeenCalledWith({
-      agentId: 'codex',
-      executableOverride: '/chosen/bin/codex',
-    });
-    expect(screen.getByText('2.1.0')).toBeTruthy();
-    expect(continueButton.disabled).toBe(false);
-    expect(onComplete).not.toHaveBeenCalled();
   });
 
   it('does not call Docker ready until the exact image and executable pass a main check', async () => {
@@ -544,12 +433,7 @@ describe('SetupWizard', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    fireEvent.click(screen.getByRole('radio', { name: /OpenAI Codex CLI/ }));
-    await screen.findByText('Connected');
-    const agentContinue = screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ });
-    await waitFor(() => expect(agentContinue.disabled).toBe(false));
-    fireEvent.click(agentContinue);
+    fireEvent.click(screen.getByRole('button', { name: /Set up Artemis/ }));
     fireEvent.click(screen.getByRole('radio', { name: /Docker isolated/ }));
     await screen.findByRole('option', { name: readyDocker.image });
     fireEvent.change(screen.getByLabelText('Container image'), {
@@ -616,8 +500,7 @@ describe('SetupWizard', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    await continueFromAgentStep();
+    fireEvent.click(screen.getByRole('button', { name: /Set up Artemis/ }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     const continueButton = screen.getByRole<HTMLButtonElement>('button', {
       name: /Continue/,
@@ -651,15 +534,14 @@ describe('SetupWizard', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    await continueFromAgentStep();
+    fireEvent.click(screen.getByRole('button', { name: /Set up Artemis/ }));
     expect(screen.queryByRole('radio', { name: /Custom/u })).toBeNull();
     fireEvent.click(screen.getByRole('radio', { name: /Write in current directory/u }));
 
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     expect(screen.getByText('Write in current directory', { selector: 'dd' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Open Forgeboard/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Open Artemis/ }));
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
     expect(onComplete.mock.calls[0]?.[0]).toMatchObject({
@@ -667,10 +549,3 @@ describe('SetupWizard', () => {
     });
   });
 });
-
-async function continueFromAgentStep(): Promise<void> {
-  await screen.findByText('Connected');
-  const continueButton = screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ });
-  await waitFor(() => expect(continueButton.disabled).toBe(false));
-  fireEvent.click(continueButton);
-}

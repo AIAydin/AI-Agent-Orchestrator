@@ -332,7 +332,7 @@ export class RecoveryIpcService {
     const selection = await this.dialog.showOpenDialog(parent, {
       title: 'Import local data',
       properties: ['openFile'],
-      filters: [{ name: 'Forgeboard export file', extensions: ['json'] }],
+      filters: [{ name: 'Artemis export file', extensions: ['json'] }],
     });
     this.#assertAvailable();
     this.#assertCurrentWindow(event, parent, 'choose an export file');
@@ -552,7 +552,7 @@ export class RecoveryIpcService {
     this.#assertLiveSender(event);
     const parent = this.#resolveWindow(event);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error(`Forgeboard needs an open window to ${action}.`);
+      throw new Error(`Artemis needs an open window to ${action}.`);
     }
     return parent;
   }
@@ -561,7 +561,7 @@ export class RecoveryIpcService {
     this.#assertLiveSender(event);
     const current = this.#resolveWindow(event);
     if (expected.isDestroyed() || current !== expected) {
-      throw new Error(`The Forgeboard window changed before it could ${action}. Try again.`);
+      throw new Error(`The Artemis window changed before it could ${action}. Try again.`);
     }
   }
 
@@ -571,7 +571,7 @@ export class RecoveryIpcService {
 
   #assertAvailable(): void {
     if (this.#disposed) {
-      throw new Error('Forgeboard is closing, so this recovery action cannot run.');
+      throw new Error('Artemis is closing, so this recovery action cannot run.');
     }
   }
 
@@ -606,7 +606,7 @@ export class RecoveryIpcService {
 
   #reportPostCommitError(action: string, error: unknown): void {
     process.stderr.write(
-      `Forgeboard could not ${action}: ${error instanceof Error ? error.message : 'unknown error'}\n`,
+      `Artemis could not ${action}: ${error instanceof Error ? error.message : 'unknown error'}\n`,
     );
   }
 
@@ -647,9 +647,7 @@ export class RecoveryIpcService {
     try {
       this.#assertAvailable();
       if (this.#paused) {
-        throw new Error(
-          'Recovery actions are paused while Forgeboard finishes another data change.',
-        );
+        throw new Error('Recovery actions are paused while Artemis finishes another data change.');
       }
       this.#assertLiveSender(event);
       const args = inputSchema.parse(rawArgs);
@@ -665,7 +663,7 @@ export class RecoveryIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard could not understand this recovery request.'
+            ? 'Artemis could not understand this recovery request.'
             : error instanceof Error
               ? error.message
               : 'The recovery action failed. Try again.',
@@ -755,8 +753,8 @@ function snapshotRestoreConfirmation(plan: RecoverySnapshotRestorePlan): Message
       `This snapshot has ${plan.snapshot.nodeCount} nodes and ${plan.snapshot.edgeCount} connections.`,
       savedReason[plan.snapshot.reason],
       '',
-      'If your current canvas differs, Forgeboard saves it as another snapshot first.',
-      'If the canvas changed since this restore was prepared, Forgeboard cancels the restore instead.',
+      'If your current canvas differs, Artemis saves it as another snapshot first.',
+      'If the canvas changed since this restore was prepared, Artemis cancels the restore instead.',
     ].join('\n'),
     buttons: ['Cancel', 'Restore snapshot'],
     defaultId: 0,
@@ -785,7 +783,7 @@ function importConfirmation(plan: RecoveryImportPlan): MessageBoxOptions {
       `Activity records: ${plan.counts.auditEvents}`,
       `Settings in file: ${plan.includesSettings ? (plan.mode === 'merge' ? 'included, but yours stay unchanged' : 'included') : 'not included'}`,
       '',
-      'Forgeboard checks the exact file again right before anything changes.',
+      'Artemis checks the exact file again right before anything changes.',
     ].join('\n'),
     buttons: [
       'Cancel',

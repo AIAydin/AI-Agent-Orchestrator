@@ -164,7 +164,7 @@ describe('packaged renderer smoke proof', () => {
     const canvasId = randomUUID();
     const escaped = {
       ...demoProbe(profile.root, projectId, canvasId),
-      projectPath: '/outside/forgeboard-demo',
+      projectPath: '/outside/artemis-demo',
     };
     const executeJavaScript = vi
       .fn<(source: string) => Promise<unknown>>()

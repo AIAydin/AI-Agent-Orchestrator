@@ -12,12 +12,12 @@ export type IntegrityCheckInput = z.infer<typeof IntegrityCheckInputSchema>;
 
 export const SANITIZED_INTEGRITY_MESSAGES = {
   sqlite: 'SQLite storage pages did not pass verification.',
-  schema: 'The database schema does not match this Forgeboard build.',
+  schema: 'The database schema does not match this Artemis build.',
   relationships: 'Stored record relationships did not pass verification.',
   audit: 'The audit history chain or retention checkpoint did not pass verification.',
   workflow: 'Stored workflow history did not pass verification.',
   approvals: 'Saved approval records did not pass verification.',
-  structural: 'Stored Forgeboard data did not pass structural verification.',
+  structural: 'Stored Artemis data did not pass structural verification.',
   incomplete: 'Integrity verification could not complete.',
 } as const;
 

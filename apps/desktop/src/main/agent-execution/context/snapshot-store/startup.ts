@@ -25,7 +25,7 @@ export async function attemptContextSnapshotStorageStartup(
       error,
       reason:
         `Agent context storage could not be initialized: ${detail} ` +
-        'Forgeboard will remain available and retry the protected storage checks when an agent launch uses context.',
+        'Artemis will remain available and retry the protected storage checks when an agent launch uses context.',
     };
   }
 }

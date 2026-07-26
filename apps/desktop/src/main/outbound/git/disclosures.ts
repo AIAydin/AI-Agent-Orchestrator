@@ -282,8 +282,8 @@ export function gitPushDisclosure(input: GitPushDisclosureInput): OutboundAction
     details: impactDetails(input),
     warning:
       input.destination.kind === 'local-filesystem'
-        ? 'The local Git repository you picked can run its own scripts and Git settings as your computer account when it receives this push. Forgeboard sends only the reviewed commit and branch, blocks force pushes, and does not let the source repository run scripts, fetch extra content, or change what is sent.'
-        : "Git may use the sign-in details and network settings already saved on this computer, including credential helpers, certificates, proxies, and your SSH setup; Forgeboard trusts those for this push. Forgeboard ignores the repository's own sign-in and address-rewrite settings, sends only the reviewed commit and branch, blocks force pushes, and does not let the source repository run scripts, fetch extra content, or change what is sent.",
+        ? 'The local Git repository you picked can run its own scripts and Git settings as your computer account when it receives this push. Artemis sends only the reviewed commit and branch, blocks force pushes, and does not let the source repository run scripts, fetch extra content, or change what is sent.'
+        : "Git may use the sign-in details and network settings already saved on this computer, including credential helpers, certificates, proxies, and your SSH setup; Artemis trusts those for this push. Artemis ignores the repository's own sign-in and address-rewrite settings, sends only the reviewed commit and branch, blocks force pushes, and does not let the source repository run scripts, fetch extra content, or change what is sent.",
   };
 }
 
@@ -306,7 +306,7 @@ export function gitHubStatusDisclosure(
     ],
     warning: gitHubCliWarning(
       input.githubCli,
-      'Forgeboard never reads or stores your GitHub token. This check only reads your sign-in, repository, and branch status; it does not create or change anything on GitHub.',
+      'Artemis never reads or stores your GitHub token. This check only reads your sign-in, repository, and branch status; it does not create or change anything on GitHub.',
     ),
   };
 }
@@ -344,7 +344,7 @@ export function gitHubPullRequestDisclosure(
     ],
     warning: gitHubCliWarning(
       input.githubCli,
-      'Forgeboard sends the title and body exactly as shown, after checking your approval and both branches again right before sending. A pull request follows its branch: if the branch changes later, the pull request changes with it. Forgeboard never changes repository visibility or settings.',
+      'Artemis sends the title and body exactly as shown, after checking your approval and both branches again right before sending. A pull request follows its branch: if the branch changes later, the pull request changes with it. Artemis never changes repository visibility or settings.',
     ),
   };
 }
@@ -366,7 +366,7 @@ export function gitHubCiDisclosure(input: GitHubCiDisclosureInput): OutboundActi
     ],
     warning: gitHubCliWarning(
       input.githubCli,
-      'This reads up to 20 recent workflow runs from GitHub. Forgeboard shows a run as current only when its branch and commit exactly match the reviewed commit.',
+      'This reads up to 20 recent workflow runs from GitHub. Artemis shows a run as current only when its branch and commit exactly match the reviewed commit.',
     ),
   };
 }
@@ -437,15 +437,15 @@ function assertResolvedGitHubCliDisclosure(cli: GitHubCliDisclosure): void {
 function gitHubCliWarning(cli: GitHubCliDisclosure, action: string): string {
   if (!cli.available) {
     if (cli.executablePath !== null) {
-      return `The GitHub CLI shown above was found automatically, but its version has not been checked yet. If you approve, Forgeboard first runs only that exact program with the --version argument and no sign-in details. Sign-in and GitHub requests stay blocked unless that check succeeds. ${action}`;
+      return `The GitHub CLI shown above was found automatically, but its version has not been checked yet. If you approve, Artemis first runs only that exact program with the --version argument and no sign-in details. Sign-in and GitHub requests stay blocked unless that check succeeds. ${action}`;
     }
-    return `Forgeboard did not find GitHub CLI on this computer. Approving keeps it that way; Forgeboard cannot contact GitHub through gh unless a new program is found and reviewed. ${action}`;
+    return `Artemis did not find GitHub CLI on this computer. Approving keeps it that way; Artemis cannot contact GitHub through gh unless a new program is found and reviewed. ${action}`;
   }
   const selection =
     cli.source === 'automatic'
       ? 'The GitHub CLI found automatically and shown above'
       : 'The custom GitHub CLI selected in Settings and shown above';
-  return `${selection} is trusted code on this computer and may use the GitHub account already signed in and your network settings. Forgeboard ties this action to that exact program and fingerprint, and checks them again before every command. ${action}`;
+  return `${selection} is trusted code on this computer and may use the GitHub account already signed in and your network settings. Artemis ties this action to that exact program and fingerprint, and checks them again before every command. ${action}`;
 }
 
 function impactDetails(input: GitPushDisclosureInput) {

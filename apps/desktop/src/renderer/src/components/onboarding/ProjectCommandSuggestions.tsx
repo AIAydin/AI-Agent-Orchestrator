@@ -35,7 +35,7 @@ export function ProjectCommandSuggestions({
         <strong>No projects to suggest commands from yet</strong>
         <p>
           Leave the commands blank for now, or use Browse below to pick a program yourself. Once you
-          open a project, Forgeboard can suggest commands based on what it finds.
+          open a project, Artemis can suggest commands based on what it finds.
         </p>
       </section>
     );
@@ -94,10 +94,10 @@ export function ProjectCommandSuggestions({
           </div>
         </>
       ) : (
-        <p>Pick a project above to see the scripts Forgeboard found in it.</p>
+        <p>Pick a project above to see the scripts Artemis found in it.</p>
       )}
       <small>
-        Suggestions come from a quick look at the project’s files. Forgeboard checks that everything
+        Suggestions come from a quick look at the project’s files. Artemis checks that everything
         exists without running any of the project’s code.
       </small>
     </section>

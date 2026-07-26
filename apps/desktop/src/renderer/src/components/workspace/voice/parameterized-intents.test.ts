@@ -7,7 +7,7 @@ describe('parameterized voice intents', () => {
   it('binds free-form prompt text to an exact live Agent title and runs without confirmation', () => {
     const promptAgent = vi.fn();
     const match = matchParameterizedVoiceIntent({
-      transcript: 'Forgeboard, please tell Hermes to review the failing tests',
+      transcript: 'Artemis, please tell Hermes to review the failing tests',
       nodes: [node('agent-1', 'Hermes', 'agent')],
       promptAgent,
       connectNodes: vi.fn(),

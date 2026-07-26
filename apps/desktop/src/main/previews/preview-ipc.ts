@@ -231,7 +231,7 @@ export class PreviewIpcService {
   #ownerId(owner: WebContents): string {
     const existing = this.#ownerIds.get(owner);
     if (existing !== undefined && this.#owners.get(existing) === owner) return existing;
-    if (owner.isDestroyed()) throw new Error('The originating Forgeboard window is closed.');
+    if (owner.isDestroyed()) throw new Error('The originating Artemis window is closed.');
     const ownerId = randomUUID();
     this.#ownerIds.set(owner, ownerId);
     this.#owners.set(ownerId, owner);
@@ -251,7 +251,7 @@ export class PreviewIpcService {
       event.sender.isDestroyed() ||
       event.senderFrame !== event.sender.mainFrame
     ) {
-      throw new Error('Preview requests require the active Forgeboard main frame.');
+      throw new Error('Preview requests require the active Artemis main frame.');
     }
   }
 
@@ -259,7 +259,7 @@ export class PreviewIpcService {
     this.#assertLiveMainFrame(event);
     const parent = BrowserWindow.fromWebContents(event.sender);
     if (!parent || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required to confirm a preview launch.');
+      throw new Error('A live Artemis window is required to confirm a preview launch.');
     }
     return parent;
   }
@@ -267,7 +267,7 @@ export class PreviewIpcService {
   #assertCurrent(event: IpcMainInvokeEvent, parent: BrowserWindow): void {
     this.#assertLiveMainFrame(event);
     if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
-      throw new Error('The originating Forgeboard window changed before the preview launch.');
+      throw new Error('The originating Artemis window changed before the preview launch.');
     }
     const ownerId = this.#ownerIds.get(event.sender);
     if (ownerId === undefined || this.#owners.get(ownerId) !== event.sender) {
@@ -303,7 +303,7 @@ export class PreviewIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid preview request.'
+            ? 'Artemis rejected an invalid preview request.'
             : error instanceof Error
               ? error.message
               : 'The preview operation failed.',
@@ -360,7 +360,7 @@ function previewConfirmation(plan: PreviewLaunchPlan, restart: boolean): Message
   }
   details.push(
     '',
-    'Forgeboard will start this local process without a shell. The process itself can still access resources allowed by your operating system.',
+    'Artemis will start this local process without a shell. The process itself can still access resources allowed by your operating system.',
   );
   return {
     type: 'warning',

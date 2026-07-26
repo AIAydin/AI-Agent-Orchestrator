@@ -70,9 +70,7 @@ export function UpdateSettings({ currentVersion, draft, setDraft, busy }: Update
       else setResult(checked);
     } catch (error) {
       if (generation.current !== requestGeneration || channel.current !== requestedChannel) return;
-      setMessage(
-        error instanceof Error ? error.message : 'Forgeboard could not check for updates.',
-      );
+      setMessage(error instanceof Error ? error.message : 'Artemis could not check for updates.');
     } finally {
       if (generation.current === requestGeneration) setChecking(false);
       checkingRef.current = false;
@@ -89,7 +87,7 @@ export function UpdateSettings({ currentVersion, draft, setDraft, busy }: Update
       );
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : 'Forgeboard could not cancel the update check.',
+        error instanceof Error ? error.message : 'Artemis could not cancel the update check.',
       );
     }
   }
@@ -99,14 +97,14 @@ export function UpdateSettings({ currentVersion, draft, setDraft, busy }: Update
       const opened = unwrap(await window.forgeboard.updates.openRelease({ releaseId }));
       if (!opened) setMessage('Opening the release was cancelled.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Forgeboard could not open the release.');
+      setMessage(error instanceof Error ? error.message : 'Artemis could not open the release.');
     }
   }
 
   return (
     <SettingsSection
       title="Application updates"
-      description="Forgeboard checks only when you ask and approve the exact GitHub request. Nothing is downloaded or installed automatically."
+      description="Artemis checks only when you ask and approve the exact GitHub request. Nothing is downloaded or installed automatically."
     >
       <div className="two-column">
         <label>
@@ -140,8 +138,8 @@ export function UpdateSettings({ currentVersion, draft, setDraft, busy }: Update
       </div>
       {draft.automaticUpdateDownloads && (
         <div className="inline-notice" role="status">
-          An imported legacy automatic-download preference is inactive. Forgeboard never downloads
-          or installs updates automatically.
+          An imported legacy automatic-download preference is inactive. Artemis never downloads or
+          installs updates automatically.
           <button
             className="button ghost"
             type="button"
@@ -170,7 +168,7 @@ export function UpdateSettings({ currentVersion, draft, setDraft, busy }: Update
       </div>
       {draft.updateChannel === 'disabled' && (
         <p className="recovery-guidance" role="status">
-          Update checks are disabled. Forgeboard makes no release request in this mode.
+          Update checks are disabled. Artemis makes no release request in this mode.
         </p>
       )}
       {checking && <p role="status">Waiting for the approved GitHub release response…</p>}
@@ -204,8 +202,8 @@ function UpdateResult({
     <div className="recovery-guidance" role="status">
       <strong>
         {result.status === 'update-available'
-          ? `Forgeboard ${release.version} is available.`
-          : `Forgeboard ${result.currentVersion} is up to date.`}
+          ? `Artemis ${release.version} is available.`
+          : `Artemis ${result.currentVersion} is up to date.`}
       </strong>
       <p>
         {release.name} · published {new Date(release.publishedAt).toLocaleString()}

@@ -65,7 +65,7 @@ export class FolderReadinessService {
     const target = await this.#inspectIfPresent(request.path);
     if (target.outcome === 'error') {
       return this.#result(request, 'unavailable', {
-        reason: errorMessage(target.error, 'Forgeboard could not inspect the selected folder.'),
+        reason: errorMessage(target.error, 'Artemis could not inspect the selected folder.'),
       });
     }
     if (target.outcome === 'present') {
@@ -84,7 +84,7 @@ export class FolderReadinessService {
         return this.#result(request, 'unavailable', {
           reason: errorMessage(
             candidate.error,
-            'Forgeboard could not inspect the selected folder parent.',
+            'Artemis could not inspect the selected folder parent.',
           ),
         });
       }
@@ -99,7 +99,7 @@ export class FolderReadinessService {
       const next = this.#pathApi().dirname(parent);
       if (next === parent) {
         return this.#result(request, 'unavailable', {
-          reason: 'Forgeboard could not find an existing parent for the selected folder.',
+          reason: 'Artemis could not find an existing parent for the selected folder.',
         });
       }
       parent = next;
@@ -117,7 +117,7 @@ export class FolderReadinessService {
       canonicalPath = await this.#canonicalize(selectedPath);
     } catch (error) {
       return this.#result(request, 'unavailable', {
-        reason: errorMessage(error, 'Forgeboard could not resolve the selected folder safely.'),
+        reason: errorMessage(error, 'Artemis could not resolve the selected folder safely.'),
       });
     }
     const usesAlias =
@@ -137,7 +137,7 @@ export class FolderReadinessService {
         return this.#result(request, 'unavailable', {
           reason: errorMessage(
             inspected.error,
-            'Forgeboard could not inspect the folder it points to.',
+            'Artemis could not inspect the folder it points to.',
           ),
         });
       }
@@ -170,7 +170,7 @@ export class FolderReadinessService {
       canonicalPath,
       readyState,
       usesAlias
-        ? 'The selected backup folder is an alias. Forgeboard will use and verify its canonical destination.'
+        ? 'The selected backup folder is an alias. Artemis will use and verify its canonical destination.'
         : null,
     );
   }
@@ -193,7 +193,7 @@ export class FolderReadinessService {
       } catch (error) {
         return error instanceof Error
           ? error.message
-          : 'Forgeboard could not verify Windows folder permissions. Choose a private folder inside your Windows profile.';
+          : 'Artemis could not verify Windows folder permissions. Choose a private folder inside your Windows profile.';
       }
     }
     if (purpose !== 'backup-destination') return null;
@@ -219,7 +219,7 @@ export class FolderReadinessService {
         warning:
           readyState === 'ready-parent'
             ? [
-                'The selected folder does not exist yet. Forgeboard will create it only when the feature first needs it.',
+                'The selected folder does not exist yet. Artemis will create it only when the feature first needs it.',
                 aliasWarning,
               ]
                 .filter((value) => value !== null)
@@ -293,7 +293,7 @@ function hasCode(error: unknown, code: string): boolean {
 
 function errorMessage(error: unknown, fallback: string): string {
   if (hasCode(error, 'EACCES') || hasCode(error, 'EPERM')) {
-    return 'Forgeboard does not have permission to access the selected folder.';
+    return 'Artemis does not have permission to access the selected folder.';
   }
   if (hasCode(error, 'ELOOP')) {
     return 'The selected folder path points to itself through an alias or shortcut.';

@@ -534,7 +534,7 @@ export function GitReviewDialog({
                   : "Can't show changes right now"
               }
             >
-              {controller.error ?? "Forgeboard couldn't read this project's files."}
+              {controller.error ?? "Artemis couldn't read this project's files."}
               {!cleanupRecoveryOnly && (
                 <button
                   className="button"
@@ -674,7 +674,7 @@ export function GitReviewDialog({
                   icon={<TriangleAlert />}
                   title="Can't compare with the starting point"
                 >
-                  Refresh this review — Forgeboard never guesses a starting point.
+                  Refresh this review — Artemis never guesses a starting point.
                 </GitReviewState>
               ) : (
                 <GitBaseComparisonPanel

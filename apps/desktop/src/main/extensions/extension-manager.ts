@@ -270,7 +270,7 @@ export class ExtensionManager {
         } catch (rollbackError) {
           surfacedError = new ExtensionRuntimeError(
             'REGISTRY_CORRUPT',
-            'The extension update failed, and Forgeboard could not restore its previous approval.',
+            'The extension update failed, and Artemis could not restore its previous approval.',
             { cause: new AggregateError([error, rollbackError]) },
           );
         }
@@ -291,7 +291,7 @@ export class ExtensionManager {
         } catch (cleanupError) {
           surfacedError = new ExtensionRuntimeError(
             'REGISTRY_CORRUPT',
-            'The extension install failed, and Forgeboard could not clean up the partial approval.',
+            'The extension install failed, and Artemis could not clean up the partial approval.',
             { cause: new AggregateError([error, cleanupError]) },
           );
         }
@@ -553,7 +553,7 @@ export class ExtensionManager {
       quarantined.push({
         extensionId,
         ledgerState: ledger?.state ?? 'missing',
-        reason: mismatch ?? 'Forgeboard cannot find the approval record for this extension.',
+        reason: mismatch ?? 'Artemis cannot find the approval record for this extension.',
         snapshot: extensionSnapshotView(extension),
       });
     }

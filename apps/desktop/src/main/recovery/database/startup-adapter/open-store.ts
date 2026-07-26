@@ -277,7 +277,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
     openStore,
     chooseVerifiedBackup: async () => {
       const selection = await options.dialog.showOpenDialog({
-        title: 'Choose a verified Forgeboard backup',
+        title: 'Choose a verified Artemis backup',
         buttonLabel: 'Choose backup',
         properties: ['openFile'],
         filters: [
@@ -357,14 +357,14 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
 
 class StartupDatabaseOpenError extends Error {
   public constructor(readonly reason: ForgeboardDatabaseProvenanceFailureReason) {
-    super('Forgeboard rejected the local database before startup.');
+    super('Artemis rejected the local database before startup.');
     this.name = 'StartupDatabaseOpenError';
   }
 }
 
 class StartupDatabaseMissingError extends Error {
   public constructor() {
-    super('The initialized Forgeboard database is missing.');
+    super('The initialized Artemis database is missing.');
     this.name = 'StartupDatabaseMissingError';
   }
 }
@@ -380,7 +380,7 @@ function classifyOpenFailure(error: unknown): StartupOpenFailure {
   }
   if (
     error instanceof Error &&
-    error.message.startsWith('The local Forgeboard database failed its startup integrity check:')
+    error.message.startsWith('The local Artemis database failed its startup integrity check:')
   ) {
     return { kind: 'recoverable' };
   }
@@ -476,7 +476,7 @@ async function prepareUserDataBoundary(
     await mkdir(userDataPath, { recursive: true, mode: 0o700 });
     traceE2eDatabaseStartup('database-user-data-mkdir-completed');
   } else if (!initial.isDirectory() || initial.isSymbolicLink()) {
-    throw new Error('The Forgeboard user data location must be an ordinary directory.');
+    throw new Error('The Artemis user data location must be an ordinary directory.');
   }
   traceE2eDatabaseStartup('database-user-data-realpath-requested');
   const canonical = await realpath(userDataPath);
@@ -486,13 +486,13 @@ async function prepareUserDataBoundary(
     await assertNoFilesystemLinkTraversal(resolved);
   }
   if (!sameCanonicalPath(canonical, resolved, platform)) {
-    throw new Error('The Forgeboard user data location must not traverse filesystem links.');
+    throw new Error('The Artemis user data location must not traverse filesystem links.');
   }
   traceE2eDatabaseStartup('database-user-data-canonical-path-accepted');
   const current = await lstat(canonical);
   traceE2eDatabaseStartup('database-user-data-canonical-lstat-resolved');
   if (!current.isDirectory() || current.isSymbolicLink()) {
-    throw new Error('The Forgeboard user data location must be an ordinary directory.');
+    throw new Error('The Artemis user data location must be an ordinary directory.');
   }
   if (platform === 'win32') {
     if (windowsSid === undefined) throw new Error('Windows recovery identity is unavailable.');
@@ -511,7 +511,7 @@ async function prepareUserDataBoundary(
       !sameFilesystemIdentity(current, protectedStats) ||
       (protectedStats.mode & 0o077) !== 0
     ) {
-      throw new Error('Forgeboard could not protect its user data directory.');
+      throw new Error('Artemis could not protect its user data directory.');
     }
     assertOwnedByCurrentUser(protectedStats, 'user data directory', getUserId);
   }
@@ -549,7 +549,7 @@ async function assertNoFilesystemLinkTraversal(resolvedPath: string): Promise<vo
   }
   for (const path of candidates.reverse()) {
     if ((await lstat(path)).isSymbolicLink()) {
-      throw new Error('The Forgeboard user data location must not traverse filesystem links.');
+      throw new Error('The Artemis user data location must not traverse filesystem links.');
     }
   }
 }
@@ -564,16 +564,16 @@ async function protectDatabaseBoundary(
   const paths = [databasePath, `${databasePath}-wal`, `${databasePath}-shm`] as const;
   const stats = await Promise.all(paths.map(async (path) => await optionalLstat(path)));
   if (stats[0] === undefined && stats.slice(1).some((value) => value !== undefined)) {
-    throw new Error('Forgeboard found database sidecars without the primary database.');
+    throw new Error('Artemis found database sidecars without the primary database.');
   }
   for (const [index, details] of stats.entries()) {
     if (details === undefined) continue;
     if (!details.isFile() || details.isSymbolicLink()) {
-      throw new Error('A Forgeboard database path is not an ordinary file.');
+      throw new Error('A Artemis database path is not an ordinary file.');
     }
     const path = paths[index];
     if (path === undefined || (await realpath(path)) !== path) {
-      throw new Error('A Forgeboard database path is not canonical.');
+      throw new Error('A Artemis database path is not canonical.');
     }
     if (platform === 'win32') {
       if (windowsSid === undefined) throw new Error('Windows recovery identity is unavailable.');
@@ -589,7 +589,7 @@ async function protectDatabaseBoundary(
         !sameFilesystemIdentity(details, protectedStats) ||
         (protectedStats.mode & 0o077) !== 0
       ) {
-        throw new Error('Forgeboard could not protect a local database file.');
+        throw new Error('Artemis could not protect a local database file.');
       }
       assertOwnedByCurrentUser(protectedStats, 'database file', getUserId);
     }
@@ -609,7 +609,7 @@ async function createPrivateAttemptDirectory(
   const stagingDirectory = await realpath(await mkdtemp(join(canonicalUserData, STAGING_PREFIX)));
   try {
     if (dirname(stagingDirectory) !== canonicalUserData) {
-      throw new Error('Forgeboard could not create private recovery staging inside user data.');
+      throw new Error('Artemis could not create private recovery staging inside user data.');
     }
     if (platform === 'win32') {
       if (windowsSid === undefined) throw new Error('Windows recovery identity is unavailable.');
@@ -635,15 +635,13 @@ function assertDirectDatabasePath(
   canonicalUserData: string,
   platform: NodeJS.Platform,
 ): string {
-  if (databasePath.includes('\0')) throw new Error('Forgeboard rejected the database path.');
+  if (databasePath.includes('\0')) throw new Error('Artemis rejected the database path.');
   const normalized = resolve(databasePath);
   if (
     !sameRequestedPath(dirname(normalized), resolve(requestedUserData), platform) ||
     basename(normalized) !== 'forgeboard.sqlite'
   ) {
-    throw new Error(
-      'The Forgeboard database must be directly inside its canonical user data folder.',
-    );
+    throw new Error('The Artemis database must be directly inside its canonical user data folder.');
   }
   return join(canonicalUserData, 'forgeboard.sqlite');
 }
@@ -672,7 +670,7 @@ function assertOwnedByCurrentUser(
 ): void {
   const userId = getUserId();
   if (userId !== undefined && stats.uid !== userId) {
-    throw new Error(`The Forgeboard ${label} is not owned by the current user.`);
+    throw new Error(`The Artemis ${label} is not owned by the current user.`);
   }
 }
 

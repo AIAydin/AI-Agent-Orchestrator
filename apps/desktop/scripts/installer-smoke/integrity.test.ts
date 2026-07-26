@@ -61,7 +61,7 @@ describe('installer artifact integrity', () => {
     const fixture = await releaseFixture('win32', 'x64');
     const outside = await mkdtemp(join(tmpdir(), 'forgeboard-outside-installer-'));
     roots.push(outside);
-    const name = `Forgeboard-${VERSION}-windows-x64-setup.exe`;
+    const name = `Artemis-${VERSION}-windows-x64-setup.exe`;
     const outsideInstaller = join(outside, name);
     await writeFile(outsideInstaller, `artifact:${name}`);
 
@@ -85,7 +85,7 @@ describe('installer artifact integrity', () => {
     ).rejects.toThrow('Unexpected primary release artifacts');
 
     const missing = await releaseFixture('darwin', 'arm64');
-    await rm(join(missing.root, `Forgeboard-${VERSION}-mac-arm64.zip`));
+    await rm(join(missing.root, `Artemis-${VERSION}-mac-arm64.zip`));
     await expect(
       verifyInstallerIntegrity(missing.root, missing.artifacts, {
         architecture: 'arm64',
@@ -106,7 +106,7 @@ describe('installer artifact integrity', () => {
   it('rejects a blockmap changed after checksums were generated', async () => {
     const fixture = await releaseFixture('darwin', 'arm64');
     await writeFile(
-      join(fixture.root, `Forgeboard-${VERSION}-mac-arm64.dmg.blockmap`),
+      join(fixture.root, `Artemis-${VERSION}-mac-arm64.dmg.blockmap`),
       'tampered blockmap',
     );
 
@@ -188,7 +188,7 @@ async function releaseFixture(
     join(root, `RELEASE-INFO-${platform}-${architecture}.json`),
     JSON.stringify({
       schemaVersion: 1,
-      product: 'Forgeboard',
+      product: 'Artemis',
       version: VERSION,
       platform,
       architecture,
@@ -233,12 +233,12 @@ function artifactNames(
 ): string[] {
   if (platform === 'darwin') {
     return [
-      `Forgeboard-${VERSION}-mac-${architecture}.dmg`,
-      `Forgeboard-${VERSION}-mac-${architecture}.zip`,
+      `Artemis-${VERSION}-mac-${architecture}.dmg`,
+      `Artemis-${VERSION}-mac-${architecture}.zip`,
     ];
   }
-  if (platform === 'win32') return [`Forgeboard-${VERSION}-windows-x64-setup.exe`];
-  return [`Forgeboard-${VERSION}-linux-x86_64.AppImage`, `forgeboard_${VERSION}_amd64.deb`];
+  if (platform === 'win32') return [`Artemis-${VERSION}-windows-x64-setup.exe`];
+  return [`Artemis-${VERSION}-linux-x86_64.AppImage`, `forgeboard_${VERSION}_amd64.deb`];
 }
 
 function digest(value: string): string {

@@ -70,7 +70,7 @@ export function normalizeVoicePhrase(value: string): string {
   return value
     .toLowerCase()
     .replace(/[^a-z0-9]+/gu, ' ')
-    .replace(/\b(?:please|forgeboard|could you|would you|a|an|the)\b/gu, ' ')
+    .replace(/\b(?:please|artemis|forgeboard|could you|would you|a|an|the)\b/gu, ' ')
     .replace(/\s+/gu, ' ')
     .trim();
 }
@@ -86,6 +86,7 @@ const FILLER_TOKENS = new Set([
   'a',
   'an',
   'and',
+  'artemis',
   'at',
   'can',
   'cli',

@@ -197,7 +197,7 @@ const REVIEW_PLAN: TerminalLaunchPlanView = {
   kind: 'terminal-launch',
   planId: 'plan-1',
   projectId: 'proj-1',
-  projectName: 'Forgeboard',
+  projectName: 'Artemis',
   nodeId: NODE_ID,
   executable: '/usr/local/bin/claude',
   arguments: [],
@@ -506,7 +506,7 @@ describe('AgentSessionNode', () => {
     expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy();
   });
 
-  it('labels a Forgeboard stop as SIGTERM instead of presenting signal 15 like a timeout', () => {
+  it('labels a Artemis stop as SIGTERM instead of presenting signal 15 like a timeout', () => {
     controller.session = {
       id: 's1',
       status: 'terminated',

@@ -6,7 +6,7 @@ import { requireDirectory, runCommand, runWithCleanup, smokeExecutable } from '.
 export async function smokeMacDmg(dmg: string, temporaryRoot: string): Promise<void> {
   const mountPoint = join(temporaryRoot, 'mounted-dmg');
   const installedApplications = join(temporaryRoot, 'Applications');
-  const installedBundle = join(installedApplications, 'Forgeboard.app');
+  const installedBundle = join(installedApplications, 'Artemis.app');
   await mkdir(mountPoint);
   await mkdir(installedApplications);
   let mounted = false;
@@ -22,8 +22,8 @@ export async function smokeMacDmg(dmg: string, temporaryRoot: string): Promise<v
         dmg,
       ]);
       mounted = true;
-      const sourceBundle = join(mountPoint, 'Forgeboard.app');
-      await requireDirectory(sourceBundle, 'The DMG does not contain Forgeboard.app.');
+      const sourceBundle = join(mountPoint, 'Artemis.app');
+      await requireDirectory(sourceBundle, 'The DMG does not contain Artemis.app.');
       await runCommand('ditto', [sourceBundle, installedBundle]);
     },
     async () => {
@@ -33,7 +33,7 @@ export async function smokeMacDmg(dmg: string, temporaryRoot: string): Promise<v
   );
 
   await smokeExecutable(
-    join(installedBundle, 'Contents', 'MacOS', 'Forgeboard'),
+    join(installedBundle, 'Contents', 'MacOS', 'Artemis'),
     [],
     join(temporaryRoot, 'user-data-dmg'),
   );

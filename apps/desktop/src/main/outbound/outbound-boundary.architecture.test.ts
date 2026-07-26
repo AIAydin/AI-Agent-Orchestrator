@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 const MAIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-describe('Forgeboard-owned outbound architecture', () => {
+describe('Artemis-owned outbound architecture', () => {
   it('keeps known external-send executors behind the permit-requiring outbound module', async () => {
     const sources = await mainSources();
     expect(callSites(sources, /\.git\.run\(\[\s*['"]clone['"]/gu)).toEqual([

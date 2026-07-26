@@ -166,7 +166,7 @@ export class WorktreeCleanupService {
           !sameCleanupImpact(recovery.inspection.impact, immediatelyCurrent.inspection.impact)
         ) {
           throw new WorktreeCleanupPublicError(
-            'The interrupted cleanup state changed while Forgeboard was reviewing it. Try again.',
+            'The interrupted cleanup state changed while Artemis was reviewing it. Try again.',
             'RECOVERY_STATE_CHANGED',
           );
         }
@@ -191,7 +191,7 @@ export class WorktreeCleanupService {
         return await this.#reconcileFullyRemoved(input, recovery);
       case 'unsafe':
         throw new WorktreeCleanupPublicError(
-          'Forgeboard could not prove the interrupted cleanup state. The target remains hidden; no files or branches were changed.',
+          'Artemis could not prove the interrupted cleanup state. The target remains hidden; no files or branches were changed.',
           recoveryUnsafeCode(recovery.inspection.reason),
         );
     }
@@ -207,7 +207,7 @@ export class WorktreeCleanupService {
       immediatelyCurrent.inspection.kind !== 'fully-removed'
     ) {
       throw new WorktreeCleanupPublicError(
-        'The interrupted cleanup state changed while Forgeboard was reviewing it. Try again.',
+        'The interrupted cleanup state changed while Artemis was reviewing it. Try again.',
         'RECOVERY_STATE_CHANGED',
       );
     }
@@ -223,7 +223,7 @@ export class WorktreeCleanupService {
       );
     } catch (error) {
       throw new WorktreeCleanupStateError(
-        'Cleanup was already complete, but Forgeboard could not finalize its run-history state. The target remains hidden.',
+        'Cleanup was already complete, but Artemis could not finalize its run-history state. The target remains hidden.',
         'RECOVERY_FINAL_PERSISTENCE_FAILED',
         { operationCompleted: true, cause: error },
       );
@@ -253,7 +253,7 @@ export class WorktreeCleanupService {
       });
     } catch (error) {
       throw new WorktreeCleanupStateError(
-        'Cleanup was already complete and run history was reconciled, but Forgeboard could not record the final audit. The target is cleaned.',
+        'Cleanup was already complete and run history was reconciled, but Artemis could not record the final audit. The target is cleaned.',
         'RECOVERY_SUCCESS_AUDIT_FAILED',
         { operationCompleted: true, cause: error },
       );
@@ -353,7 +353,7 @@ export class WorktreeCleanupService {
                 );
               } catch (rollbackError) {
                 throw new WorktreeCleanupStateError(
-                  'Cleanup did not remove the worktree, but Forgeboard could not restore its run-history state. Restart Forgeboard before retrying.',
+                  'Cleanup did not remove the worktree, but Artemis could not restore its run-history state. Restart Artemis before retrying.',
                   'CLEANUP_ROLLBACK_PERSISTENCE_FAILED',
                   { cause: new AggregateError([error, rollbackError]) },
                 );
@@ -361,14 +361,14 @@ export class WorktreeCleanupService {
               throw error;
             }
             throw new WorktreeCleanupStateError(
-              'Cleanup may have partially completed. Forgeboard hid this worktree target until its exact state is reviewed again.',
+              'Cleanup may have partially completed. Artemis hid this worktree target until its exact state is reviewed again.',
               'CLEANUP_MUTATION_STATE_UNCERTAIN',
               { mutationMayHaveCompleted: true, cause: error },
             );
           }
           if (!isCompleteCleanupResult(cleanupResult)) {
             throw new WorktreeCleanupStateError(
-              'Cleanup returned an incomplete result. Forgeboard hid this worktree target until its exact state is reviewed again.',
+              'Cleanup returned an incomplete result. Artemis hid this worktree target until its exact state is reviewed again.',
               'CLEANUP_RESULT_INCOMPLETE',
               { mutationMayHaveCompleted: true },
             );
@@ -385,7 +385,7 @@ export class WorktreeCleanupService {
             );
           } catch (error) {
             throw new WorktreeCleanupStateError(
-              'Cleanup completed, but Forgeboard could not finalize its run-history state. The worktree target remains hidden.',
+              'Cleanup completed, but Artemis could not finalize its run-history state. The worktree target remains hidden.',
               'CLEANUP_FINAL_PERSISTENCE_FAILED',
               { operationCompleted: true, cause: error },
             );
@@ -403,7 +403,7 @@ export class WorktreeCleanupService {
           });
         } catch (error) {
           throw new WorktreeCleanupStateError(
-            'Cleanup completed and run history was finalized, but Forgeboard could not record the final audit. The target is cleaned.',
+            'Cleanup completed and run history was finalized, but Artemis could not record the final audit. The target is cleaned.',
             'CLEANUP_SUCCESS_AUDIT_FAILED',
             { operationCompleted: true, cause: error },
           );
@@ -799,15 +799,15 @@ function publicCleanupError(error: unknown, stage: 'prepare' | 'confirm'): Error
   }
   return new WorktreeCleanupPublicError(
     stage === 'prepare'
-      ? 'Forgeboard could not safely inspect this agent worktree for cleanup.'
-      : 'Forgeboard could not safely clean up this agent worktree.',
+      ? 'Artemis could not safely inspect this agent worktree for cleanup.'
+      : 'Artemis could not safely clean up this agent worktree.',
     errorCode(error),
   );
 }
 
 function assertLiveOwner(ownerId: number): void {
   if (!Number.isInteger(ownerId) || ownerId <= 0) {
-    throw new WorktreeCleanupPublicError('A live Forgeboard window is required for cleanup.');
+    throw new WorktreeCleanupPublicError('A live Artemis window is required for cleanup.');
   }
 }
 

@@ -389,7 +389,7 @@ function assertContextSizeLimits(
 
 function videoContextNote(file: AttachmentManifest['files'][number]): string {
   return [
-    '# Forgeboard video context',
+    '# Artemis video context',
     '',
     'The user explicitly shared this project video with this agent.',
     `Project-relative path: ${file.relativePath}`,
@@ -397,7 +397,7 @@ function videoContextNote(file: AttachmentManifest['files'][number]): string {
     `Size: ${String(file.sizeBytes)} bytes`,
     '',
     'Open the original video at the project-relative path when your tools support video access.',
-    'Forgeboard did not copy, transcribe, or claim to understand the video automatically.',
+    'Artemis did not copy, transcribe, or claim to understand the video automatically.',
     '',
   ].join('\n');
 }

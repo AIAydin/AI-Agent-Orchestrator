@@ -26,7 +26,7 @@ export async function assertCompleteSourceHistory(
   );
   if (shallow.stdout.trim() !== 'false') {
     throw new Error(
-      'Shallow repositories (with only partial history) cannot be pushed with Forgeboard yet.',
+      'Shallow repositories (with only partial history) cannot be pushed with Artemis yet.',
     );
   }
   await repositories.git.run(
@@ -62,7 +62,7 @@ export async function assertNoLfsPointerHistory(
   const objectIds = parseObjectIdLines(result.stdout);
   if (objectIds.length > MAX_LFS_CANDIDATE_BLOBS) {
     throw new Error(
-      'This history has too many small objects for Forgeboard to verify safely before pushing.',
+      'This history has too many small objects for Artemis to verify safely before pushing.',
     );
   }
   if (objectIds.length === 0) return;
@@ -89,7 +89,7 @@ export async function assertNoLfsPointerHistory(
     );
     if (batchContainsGitLfsPointer(objects.stdout, batch)) {
       throw new Error(
-        'This history uses Git LFS, which needs a separate reviewed upload. Forgeboard cannot push it yet.',
+        'This history uses Git LFS, which needs a separate reviewed upload. Artemis cannot push it yet.',
       );
     }
   }
@@ -97,10 +97,10 @@ export async function assertNoLfsPointerHistory(
 
 function parseObjectIdLines(stdout: string): readonly string[] {
   if (stdout === '') return [];
-  if (!stdout.endsWith('\n')) throw new Error('Forgeboard could not verify reachable Git objects.');
+  if (!stdout.endsWith('\n')) throw new Error('Artemis could not verify reachable Git objects.');
   const lines = stdout.slice(0, -1).split('\n');
   if (lines.some((line) => !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(line))) {
-    throw new Error('Forgeboard could not verify reachable Git objects.');
+    throw new Error('Artemis could not verify reachable Git objects.');
   }
   return lines;
 }
@@ -109,10 +109,10 @@ function parseLfsBatchCheck(
   stdout: string,
   expectedObjectIds: readonly string[],
 ): readonly LfsBlobCandidate[] {
-  if (!stdout.endsWith('\n')) throw new Error('Forgeboard could not verify Git object metadata.');
+  if (!stdout.endsWith('\n')) throw new Error('Artemis could not verify Git object metadata.');
   const lines = stdout.slice(0, -1).split('\n');
   if (lines.length !== expectedObjectIds.length) {
-    throw new Error('Forgeboard could not verify Git object metadata.');
+    throw new Error('Artemis could not verify Git object metadata.');
   }
   return lines.flatMap((line, index) => {
     const match = /^([0-9a-f]{40}|[0-9a-f]{64}) blob ([0-9]+)$/u.exec(line);
@@ -125,7 +125,7 @@ function parseLfsBatchCheck(
       size < 0 ||
       size >= LFS_POINTER_MAX_BYTES
     ) {
-      throw new Error('Forgeboard could not verify Git object metadata.');
+      throw new Error('Artemis could not verify Git object metadata.');
     }
     return size >= LFS_POINTER_MIN_BYTES ? [{ oid, size }] : [];
   });
@@ -139,21 +139,21 @@ function batchContainsGitLfsPointer(
   let offset = 0;
   for (const object of expected) {
     const headerEnd = framed.indexOf(0x0a, offset);
-    if (headerEnd < 0) throw new Error('Forgeboard could not verify Git object contents.');
+    if (headerEnd < 0) throw new Error('Artemis could not verify Git object contents.');
     const header = framed.subarray(offset, headerEnd).toString('ascii');
     if (header !== `${object.oid} blob ${String(object.size)}`) {
-      throw new Error('Forgeboard could not verify Git object contents.');
+      throw new Error('Artemis could not verify Git object contents.');
     }
     const contentStart = headerEnd + 1;
     const contentEnd = contentStart + object.size;
     if (contentEnd >= framed.length || framed[contentEnd] !== 0x0a) {
-      throw new Error('Forgeboard could not verify Git object contents.');
+      throw new Error('Artemis could not verify Git object contents.');
     }
     if (isGitLfsPointer(framed.subarray(contentStart, contentEnd))) return true;
     offset = contentEnd + 1;
   }
   if (offset !== framed.length) {
-    throw new Error('Forgeboard could not verify Git object contents.');
+    throw new Error('Artemis could not verify Git object contents.');
   }
   return false;
 }

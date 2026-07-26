@@ -323,7 +323,7 @@ export class CollaborationClient {
         generation,
         connectionError(
           'network-failed',
-          'Forgeboard could not start the collaboration connection.',
+          'Artemis could not start the collaboration connection.',
           true,
         ),
       );
@@ -758,7 +758,7 @@ export class CollaborationClient {
           generation,
           connectionError(
             'privacy-rejected',
-            "The collaboration server sent data that Forgeboard's privacy rules do not allow.",
+            "The collaboration server sent data that Artemis's privacy rules do not allow.",
             false,
           ),
         );
@@ -1144,8 +1144,7 @@ export class CollaborationClient {
 
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The collaboration client has been disposed.');
-    if (this.#paused)
-      throw new Error('Collaboration is paused while Forgeboard changes local data.');
+    if (this.#paused) throw new Error('Collaboration is paused while Artemis changes local data.');
   }
 
   #sharingReady(): boolean {

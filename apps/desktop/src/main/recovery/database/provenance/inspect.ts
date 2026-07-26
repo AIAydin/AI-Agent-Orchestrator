@@ -44,10 +44,10 @@ const LEGACY_MISSING_AUDIT_DELETE_TRIGGERS = [
 ] as const;
 
 const MESSAGES = {
-  newer: 'This database was created by a newer Forgeboard version. Update Forgeboard to open it.',
-  foreign: 'The selected database is not a verified Forgeboard database.',
-  corrupt: 'The Forgeboard database provenance or schema is inconsistent.',
-  unavailable: 'Forgeboard could not inspect the database safely.',
+  newer: 'This database was created by a newer Artemis version. Update Artemis to open it.',
+  foreign: 'The selected database is not a verified Artemis database.',
+  corrupt: 'The Artemis database provenance or schema is inconsistent.',
+  unavailable: 'Artemis could not inspect the database safely.',
 } as const satisfies Record<ForgeboardDatabaseProvenanceFailureReason, string>;
 
 /**
@@ -174,7 +174,7 @@ function expectedSchemaForVersion(version: number): ReadonlyMap<string, string> 
   try {
     for (let index = 0; index < version; index += 1) {
       const migration = MIGRATIONS[index];
-      if (migration === undefined) throw new Error('Missing Forgeboard migration.');
+      if (migration === undefined) throw new Error('Missing Artemis migration.');
       database.exec('BEGIN IMMEDIATE;');
       try {
         database.exec(migration);

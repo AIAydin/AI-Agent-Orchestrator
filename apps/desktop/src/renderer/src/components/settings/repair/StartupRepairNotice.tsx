@@ -14,7 +14,7 @@ export function StartupRepairNotice({ repair, onReview, onDismiss }: StartupRepa
     <aside className="startup-repair-notice" role="status" aria-live="polite">
       <ShieldAlert size={20} aria-hidden="true" />
       <div>
-        <strong>Forgeboard fixed some settings for this version</strong>
+        <strong>Artemis fixed some settings for this version</strong>
         <span>
           {repair.repairedFieldPaths.length} unsafe{' '}
           {repair.repairedFieldPaths.length === 1 ? 'value was' : 'values were'} replaced with safe

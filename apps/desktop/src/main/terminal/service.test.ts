@@ -71,17 +71,17 @@ describe('TerminalService', () => {
       { executable: 'sh', arguments: [] },
     ]);
     await expect(harness.service.getSession('owner-b', { sessionId: SESSION_ID })).rejects.toThrow(
-      /another Forgeboard window/u,
+      /another Artemis window/u,
     );
     await expect(harness.service.replay('owner-b', { sessionId: SESSION_ID })).rejects.toThrow(
-      /another Forgeboard window/u,
+      /another Artemis window/u,
     );
     await expect(
       harness.service.sendInput('owner-b', {
         sessionId: SESSION_ID,
         data: 'hidden',
       }),
-    ).rejects.toThrow(/another Forgeboard window/u);
+    ).rejects.toThrow(/another Artemis window/u);
 
     harness.pty.emitData('ready\0now\r\n');
     await expectEventually(async () => {
@@ -115,7 +115,7 @@ describe('TerminalService', () => {
     );
   });
 
-  it('does not impose a Forgeboard process or window cap on running terminals', async () => {
+  it('does not impose a Artemis process or window cap on running terminals', async () => {
     const harness = await fixture();
     const sessions: TerminalSessionView[] = [];
 

@@ -48,9 +48,7 @@ export function AgentReadinessPanel({
       if (refreshed !== null) onResult(refreshed);
     } catch (cause) {
       onError(
-        cause instanceof Error
-          ? cause.message
-          : 'Forgeboard could not check this agent. Try again.',
+        cause instanceof Error ? cause.message : 'Artemis could not check this agent. Try again.',
       );
     }
   }
@@ -86,7 +84,7 @@ export function AgentReadinessPanel({
           <ReadinessResult result={result} />
         ) : launchReady ? (
           <p>
-            Found when Forgeboard opened: version <code>{agent?.version}</code>. “Check again”
+            Found when Artemis opened: version <code>{agent?.version}</code>. “Check again”
             re-checks the current program — nothing is saved.
           </p>
         ) : (
@@ -100,7 +98,7 @@ export function AgentReadinessPanel({
       {!ready && <p>{agentDependencyGuidance(agent, draft.request?.agentId ?? 'custom')}</p>}
       {checkReadiness === undefined && (
         <p className="agent-readiness-unavailable" role="status">
-          Re-checking is not available in this build of Forgeboard. Only what was found when the app
+          Re-checking is not available in this build of Artemis. Only what was found when the app
           opened can be shown.
         </p>
       )}

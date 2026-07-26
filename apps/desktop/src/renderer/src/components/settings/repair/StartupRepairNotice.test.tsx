@@ -26,7 +26,7 @@ describe('StartupRepairNotice', () => {
       />,
     );
 
-    expect(screen.getByText('Forgeboard fixed some settings for this version')).toBeTruthy();
+    expect(screen.getByText('Artemis fixed some settings for this version')).toBeTruthy();
     expect(screen.getByText(/original settings are kept/iu)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));

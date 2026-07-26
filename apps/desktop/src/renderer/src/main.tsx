@@ -13,7 +13,7 @@ const queryClient = new QueryClient({
 });
 
 const root = document.getElementById('root');
-if (!root) throw new Error('Missing Forgeboard root element.');
+if (!root) throw new Error('Missing Artemis root element.');
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>

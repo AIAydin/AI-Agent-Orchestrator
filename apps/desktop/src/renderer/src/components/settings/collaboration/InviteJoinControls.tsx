@@ -96,8 +96,8 @@ export function InviteJoinControls({
           </button>
         </span>
         <small id="collaboration-invite-link-help">
-          New Forgeboard invites include the server connection automatically. The link is kept only
-          for this attempt and clears immediately after you join.
+          New Artemis invites include the server connection automatically. The link is kept only for
+          this attempt and clears immediately after you join.
         </small>
       </div>
       <button

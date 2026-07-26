@@ -113,7 +113,7 @@ export function assertIntegrity(database: DatabaseSync): void {
   const report = checkDatabaseIntegrity(database, 'quick', new Date());
   if (!report.ok) {
     throw new Error(
-      `The local Forgeboard database failed its startup integrity check: ${report.messages.join(
+      `The local Artemis database failed its startup integrity check: ${report.messages.join(
         '; ',
       )}`,
     );

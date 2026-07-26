@@ -375,7 +375,7 @@ async function writeExtension(source: string): Promise<void> {
       name: 'Confirmation test',
       version: '1.0.0',
       description: 'Tests the trusted confirmation boundary.',
-      publisher: 'Forgeboard tests',
+      publisher: 'Artemis tests',
       requestedPermissions: ['canvas.node.register', 'canvas.data.persist'],
       contributes: {
         agentAdapters: [],

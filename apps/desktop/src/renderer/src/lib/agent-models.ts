@@ -1,5 +1,5 @@
 /**
- * Curated model ids for the coding-agent CLIs Forgeboard can launch.
+ * Curated model ids for the coding-agent CLIs Artemis can launch.
  *
  * These lists only seed the "Default model" pickers with common choices so users
  * can select instead of typing. The CLIs accept any model id, so the pickers

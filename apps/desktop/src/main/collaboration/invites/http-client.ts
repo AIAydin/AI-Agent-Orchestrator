@@ -286,7 +286,7 @@ export class CollaborationInviteHttpClient {
       }
       throw new CollaborationInviteHttpError(
         'network-failed',
-        'Forgeboard could not reach the collaboration server for the invite request.',
+        'Artemis could not reach the collaboration server for the invite request.',
       );
     } finally {
       clearTimeout(timeout);

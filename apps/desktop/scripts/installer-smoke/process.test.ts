@@ -44,7 +44,7 @@ if (process.env.ELECTRON_RENDERER_URL || process.env.ELECTRON_RUN_AS_NODE || pro
 const projectId = '11111111-1111-4111-8111-111111111111';
 const canvasId = '22222222-2222-4222-8222-222222222222';
 const timestamp = new Date().toISOString();
-const demoProjectPath = join(root, 'demo', 'forgeboard-demo');
+const demoProjectPath = join(root, 'demo', 'artemis-demo');
 mkdirSync(demoProjectPath, { recursive: true });
 const databasePath = join(root, 'forgeboard.sqlite');
 const database = new DatabaseSync(databasePath);
@@ -55,7 +55,7 @@ database.exec(
 );
 const project = {
   id: projectId,
-  name: 'forgeboard-demo',
+  name: 'artemis-demo',
   path: demoProjectPath,
   openedAt: timestamp,
   missing: false,
@@ -94,12 +94,12 @@ const report = {
   ipc: 'ready',
   firstRun: 'ready',
   heading: 'Ready to build without wiring config files?',
-  primaryAction: 'Set up Forgeboard',
+  primaryAction: 'Set up Artemis',
   safeDefaults: 'applied',
   demoWorkspace: 'ready',
   recentProjectCount: 1,
   demoProjectId: projectId,
-  demoProjectName: 'forgeboard-demo',
+  demoProjectName: 'artemis-demo',
   demoProjectPath,
   demoCanvasId: canvasId,
   demoCanvasName: 'Workshop',

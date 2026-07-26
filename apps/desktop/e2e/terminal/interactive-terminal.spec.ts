@@ -54,7 +54,7 @@ test('an interactive Terminal node launches a real reviewed PTY entirely from th
 
     await page.getByRole('button', { name: 'Use safe defaults' }).click();
     await page.getByRole('button', { name: /Explore the safe demo/i }).click();
-    await expect(page.locator('.project-switcher')).toContainText('forgeboard-demo');
+    await expect(page.locator('.project-switcher')).toContainText('artemis-demo');
 
     await test.step('the node and every ordinary process setting are configured in the UI', async () => {
       await page
@@ -130,7 +130,7 @@ test('an interactive Terminal node launches a real reviewed PTY entirely from th
 
     const canonicalExecutable = await realpath(process.execPath);
     const canonicalWorkingDirectory = await realpath(
-      join(userDataDirectory, 'demo', 'forgeboard-demo'),
+      join(userDataDirectory, 'demo', 'artemis-demo'),
     );
     await test.step('the separate owner-bound native confirmation discloses and launches the exact PTY', async () => {
       await terminalPanel.getByRole('button', { name: 'Review and start' }).click();
@@ -147,7 +147,7 @@ test('an interactive Terminal node launches a real reviewed PTY entirely from th
         cwd: canonicalWorkingDirectory,
         environmentVariableNames: ENVIRONMENT_VARIABLE_NAMES,
         executable: canonicalExecutable,
-        projectName: 'forgeboard-demo',
+        projectName: 'artemis-demo',
       });
       await expect(review).toBeHidden();
       await expectTerminalText(terminalPanel, 'ANSI_READY');
@@ -190,7 +190,7 @@ test('an interactive Terminal node launches a real reviewed PTY entirely from th
         cwd: canonicalWorkingDirectory,
         environmentVariableNames: ENVIRONMENT_VARIABLE_NAMES,
         executable: canonicalExecutable,
-        projectName: 'forgeboard-demo',
+        projectName: 'artemis-demo',
       });
 
       await expect(terminalPanel.getByRole('button', { name: 'Terminate' })).toBeVisible();

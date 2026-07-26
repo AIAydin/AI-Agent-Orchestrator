@@ -31,7 +31,7 @@ describe('AgentContextDropZone', () => {
     expect(onRemove).toHaveBeenCalledWith('stale-file');
   });
 
-  it('accepts only the strict Forgeboard payload and reports verification progress', async () => {
+  it('accepts only the strict Artemis payload and reports verification progress', async () => {
     let finish: (() => void) | undefined;
     const onAttach = vi.fn(
       () =>

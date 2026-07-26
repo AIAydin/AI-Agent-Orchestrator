@@ -82,7 +82,7 @@ async function repositoryOverrideQuery(
 function pushConfigVerificationError(): GitEngineError {
   return new GitEngineError(
     'APPROVAL_MISMATCH',
-    'Forgeboard could not verify repository-owned push transport configuration.',
+    'Artemis could not verify repository-owned push transport configuration.',
   );
 }
 
@@ -102,7 +102,7 @@ export async function readExactRemotePushUrl(
   if (result.exitCode !== 0 || !result.stdout.endsWith('\n')) {
     throw new GitEngineError(
       'APPROVAL_MISMATCH',
-      'Forgeboard could not resolve one exact push destination for the selected remote.',
+      'Artemis could not resolve one exact push destination for the selected remote.',
     );
   }
   const records = result.stdout.slice(0, -1).split('\n');
@@ -213,7 +213,7 @@ export async function assertNoMatchingPushUrlRewrites(
   if (result.exitCode !== 0 || !result.stdout.endsWith('\0')) {
     throw new GitEngineError(
       'APPROVAL_MISMATCH',
-      'Forgeboard could not verify effective Git URL rewrite configuration.',
+      'Artemis could not verify effective Git URL rewrite configuration.',
     );
   }
   const records = result.stdout.slice(0, -1).split('\0');
@@ -230,7 +230,7 @@ export async function assertNoMatchingPushUrlRewrites(
     if (!/^url\..+\.(?:insteadof|pushinsteadof)$/u.test(key)) {
       throw new GitEngineError(
         'APPROVAL_MISMATCH',
-        'Forgeboard could not verify effective Git URL rewrite configuration.',
+        'Artemis could not verify effective Git URL rewrite configuration.',
       );
     }
     if (value === '' || pushTarget.startsWith(value)) {
@@ -266,7 +266,7 @@ export async function assertNoPushTargetRemoteNameCollision(
   if (result.exitCode !== 0 || !result.stdout.endsWith('\0')) {
     throw new GitEngineError(
       'APPROVAL_MISMATCH',
-      'Forgeboard could not verify configured Git remote names.',
+      'Artemis could not verify configured Git remote names.',
     );
   }
   const keys = result.stdout.slice(0, -1).split('\0');
@@ -281,7 +281,7 @@ export async function assertNoPushTargetRemoteNameCollision(
     if (match === null || match[1] === '') {
       throw new GitEngineError(
         'APPROVAL_MISMATCH',
-        'Forgeboard could not verify configured Git remote names.',
+        'Artemis could not verify configured Git remote names.',
       );
     }
     return match[1] === pushTarget;

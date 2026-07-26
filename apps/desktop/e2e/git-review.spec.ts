@@ -40,12 +40,12 @@ test('authoritative Git review stages, unstages, and discloses the exact local c
     });
     const headBefore = gitHead(projectPath);
     // Commits use the repository's own Git identity, so configure it where Git actually reads it.
-    gitConfig(projectPath, 'user.name', 'Forgeboard E2E Reviewer');
+    gitConfig(projectPath, 'user.name', 'Artemis E2E Reviewer');
     gitConfig(projectPath, 'user.email', 'reviewer@forgeboard.invalid');
     await writeFile(join(projectPath, 'review-e2e.txt'), 'authoritative review proof\n', 'utf8');
 
     await page.locator('.command-bar').getByRole('button', { name: 'Changes' }).click();
-    const dialog = page.getByRole('dialog', { name: /Review changes in forgeboard-demo/ });
+    const dialog = page.getByRole('dialog', { name: /Review changes in artemis-demo/ });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText('review-e2e.txt', { exact: true }).first()).toBeVisible();
     await expect(dialog.getByText('New files').locator('..')).toContainText('1');
@@ -61,7 +61,7 @@ test('authoritative Git review stages, unstages, and discloses the exact local c
     await dialog.getByLabel('Commit message').fill('Prove authoritative Git review');
     await dialog.getByRole('button', { name: /Review commit/ }).click();
     const disclosure = page.getByRole('alertdialog', { name: 'Review your commit' });
-    await expect(disclosure).toContainText('Forgeboard E2E Reviewer');
+    await expect(disclosure).toContainText('Artemis E2E Reviewer');
     await expect(disclosure).toContainText('reviewer@forgeboard.invalid');
     await expect(disclosure).toContainText('Prove authoritative Git review');
     await expect(disclosure).toContainText('review-e2e.txt');

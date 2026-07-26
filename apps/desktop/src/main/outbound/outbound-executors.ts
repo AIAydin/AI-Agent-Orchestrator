@@ -80,7 +80,7 @@ export async function executeUpdateReleaseRequest(
         method: 'GET',
         headers: {
           accept: 'application/vnd.github+json',
-          'user-agent': 'Forgeboard-update-check',
+          'user-agent': 'Artemis-update-check',
           'x-github-api-version': '2022-11-28',
         },
       },

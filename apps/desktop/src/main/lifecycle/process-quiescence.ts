@@ -29,8 +29,8 @@ export class ProcessAdmissionRestoreError extends AggregateError {
     super(
       errors,
       operationCompleted
-        ? 'The cleanup finished, but Forgeboard could not restart all of its process controls. Restart Forgeboard before starting anything new.'
-        : 'The cleanup failed, and Forgeboard could not restart all of its process controls. Restart Forgeboard before starting anything new.',
+        ? 'The cleanup finished, but Artemis could not restart all of its process controls. Restart Artemis before starting anything new.'
+        : 'The cleanup failed, and Artemis could not restart all of its process controls. Restart Artemis before starting anything new.',
     );
     this.name = 'ProcessAdmissionRestoreError';
   }

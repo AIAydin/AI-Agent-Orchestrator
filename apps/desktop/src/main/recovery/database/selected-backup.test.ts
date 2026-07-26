@@ -32,7 +32,7 @@ afterEach(async () => {
 });
 
 describe('stageValidatedSelectedBackup', () => {
-  it('copies and fully validates a current Forgeboard backup without touching its source', async () => {
+  it('copies and fully validates a current Artemis backup without touching its source', async () => {
     const fixture = await createFixture();
     const sourceBefore = await readFile(fixture.source);
 
@@ -87,7 +87,7 @@ describe('stageValidatedSelectedBackup', () => {
     await rename(fixture.source, original);
     await writeFile(fixture.source, 'replacement');
 
-    await expect(staging).rejects.toThrow('changed while Forgeboard was copying it');
+    await expect(staging).rejects.toThrow('changed while Artemis was copying it');
     expect(await directoryEntries(fixture.staging)).toEqual([]);
     expect((await lstat(original)).isFile()).toBe(true);
   });
@@ -159,7 +159,7 @@ describe('stageValidatedSelectedBackup', () => {
     } catch (error) {
       failure = error as Error;
     }
-    expect(failure?.message).toBe('Forgeboard could not validate the selected backup safely.');
+    expect(failure?.message).toBe('Artemis could not validate the selected backup safely.');
     expect(failure?.message).not.toContain(fixture.root);
     expect(failure?.message.length).toBeLessThan(256);
   });

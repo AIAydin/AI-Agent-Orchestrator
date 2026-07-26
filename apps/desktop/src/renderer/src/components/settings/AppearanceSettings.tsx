@@ -6,7 +6,7 @@ export function AppearanceSettings({ draft, setDraft }: SettingsDraftProps) {
     <>
       <SettingsSection
         title="Appearance"
-        description="Forgeboard follows your system until you choose otherwise."
+        description="Artemis follows your system until you choose otherwise."
       >
         <div className="segmented-field">
           <span>Theme</span>

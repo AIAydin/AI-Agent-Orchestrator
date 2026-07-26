@@ -17,7 +17,7 @@ describe('WorkspaceCommandBar', () => {
       ['Redo', 'Nothing to redo'],
       ['Zoom to fit the canvas', 'Fit every node on the canvas'],
       ['Hide project sidebar', 'Hide the project sidebar'],
-      ['Settings', 'Open Forgeboard settings'],
+      ['Settings', 'Open Artemis settings'],
     ] as const;
     for (const [buttonName, description] of expected) {
       const button = screen.getByRole('button', { name: buttonName });

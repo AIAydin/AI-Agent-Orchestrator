@@ -394,9 +394,9 @@ interface SharedJsonBaseline {
 }
 
 /** A baseline plus the one judgement that can only be made at registration time: whether the
- * container object was the user's to begin with, or something Forgeboard introduced. */
+ * container object was the user's to begin with, or something Artemis introduced. */
 interface SharedJsonRegistration extends SharedJsonBaseline {
-  /** The container key existed and held something other than Forgeboard's own entries, so
+  /** The container key existed and held something other than Artemis's own entries, so
    * cleanup must leave the key in place even after emptying it. */
   readonly containerWasTheirs: boolean;
 }
@@ -424,9 +424,9 @@ const filesCreatedByThisInstance = new Set<string>();
 /**
  * Top-level keys that hold no user data and that the provider CLI itself may add to a file we
  * created (opencode writes `$schema` into `opencode.json` when it normalises it). They are only
- * ever treated as disposable when the file did NOT exist before Forgeboard wrote it -- in that
- * case a file containing nothing but these plus our now-empty container is pure Forgeboard
- * residue, and removing it restores the project to its pre-Forgeboard state.
+ * ever treated as disposable when the file did NOT exist before Artemis wrote it -- in that
+ * case a file containing nothing but these plus our now-empty container is pure Artemis
+ * residue, and removing it restores the project to its pre-Artemis state.
  */
 const DISPOSABLE_METADATA_KEYS: ReadonlySet<string> = new Set(['$schema']);
 
@@ -552,7 +552,7 @@ function isAuthoredEntry(
 }
 
 /**
- * Deletes every LEAKED Forgeboard entry from `container`, in place: one we authored, that is not
+ * Deletes every LEAKED Artemis entry from `container`, in place: one we authored, that is not
  * our own key, and that no live provision of this app instance owns (`liveEntryKeys`). Only an
  * entry whose owning process is gone can satisfy all three.
  */
@@ -605,9 +605,9 @@ async function mergeJsonEntry(plan: SharedJsonEntryPlan): Promise<SharedJsonRegi
  * Removes only `[containerKey][entryKey]` from the JSON object at `plan.path` and then restores
  * as much of the pre-session state as is still ours to restore:
  *
- * - the file is one this app instance created and nothing but Forgeboard residue is left (an
+ * - the file is one this app instance created and nothing but Artemis residue is left (an
  *   empty container, plus metadata-only keys such as a `$schema` pointer the CLI added on its
- *   own) -- the file is deleted, since that IS its pre-Forgeboard state;
+ *   own) -- the file is deleted, since that IS its pre-Artemis state;
  * - what remains is semantically identical to the baseline -- the original bytes are written
  *   back verbatim, so a pre-existing user file ends up byte-identical to how we found it;
  * - anything else (another session's entry, edits made while we ran, entries the sweep removed)
@@ -654,7 +654,7 @@ async function cleanupJsonEntry(
 }
 
 /** True when `value` holds no content worth keeping: at most an empty container plus
- * metadata-only keys. Only ever consulted for a file Forgeboard itself created. */
+ * metadata-only keys. Only ever consulted for a file Artemis itself created. */
 function isForgeboardResidueOnly(value: Record<string, unknown>, containerKey: string): boolean {
   return Object.entries(value).every(([key, entry]) => {
     if (key === containerKey) return isRecord(entry) && Object.keys(entry).length === 0;

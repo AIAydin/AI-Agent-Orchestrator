@@ -137,7 +137,7 @@ export async function createBackup(
     };
     // A read-only integrity connection can still create SQLite WAL/SHM sidecars. Remove the
     // private staging tree before recording success so callers never observe a completed backup
-    // alongside Forgeboard's transient files.
+    // alongside Artemis's transient files.
     await cleanupBackupStagingDirectory(stagingDirectory, canonicalDirectory, security);
     database
       .prepare(
@@ -378,7 +378,7 @@ async function nearestExistingCanonicalDirectory(start: string): Promise<string>
     }
     const parent = dirname(candidate);
     if (parent === candidate) {
-      throw new Error('Forgeboard could not find an existing backup destination parent.');
+      throw new Error('Artemis could not find an existing backup destination parent.');
     }
     candidate = parent;
   }
@@ -539,7 +539,7 @@ async function removeRecordedBackup(
   }
   const digest = await hashFile(backupPath);
   if (digest.sha256 !== backup.sha256 || digest.sizeBytes !== backup.size_bytes) {
-    throw new Error('A recorded backup changed after Forgeboard created it.');
+    throw new Error('A recorded backup changed after Artemis created it.');
   }
   await assertCanonicalPrivateDirectory(canonicalParent, security);
   const finalStats = await lstat(backupPath);

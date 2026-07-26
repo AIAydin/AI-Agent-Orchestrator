@@ -455,7 +455,7 @@ export class GitExecutor {
         if (settled || timedOut || terminationError !== undefined) return;
         terminationError = new GitEngineError(
           'COMMAND_FAILED',
-          'Git closed command input before Forgeboard finished writing it.',
+          'Git closed command input before Artemis finished writing it.',
           {},
           { cause: error },
         );
@@ -525,7 +525,7 @@ export class GitExecutor {
           reject(
             new GitEngineError(
               'COMMAND_FAILED',
-              'Git closed command input before Forgeboard finished writing it.',
+              'Git closed command input before Artemis finished writing it.',
             ),
           );
         } else if (result.exitCode !== 0 && options.allowNonZeroExit !== true) {
@@ -567,14 +567,14 @@ function assertArguments(args: readonly string[]): void {
   if (args.includes('--paginate') || args.includes('-p')) {
     throw new GitEngineError(
       'EXTERNAL_DRIVER_BLOCKED',
-      'Forgeboard never allows Git to launch a configured pager.',
+      'Artemis never allows Git to launch a configured pager.',
     );
   }
   const command = commandName(args);
   if (!KNOWN_GIT_COMMANDS.has(command) && !SAFE_STANDALONE_OPTIONS.has(command)) {
     throw new GitEngineError(
       'EXTERNAL_DRIVER_BLOCKED',
-      `Forgeboard blocked unsupported Git command ${JSON.stringify(command)} because aliases and external Git helpers can execute delegated processes.`,
+      `Artemis blocked unsupported Git command ${JSON.stringify(command)} because aliases and external Git helpers can execute delegated processes.`,
       { command },
     );
   }
@@ -608,7 +608,7 @@ function assertUnguardedCommandIsSafe(args: readonly string[]): void {
   ) {
     throw new GitEngineError(
       'EXTERNAL_DRIVER_BLOCKED',
-      'Forgeboard only allows Git var to resolve the effective author identity.',
+      'Artemis only allows Git var to resolve the effective author identity.',
     );
   }
   if (CHECKOUT_CAPABLE_COMMANDS.has(command)) throw guardRequired(command);
@@ -657,7 +657,7 @@ function assertExactIndexUpdate(args: readonly string[], input: string): void {
 function guardRequired(command: string): GitEngineError {
   return new GitEngineError(
     'EXTERNAL_DRIVER_BLOCKED',
-    `Git ${command} must use Forgeboard's delegated-process guard.`,
+    `Git ${command} must use Artemis's delegated-process guard.`,
     { command },
   );
 }
@@ -712,13 +712,13 @@ function hardenDiffArguments(args: readonly string[]): readonly string[] {
   if (hasLongOption(args, '--textconv')) {
     throw new GitEngineError(
       'EXTERNAL_DRIVER_BLOCKED',
-      'Forgeboard never enables external Git text-conversion commands.',
+      'Artemis never enables external Git text-conversion commands.',
     );
   }
   if (hasLongOption(args, '--ext-diff')) {
     throw new GitEngineError(
       'EXTERNAL_DRIVER_BLOCKED',
-      'Forgeboard never enables external Git diff commands.',
+      'Artemis never enables external Git diff commands.',
     );
   }
   const index = gitCommandIndex(args);

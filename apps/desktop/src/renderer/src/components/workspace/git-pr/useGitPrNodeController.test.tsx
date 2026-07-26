@@ -712,7 +712,7 @@ function runSummary(
 function inspectView(ready: boolean): GitRemoteInspectView {
   return {
     target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID },
-    projectName: 'Forgeboard demo',
+    projectName: 'Artemis demo',
     sourceBranch: 'forgeboard/remote-delivery',
     baseRef: 'refs/heads/main',
     baseCommit: BASE_OID,
@@ -742,7 +742,7 @@ function pushPlan(): GitRemotePushPlanView {
     planId: PLAN_ID,
     expiresAt: '2026-07-17T01:10:00.000Z',
     target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID },
-    projectName: 'Forgeboard demo',
+    projectName: 'Artemis demo',
     remote: remoteDescriptor(),
     sourceBranch: 'forgeboard/remote-delivery',
     destinationBranch: 'forgeboard/remote-delivery',
@@ -798,7 +798,7 @@ function pullRequestPlan(): GitHubPullRequestPlanView {
     planId: PLAN_ID,
     expiresAt: '2026-07-17T01:12:00.000Z',
     target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID },
-    projectName: 'Forgeboard demo',
+    projectName: 'Artemis demo',
     remote: remoteDescriptor(),
     ownerRepository: 'example/forgeboard',
     baseBranch: 'main',

@@ -310,7 +310,7 @@ describe('TerminalIpcService collaboration authority routing', () => {
       ok: false,
       error: {
         code: 'OPERATION_FAILED',
-        message: 'Another live Forgeboard window is already connected to these terminals.',
+        message: 'Another live Artemis window is already connected to these terminals.',
       },
     });
 

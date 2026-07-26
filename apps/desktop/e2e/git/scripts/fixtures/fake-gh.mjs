@@ -23,7 +23,7 @@ await appendFile(
 );
 
 if (sameArguments(argv, ['--version'])) {
-  process.stdout.write('gh version 2.76.1 (deterministic Forgeboard E2E fixture)\n');
+  process.stdout.write('gh version 2.76.1 (deterministic Artemis E2E fixture)\n');
   process.exit(0);
 }
 

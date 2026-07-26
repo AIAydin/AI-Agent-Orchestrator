@@ -24,18 +24,11 @@ export async function resolvePackagedLaunch(
 
   if (platform === 'darwin') {
     const directory = architecture === 'x64' ? 'mac' : `mac-${architecture}`;
-    const executable = join(
-      releaseRoot,
-      directory,
-      'Forgeboard.app',
-      'Contents',
-      'MacOS',
-      'Forgeboard',
-    );
+    const executable = join(releaseRoot, directory, 'Artemis.app', 'Contents', 'MacOS', 'Artemis');
     if (await isFile(executable)) return { executable, args };
   } else if (platform === 'win32') {
     const directory = architecture === 'x64' ? 'win-unpacked' : `win-${architecture}-unpacked`;
-    const executable = join(releaseRoot, directory, 'Forgeboard.exe');
+    const executable = join(releaseRoot, directory, 'Artemis.exe');
     if (await isFile(executable)) return { executable, args };
   } else {
     const normalizedArchitecture = architecture === 'arm' ? 'armv7l' : architecture;
@@ -65,7 +58,7 @@ export async function resolvePackagedLaunch(
   }
 
   throw new Error(
-    `No packaged Forgeboard executable for ${platform}-${architecture} found in ${releaseRoot}.`,
+    `No packaged Artemis executable for ${platform}-${architecture} found in ${releaseRoot}.`,
   );
 }
 
@@ -81,7 +74,7 @@ export async function runPackagedSmoke(releaseRoot: string): Promise<void> {
     async () => await rm(temporaryRoot, { recursive: true, force: true }),
     'Packaged runtime smoke test and temporary cleanup both failed.',
   );
-  process.stdout.write('Packaged Forgeboard smoke test passed.\n');
+  process.stdout.write('Packaged Artemis smoke test passed.\n');
 }
 
 async function isFile(path: string): Promise<boolean> {

@@ -47,7 +47,7 @@ const PROVIDERS: Readonly<Record<ProviderConnectionId, ProviderDefinition>> = {
   codex: {
     name: 'OpenAI Codex',
     disclosure:
-      'Codex opens and owns its official sign-in flow and may contact OpenAI. Forgeboard never receives or stores its OAuth tokens.',
+      'Codex opens and owns its official sign-in flow and may contact OpenAI. Artemis never receives or stores its OAuth tokens.',
     connectArguments: ['login'],
     statusArguments: ['login', 'status'],
     disconnectArguments: ['logout'],
@@ -55,7 +55,7 @@ const PROVIDERS: Readonly<Record<ProviderConnectionId, ProviderDefinition>> = {
   claude: {
     name: 'Anthropic Claude Code',
     disclosure:
-      'Claude Code opens and owns its official sign-in flow and may contact Anthropic. Forgeboard never receives or stores its OAuth tokens.',
+      'Claude Code opens and owns its official sign-in flow and may contact Anthropic. Artemis never receives or stores its OAuth tokens.',
     connectArguments: ['auth', 'login'],
     statusArguments: ['auth', 'status', '--json'],
     disconnectArguments: ['auth', 'logout'],

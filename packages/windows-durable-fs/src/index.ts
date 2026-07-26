@@ -35,32 +35,32 @@ export interface WindowsDurableNativeBinding {
 type LoadNativeBinding = () => WindowsDurableNativeBinding;
 
 const MAXIMUM_WINDOWS_PATH_CHARACTERS = 32_767;
-const BOUNDED_MOVE_FAILURE = 'Forgeboard could not complete the durable Windows move.';
+const BOUNDED_MOVE_FAILURE = 'Artemis could not complete the durable Windows move.';
 let defaultAuthority: WindowsDurableFilesystemAuthority | undefined;
 let defaultNativeBinding: WindowsDurableNativeBinding | undefined;
 
 export function currentWindowsUserSid(): Promise<string> {
   if (process.platform !== 'win32') {
-    return Promise.reject(new Error('Forgeboard Windows identity authority is unavailable.'));
+    return Promise.reject(new Error('Artemis Windows identity authority is unavailable.'));
   }
   try {
     const sid = defaultWindowsNativeBinding().currentUserSid();
     return Promise.resolve(validWindowsSid(sid));
   } catch {
-    return Promise.reject(new Error('Forgeboard could not verify the current Windows account.'));
+    return Promise.reject(new Error('Artemis could not verify the current Windows account.'));
   }
 }
 
 export function inspectWindowsFilesystemAcl(path: string): Promise<string> {
   if (process.platform !== 'win32') {
-    return Promise.reject(new Error('Forgeboard Windows permission authority is unavailable.'));
+    return Promise.reject(new Error('Artemis Windows permission authority is unavailable.'));
   }
   try {
     return Promise.resolve(
       defaultWindowsNativeBinding().inspectFilesystemAcl(validWindowsPath(path)),
     );
   } catch {
-    return Promise.reject(new Error('Forgeboard could not inspect Windows permissions.'));
+    return Promise.reject(new Error('Artemis could not inspect Windows permissions.'));
   }
 }
 
@@ -70,7 +70,7 @@ export function protectWindowsFilesystemAcl(
   directory: boolean,
 ): Promise<void> {
   if (process.platform !== 'win32') {
-    return Promise.reject(new Error('Forgeboard Windows permission authority is unavailable.'));
+    return Promise.reject(new Error('Artemis Windows permission authority is unavailable.'));
   }
   try {
     defaultWindowsNativeBinding().protectFilesystemAcl(
@@ -80,7 +80,7 @@ export function protectWindowsFilesystemAcl(
     );
     return Promise.resolve();
   } catch {
-    return Promise.reject(new Error('Forgeboard could not protect Windows permissions.'));
+    return Promise.reject(new Error('Artemis could not protect Windows permissions.'));
   }
 }
 
@@ -103,12 +103,12 @@ export function createWindowsDurableFilesystemAuthority(
   let binding: WindowsDurableNativeBinding | undefined;
   const move = (source: string, destination: string, replaceExisting: boolean): Promise<void> => {
     if (platform !== 'win32') {
-      throw new Error('Forgeboard Windows durable filesystem authority is unavailable.');
+      throw new Error('Artemis Windows durable filesystem authority is unavailable.');
     }
     const normalizedSource = validWindowsPath(source);
     const normalizedDestination = validWindowsPath(destination);
     if (normalizedSource.toLowerCase() === normalizedDestination.toLowerCase()) {
-      throw new Error('Forgeboard rejected the Windows durable move request.');
+      throw new Error('Artemis rejected the Windows durable move request.');
     }
     try {
       binding ??= loadNativeBinding();
@@ -121,7 +121,7 @@ export function createWindowsDurableFilesystemAuthority(
   return {
     createDirectoryWriteThrough: async (path) => {
       if (platform !== 'win32') {
-        throw new Error('Forgeboard Windows durable filesystem authority is unavailable.');
+        throw new Error('Artemis Windows durable filesystem authority is unavailable.');
       }
       const destination = validWindowsPath(path);
       let temporary: string | undefined;
@@ -132,7 +132,7 @@ export function createWindowsDurableFilesystemAuthority(
         if (temporary !== undefined) {
           await rm(temporary, { recursive: true, force: true }).catch(() => undefined);
         }
-        throw new Error('Forgeboard could not durably create a recovery directory on Windows.');
+        throw new Error('Artemis could not durably create a recovery directory on Windows.');
       }
     },
     moveFileWriteThrough: async (source, destination, options = {}) => {
@@ -143,7 +143,7 @@ export function createWindowsDurableFilesystemAuthority(
     },
     syncFile: async (path) => {
       if (platform !== 'win32') {
-        throw new Error('Forgeboard Windows durable filesystem authority is unavailable.');
+        throw new Error('Artemis Windows durable filesystem authority is unavailable.');
       }
       const normalized = validWindowsPath(path);
       let handle: Awaited<ReturnType<typeof open>> | undefined;
@@ -151,7 +151,7 @@ export function createWindowsDurableFilesystemAuthority(
         handle = await open(normalized, 'r+');
         await handle.sync();
       } catch {
-        throw new Error('Forgeboard could not flush a recovery file on Windows.');
+        throw new Error('Artemis could not flush a recovery file on Windows.');
       } finally {
         await handle?.close().catch(() => undefined);
       }
@@ -168,7 +168,7 @@ function validWindowsPath(value: string): string {
     win32.normalize(value) !== value ||
     !hasStrictWindowsComponents(value)
   ) {
-    throw new Error('Forgeboard rejected the Windows durable move request.');
+    throw new Error('Artemis rejected the Windows durable move request.');
   }
   return value;
 }
@@ -176,7 +176,7 @@ function validWindowsPath(value: string): string {
 function validWindowsSid(value: string): string {
   const normalized = value.toUpperCase();
   if (!/^S-\d(?:-\d+){1,15}$/u.test(normalized) || normalized.length > 184) {
-    throw new Error('Forgeboard rejected the Windows identity response.');
+    throw new Error('Artemis rejected the Windows identity response.');
   }
   return normalized;
 }
@@ -202,7 +202,7 @@ function loadWindowsNativeBinding(): WindowsDurableNativeBinding {
   const nativeRequire = moduleBuiltin.createRequire(import.meta.url);
   const loaded = nativeRequire('@forgeboard/windows-durable-fs/native') as unknown;
   if (!isNativeBinding(loaded)) {
-    throw new Error('Forgeboard Windows durable filesystem authority is unavailable.');
+    throw new Error('Artemis Windows durable filesystem authority is unavailable.');
   }
   return loaded;
 }

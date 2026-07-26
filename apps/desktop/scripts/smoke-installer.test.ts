@@ -21,29 +21,26 @@ async function releaseWith(...files: readonly string[]): Promise<string> {
 
 describe('installer artifact discovery', () => {
   it('requires exactly one macOS DMG', async () => {
-    const root = await releaseWith(
-      'Forgeboard-0.1.0-mac-arm64.dmg',
-      'Forgeboard-0.1.0-mac-arm64.zip',
-    );
+    const root = await releaseWith('Artemis-0.1.0-mac-arm64.dmg', 'Artemis-0.1.0-mac-arm64.zip');
     await expect(resolveInstallerArtifacts(root, 'darwin')).resolves.toEqual({
       platform: 'darwin',
-      dmg: join(root, 'Forgeboard-0.1.0-mac-arm64.dmg'),
+      dmg: join(root, 'Artemis-0.1.0-mac-arm64.dmg'),
     });
   });
 
   it('prefers the named NSIS setup when a portable executable is also present', async () => {
     const root = await releaseWith(
-      'Forgeboard-0.1.0-windows-x64-setup.exe',
-      'Forgeboard-0.1.0-windows-x64-portable.exe',
+      'Artemis-0.1.0-windows-x64-setup.exe',
+      'Artemis-0.1.0-windows-x64-portable.exe',
     );
     await expect(resolveInstallerArtifacts(root, 'win32')).resolves.toEqual({
       platform: 'win32',
-      nsis: join(root, 'Forgeboard-0.1.0-windows-x64-setup.exe'),
+      nsis: join(root, 'Artemis-0.1.0-windows-x64-setup.exe'),
     });
   });
 
   it('rejects an executable that is not the expected NSIS setup artifact', async () => {
-    const root = await releaseWith('Forgeboard Portable 0.1.0.exe');
+    const root = await releaseWith('Artemis Portable 0.1.0.exe');
     await expect(resolveInstallerArtifacts(root, 'win32')).rejects.toThrow(
       'Expected exactly one Windows NSIS installer, found 0',
     );
@@ -51,12 +48,12 @@ describe('installer artifact discovery', () => {
 
   it('requires both Linux distribution artifacts', async () => {
     const root = await releaseWith(
-      'Forgeboard-0.1.0-linux-x86_64.AppImage',
+      'Artemis-0.1.0-linux-x86_64.AppImage',
       'forgeboard_0.1.0_amd64.deb',
     );
     await expect(resolveInstallerArtifacts(root, 'linux')).resolves.toEqual({
       platform: 'linux',
-      appImage: join(root, 'Forgeboard-0.1.0-linux-x86_64.AppImage'),
+      appImage: join(root, 'Artemis-0.1.0-linux-x86_64.AppImage'),
       deb: join(root, 'forgeboard_0.1.0_amd64.deb'),
     });
   });

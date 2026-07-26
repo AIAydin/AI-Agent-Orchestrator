@@ -6,7 +6,7 @@ import {
   withDockerContextBindFailureGuidance,
 } from './docker-bind-guidance.js';
 
-const SNAPSHOT_ROOT = String.raw`C:\Users\Aydin\AppData\Roaming\Forgeboard\.private\snapshot-1`;
+const SNAPSHOT_ROOT = String.raw`C:\Users\Aydin\AppData\Roaming\Artemis\.private\snapshot-1`;
 const TIMESTAMP = '2026-07-16T20:00:00.000Z';
 
 describe('Docker private-context bind guidance', () => {

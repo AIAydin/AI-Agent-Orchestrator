@@ -40,7 +40,7 @@ describe('native terminal confirmation', () => {
     expect(shown?.detail).toContain('not sandboxed');
     expect(shown?.detail).toContain('This one-time launch approval expires at');
     expect(shown?.detail).toContain(
-      'Forgeboard rechecks the exact program identity, project, and folder immediately before starting it.',
+      'Artemis rechecks the exact program identity, project, and folder immediately before starting it.',
     );
   });
 
@@ -87,7 +87,7 @@ function nativeReview(
       kind: 'terminal-launch',
       planId: '10000000-0000-4000-8000-000000000001',
       projectId: '20000000-0000-4000-8000-000000000001',
-      projectName: 'Forgeboard',
+      projectName: 'Artemis',
       nodeId: 'terminal-1',
       executable: '/private/tools/zsh',
       arguments: [...(exactOverrides.arguments ?? ['-l'])],

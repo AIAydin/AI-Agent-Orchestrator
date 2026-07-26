@@ -21,7 +21,7 @@ export function ProviderConnectionSummary() {
               <strong>{LABELS[providerId]}</strong>
               <small>
                 {view?.status?.reason ??
-                  'Provider-owned OAuth; Forgeboard never sees or stores tokens.'}{' '}
+                  'Provider-owned OAuth; Artemis never sees or stores tokens.'}{' '}
                 Manage in Settings → Agents.
               </small>
             </span>

@@ -161,7 +161,7 @@ export function reconcileAgentStatus(
   if (attempt.status === 'lost') {
     return {
       status: 'lost',
-      lastRunSummary: 'Lost · Forgeboard restarted or lost process authority',
+      lastRunSummary: 'Lost · Artemis restarted or lost process authority',
     };
   }
   return { status: 'failed' };

@@ -11,7 +11,7 @@ interface WindowsInstallLocation {
 export async function smokeWindowsNsis(nsis: string, temporaryRoot: string): Promise<void> {
   const requested = installLocation(join(temporaryRoot, 'installed'));
   const fallback = process.env.LOCALAPPDATA
-    ? installLocation(join(process.env.LOCALAPPDATA, 'Programs', 'Forgeboard'))
+    ? installLocation(join(process.env.LOCALAPPDATA, 'Programs', 'Artemis'))
     : undefined;
   const locations = fallback ? [requested, fallback] : [requested];
   await rejectPreExistingInstall(locations);
@@ -24,7 +24,7 @@ export async function smokeWindowsNsis(nsis: string, temporaryRoot: string): Pro
         windowsVerbatimArguments: true,
       });
       if (!(await isFile(requested.executable))) {
-        throw new Error('The NSIS installer did not install Forgeboard.exe at the requested path.');
+        throw new Error('The NSIS installer did not install Artemis.exe at the requested path.');
       }
       await smokeExecutable(requested.executable, [], join(temporaryRoot, 'user-data-nsis'));
     },
@@ -37,8 +37,8 @@ export async function smokeWindowsNsis(nsis: string, temporaryRoot: string): Pro
 
 function installLocation(root: string): WindowsInstallLocation {
   return {
-    executable: join(root, 'Forgeboard.exe'),
-    uninstaller: join(root, 'Uninstall Forgeboard.exe'),
+    executable: join(root, 'Artemis.exe'),
+    uninstaller: join(root, 'Uninstall Artemis.exe'),
   };
 }
 
@@ -48,7 +48,7 @@ async function rejectPreExistingInstall(
   for (const location of locations) {
     if ((await isFile(location.executable)) || (await isFile(location.uninstaller))) {
       throw new Error(
-        `Refusing to overwrite a pre-existing Forgeboard install: ${location.executable}`,
+        `Refusing to overwrite a pre-existing Artemis install: ${location.executable}`,
       );
     }
   }
@@ -61,7 +61,7 @@ async function uninstallDiscoveredLocations(
     if (await isFile(location.uninstaller)) {
       await runCommand(location.uninstaller, ['/S']);
     } else if (await isFile(location.executable)) {
-      throw new Error(`Forgeboard was installed without an uninstaller: ${location.executable}`);
+      throw new Error(`Artemis was installed without an uninstaller: ${location.executable}`);
     }
   }
 }

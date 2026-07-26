@@ -21,7 +21,7 @@ const DESCRIPTION = 'Writes a file if it ever runs.';
  */
 test('a Test node keeps its exact command line across a restart and runs it on request', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-test-node-e2e-'));
-  const sideEffectPath = join(userDataDirectory, 'demo', 'forgeboard-demo', SIDE_EFFECT_FILE);
+  const sideEffectPath = join(userDataDirectory, 'demo', 'artemis-demo', SIDE_EFFECT_FILE);
   let electronApp: ElectronApplication | null = null;
   const externalRequests: string[] = [];
 
@@ -79,7 +79,7 @@ test('a Test node keeps its exact command line across a restart and runs it on r
 async function openSafeDemo(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Use safe defaults' }).click();
   await page.getByRole('button', { name: /Explore the safe demo/i }).click();
-  await expect(page.locator('.project-switcher')).toContainText('forgeboard-demo');
+  await expect(page.locator('.project-switcher')).toContainText('artemis-demo');
 }
 
 async function addAndSelectTestNode(page: Page) {

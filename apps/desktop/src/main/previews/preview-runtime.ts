@@ -584,7 +584,7 @@ export class PreviewRuntime {
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The preview runtime has been disposed.');
     if (this.#privacyResetting) {
-      throw new Error('Previews are paused while Forgeboard deletes local data.');
+      throw new Error('Previews are paused while Artemis deletes local data.');
     }
   }
 }
@@ -761,12 +761,12 @@ async function packageManagerLaunch(
   }
   const guidance =
     packageManager === 'npm'
-      ? 'Install Node.js (which includes npm), then reopen Forgeboard.'
+      ? 'Install Node.js (which includes npm), then reopen Artemis.'
       : packageManager === 'pnpm'
-        ? 'Install pnpm or enable it with Corepack, then reopen Forgeboard.'
+        ? 'Install pnpm or enable it with Corepack, then reopen Artemis.'
         : packageManager === 'yarn'
-          ? 'Install Yarn or enable it with Corepack, then reopen Forgeboard.'
-          : 'Install Bun, then reopen Forgeboard.';
+          ? 'Install Yarn or enable it with Corepack, then reopen Artemis.'
+          : 'Install Bun, then reopen Artemis.';
   throw new Error(`${packageManager} was not found on PATH. ${guidance}`);
 }
 

@@ -39,7 +39,7 @@ export function outboundMessageBox(plan: OutboundApprovalPlan): MessageBoxOption
       '',
       displayEscapedText(disclosure.warning),
       '',
-      `You can use this approval only once, and it expires at ${plan.expiresAt}. If the action or destination changes, Forgeboard blocks it.`,
+      `You can use this approval only once, and it expires at ${plan.expiresAt}. If the action or destination changes, Artemis blocks it.`,
     ].join('\n'),
     buttons: ['Cancel', displayEscapedText(disclosure.confirmLabel)],
     defaultId: 0,

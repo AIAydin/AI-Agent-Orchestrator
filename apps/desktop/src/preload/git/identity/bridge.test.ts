@@ -5,7 +5,7 @@ import { createGitIdentityApi } from './bridge.js';
 
 const input = {
   source: 'settings' as const,
-  name: 'Forgeboard Author',
+  name: 'Artemis Author',
   email: 'author@example.invalid',
 };
 const result = {

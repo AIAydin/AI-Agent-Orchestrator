@@ -199,7 +199,7 @@ describe('Windows backup filesystem boundaries', () => {
 
     try {
       await expect(deleteAllLocalData(database, {}, windows(authority))).rejects.toThrow(
-        'changed after Forgeboard created it',
+        'changed after Artemis created it',
       );
       expect(authority.protectPrivateFile).not.toHaveBeenCalled();
       expect(await readFile(backupPath, 'utf8')).toBe('user file that is not the recorded backup');

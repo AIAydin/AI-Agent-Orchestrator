@@ -5,7 +5,7 @@ import { CommandExitError, runCommand, runWithCleanup, smokeExecutable } from '.
 
 const EXPECTED_PACKAGE_NAME = 'forgeboard';
 const INSTALLED_EXECUTABLE = '/usr/bin/forgeboard';
-const OWNED_EXECUTABLE = '/opt/Forgeboard/forgeboard';
+const OWNED_EXECUTABLE = '/opt/Artemis/forgeboard';
 
 type LinuxArtifacts = Extract<InstallerArtifacts, { platform: 'linux' }>;
 
@@ -69,7 +69,7 @@ export async function assertNoPreExistingLinuxInstall(
 ): Promise<void> {
   for (const path of [INSTALLED_EXECUTABLE, OWNED_EXECUTABLE]) {
     if (await exists(path)) {
-      throw new Error(`Refusing to overwrite a pre-existing Forgeboard path: ${path}`);
+      throw new Error(`Refusing to overwrite a pre-existing Artemis path: ${path}`);
     }
   }
   try {

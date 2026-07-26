@@ -96,7 +96,7 @@ export class ExtensionIpcService {
           );
           throw new ExtensionRuntimeError(
             'APPROVAL_MISMATCH',
-            'A live Forgeboard window is required to approve an extension.',
+            'A live Artemis window is required to approve an extension.',
           );
         }
         const options: MessageBoxOptions = {
@@ -127,7 +127,7 @@ export class ExtensionIpcService {
           );
         }
         if (this.#privacyResetting) {
-          throw new Error('Extensions are paused while Forgeboard deletes local data.');
+          throw new Error('Extensions are paused while Artemis deletes local data.');
         }
         return this.#withTrustLock(async () => {
           this.#assertCurrentParent(event, parentWindow);
@@ -177,7 +177,7 @@ export class ExtensionIpcService {
         }
         if (this.#privacyResetting) {
           this.#manager.denyRemoval(plan.planId, ownerId, 'privacy-reset-started');
-          throw new Error('Extensions are paused while Forgeboard deletes local data.');
+          throw new Error('Extensions are paused while Artemis deletes local data.');
         }
         return this.#withTrustLock(async () => {
           try {
@@ -261,7 +261,7 @@ export class ExtensionIpcService {
   ): Promise<T> {
     return this.#withTrustLock(async () => {
       if (this.#privacyResetting) {
-        throw new Error('Extensions are paused while Forgeboard deletes local data.');
+        throw new Error('Extensions are paused while Artemis deletes local data.');
       }
       const current = (await this.#manager.listActiveAgentAdapters()).find(
         (adapter) => adapter.id === adapterId,
@@ -282,7 +282,7 @@ export class ExtensionIpcService {
     const options: OpenDialogOptions =
       kind === 'folder'
         ? {
-            title: 'Choose a Forgeboard extension folder',
+            title: 'Choose a Artemis extension folder',
             buttonLabel: 'Review extension',
             properties: ['openDirectory'],
           }
@@ -290,13 +290,13 @@ export class ExtensionIpcService {
             title: 'Choose forgeboard-extension.json',
             buttonLabel: 'Review extension',
             properties: ['openFile'],
-            filters: [{ name: 'Forgeboard extension manifest', extensions: ['json'] }],
+            filters: [{ name: 'Artemis extension manifest', extensions: ['json'] }],
           };
     const parentWindow = this.#liveParentWindow(event);
     if (parentWindow === null) {
       throw new ExtensionRuntimeError(
         'INVALID_SELECTION',
-        'A live Forgeboard window is required to choose an extension.',
+        'A live Artemis window is required to choose an extension.',
       );
     }
     const selection = await this.dialog.showOpenDialog(parentWindow, options);
@@ -337,7 +337,7 @@ export class ExtensionIpcService {
     if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
       throw new ExtensionRuntimeError(
         'APPROVAL_MISMATCH',
-        'The originating Forgeboard window changed before extension authorization completed.',
+        'The originating Artemis window changed before extension authorization completed.',
       );
     }
   }
@@ -397,7 +397,7 @@ export class ExtensionIpcService {
       if (this.#disposed) throw new Error('The extension service has been disposed.');
       assertLiveMainFrame(event, 'Extension request');
       if (this.#privacyResetting) {
-        throw new Error('Extensions are paused while Forgeboard deletes local data.');
+        throw new Error('Extensions are paused while Artemis deletes local data.');
       }
       const args = inputSchema.parse(rawArgs);
       const value = await operation(event, ...args);
@@ -417,7 +417,7 @@ export class ExtensionIpcService {
               ? error.code
               : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid extension request.'
+            ? 'Artemis rejected an invalid extension request.'
             : error instanceof Error
               ? error.message
               : 'The extension operation failed.',
@@ -468,7 +468,7 @@ function extensionRemovalConfirmation(plan: ExtensionRemovalPlan): MessageBoxOpt
   return {
     type: 'warning',
     title: 'Remove extension',
-    message: `Remove ${plan.extensionName} ${plan.version} from Forgeboard?`,
+    message: `Remove ${plan.extensionName} ${plan.version} from Artemis?`,
     detail: [
       `Extension id: ${plan.extensionId}`,
       `Manifest fingerprint (SHA-256): ${plan.manifestDigest}`,
@@ -476,7 +476,7 @@ function extensionRemovalConfirmation(plan: ExtensionRemovalPlan): MessageBoxOpt
       `Granted permissions: ${plan.grantedPermissions.join(', ') || 'none'}`,
       `Approval expires: ${plan.expiresAt}`,
       '',
-      'This revokes the saved extension approval and removes Forgeboard’s installed copy. The folder you originally selected is not deleted.',
+      'This revokes the saved extension approval and removes Artemis’s installed copy. The folder you originally selected is not deleted.',
     ].join('\n'),
     buttons: ['Cancel', 'Remove extension'],
     defaultId: 0,

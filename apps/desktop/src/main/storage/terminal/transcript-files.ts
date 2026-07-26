@@ -93,7 +93,7 @@ export class TerminalTranscriptFiles {
     try {
       const details = await handle.stat();
       if (!details.isFile() || details.size !== 0) {
-        throw new Error('Forgeboard could not create a private empty terminal transcript.');
+        throw new Error('Artemis could not create a private empty terminal transcript.');
       }
       await handle.sync();
     } finally {
@@ -138,11 +138,11 @@ export class TerminalTranscriptFiles {
     try {
       const before = await handle.stat();
       if (!before.isFile() || before.size !== expectedBytes) {
-        throw new Error('The private terminal transcript changed outside Forgeboard.');
+        throw new Error('The private terminal transcript changed outside Artemis.');
       }
       const result = await handle.write(encoded, 0, encoded.byteLength, expectedBytes);
       if (result.bytesWritten !== encoded.byteLength) {
-        throw new Error('Forgeboard could not durably append the complete terminal output chunk.');
+        throw new Error('Artemis could not durably append the complete terminal output chunk.');
       }
       await handle.sync();
       const after = await handle.stat();
@@ -152,7 +152,7 @@ export class TerminalTranscriptFiles {
         !sameIdentity(after, pathAfter, true) ||
         after.size !== expectedBytes + encoded.byteLength
       ) {
-        throw new Error('The private terminal transcript changed while Forgeboard wrote it.');
+        throw new Error('The private terminal transcript changed while Artemis wrote it.');
       }
       this.#totalBytes += encoded.byteLength;
       return {

@@ -46,7 +46,7 @@ export function DeclarativeExtensionInspector({
         </span>
       </header>
       <p>
-        <code>{extensionId}</code> · v{extensionVersion} · Controls provided by Forgeboard
+        <code>{extensionId}</code> · v{extensionVersion} · Controls provided by Artemis
       </p>
       {disabled && (
         <div className="extension-node-unavailable" role="status">

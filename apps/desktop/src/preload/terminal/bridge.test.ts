@@ -32,7 +32,7 @@ const PREPARE = {
 const PLAN: TerminalLaunchPlanView = {
   kind: 'terminal-launch',
   planId: PLAN_ID,
-  projectName: 'Forgeboard',
+  projectName: 'Artemis',
   permission: PERMISSION,
   expiresAt: '2026-07-17T16:10:00.000Z',
   ...PREPARE,

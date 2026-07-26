@@ -24,7 +24,7 @@ import { compareVersions, UpdateIpcService, type UpdateOperations } from './serv
 const RELEASE = {
   id: 10,
   tag_name: 'v0.2.0',
-  name: 'Forgeboard 0.2.0',
+  name: 'Artemis 0.2.0',
   html_url: 'https://github.com/AIAydin/AI-Agent-Orchestrator/releases/tag/v0.2.0',
   published_at: '2026-07-17T12:00:00.000Z',
   draft: false,

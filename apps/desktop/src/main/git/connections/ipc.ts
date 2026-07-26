@@ -329,7 +329,7 @@ export class GitConnectionsIpcService {
     const ownerId = this.#owner(event);
     const parent = this.resolveWindow(event);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required for Git connection changes.');
+      throw new Error('A live Artemis window is required for Git connection changes.');
     }
     const assertCurrent = (): void => {
       this.#assertAvailable();
@@ -339,7 +339,7 @@ export class GitConnectionsIpcService {
         parent.isDestroyed() ||
         this.resolveWindow(event) !== parent
       ) {
-        throw new Error('The originating Forgeboard window changed during Git connection review.');
+        throw new Error('The originating Artemis window changed during Git connection review.');
       }
     };
     return { parent, assertCurrent };
@@ -422,7 +422,7 @@ export class GitConnectionsIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid Git connection request.'
+            ? 'Artemis rejected an invalid Git connection request.'
             : rendererSafeErrorMessage(error),
         },
       };

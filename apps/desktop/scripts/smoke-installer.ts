@@ -37,7 +37,7 @@ export async function runInstallerSmoke(
     async () => rm(temporaryRoot, { recursive: true, force: true }),
     'Installer smoke test and temporary cleanup both failed.',
   );
-  process.stdout.write('Forgeboard installer artifact smoke test passed: FORGEBOARD_SMOKE_OK\n');
+  process.stdout.write('Artemis installer artifact smoke test passed: FORGEBOARD_SMOKE_OK\n');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

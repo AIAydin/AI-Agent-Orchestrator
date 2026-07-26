@@ -670,7 +670,7 @@ describe('WorkspaceCanvas Agent context drops', () => {
       },
       dataTransfer: () => contextDataTransfer('{"schemaVersion":1,"kind":"project-file"}'),
       target: 'canvas-node-agent',
-      message: /valid Forgeboard project file/u,
+      message: /valid Artemis project file/u,
     },
     {
       label: 'non-Agent target',

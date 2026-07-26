@@ -776,7 +776,7 @@ describe('GitReviewDialog', () => {
 
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith(
-        "Forgeboard couldn't confirm that the workspace, branch, and run details were all removed. Refresh the run history before continuing.",
+        "Artemis couldn't confirm that the workspace, branch, and run details were all removed. Refresh the run history before continuing.",
       ),
     );
     await waitFor(() => expect(onCleanupStateUncertain).toHaveBeenCalledTimes(1));
@@ -845,7 +845,7 @@ describe('GitReviewDialog', () => {
     expect(disclosure.textContent).toContain(`${baseOid}..${agentHeadOid}`);
     expect(disclosure.textContent).toContain('src/committed.ts');
     expect(disclosure.textContent).toContain('Ada Developer <ada@example.test>');
-    expect(disclosure.textContent).toContain('name from Forgeboard settings');
+    expect(disclosure.textContent).toContain('name from Artemis settings');
     expect(confirmShippingMock).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' })),

@@ -54,7 +54,7 @@ const PLAN: TerminalLaunchPlanView = {
   kind: 'terminal-launch',
   planId: PLAN_ID,
   projectId: PROJECT_ID,
-  projectName: 'Forgeboard',
+  projectName: 'Artemis',
   nodeId: 'terminal-node',
   ...CONFIGURATION,
   arguments: [...CONFIGURATION.arguments],

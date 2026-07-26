@@ -67,7 +67,7 @@ export type DetectedScriptCategory =
 export interface DetectedScript {
   readonly name: string;
   readonly category: DetectedScriptCategory;
-  /** The package-manager invocation Forgeboard may present to the user. */
+  /** The package-manager invocation Artemis may present to the user. */
   readonly command: ArgumentArrayCommand;
   /** Display-only package.json script. It is never passed to a shell by this package. */
   readonly declaration: string;

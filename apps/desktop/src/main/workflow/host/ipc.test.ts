@@ -93,7 +93,7 @@ describe('WorkflowIpcService', () => {
     expect(subframe).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
     const subframeMessage = (subframe as { error?: { message?: unknown } }).error?.message;
     expect(typeof subframeMessage).toBe('string');
-    expect(subframeMessage).toMatch(/main Forgeboard frame/iu);
+    expect(subframeMessage).toMatch(/main Artemis frame/iu);
   });
 
   it('main-authorizes mutations while keeping workflow history readable', async () => {

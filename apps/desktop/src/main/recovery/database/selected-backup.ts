@@ -27,7 +27,7 @@ export interface SelectedBackupValidationOptions {
   readonly platform?: NodeJS.Platform;
   readonly windowsSecurity?: WindowsFilesystemSecurity;
   /**
-   * Defaults to the current-schema full Forgeboard integrity check. Atomic recovery may inject a
+   * Defaults to the current-schema full Artemis integrity check. Atomic recovery may inject a
    * validator that migrates this private copy before performing the same full check.
    */
   readonly validateStaged?: (stagedPath: string) => void | Promise<void>;
@@ -47,7 +47,7 @@ export async function stageValidatedSelectedBackup(
   assertAbsolutePath(privateStagingDirectory, 'recovery staging directory');
   const maxBytes = options.maxBytes ?? MAX_SELECTED_BACKUP_BYTES;
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
-    throw new Error('Forgeboard rejected the selected backup safety limit.');
+    throw new Error('Artemis rejected the selected backup safety limit.');
   }
 
   const platform = options.platform ?? process.platform;
@@ -69,7 +69,7 @@ export async function stageValidatedSelectedBackup(
       const sourceBefore = await source.stat();
       if (!sourceBefore.isFile() || !sameFile(sourcePathStats, sourceBefore)) {
         throw new SafeSelectedBackupError(
-          'The selected backup changed before Forgeboard could copy it.',
+          'The selected backup changed before Artemis could copy it.',
         );
       }
       assertBoundedSize(sourceBefore.size, maxBytes);
@@ -91,7 +91,7 @@ export async function stageValidatedSelectedBackup(
         const destinationStats = await destination.stat();
         if (!destinationStats.isFile() || destinationStats.size !== copiedBytes) {
           throw new SafeSelectedBackupError(
-            'Forgeboard could not create a stable private backup copy.',
+            'Artemis could not create a stable private backup copy.',
           );
         }
       } finally {
@@ -106,12 +106,12 @@ export async function stageValidatedSelectedBackup(
         finalSourcePathStats.isSymbolicLink()
       ) {
         throw new SafeSelectedBackupError(
-          'The selected backup changed while Forgeboard was copying it.',
+          'The selected backup changed while Artemis was copying it.',
         );
       }
       if (copiedBytes !== sourceAfter.size) {
         throw new SafeSelectedBackupError(
-          'The selected backup changed while Forgeboard was copying it.',
+          'The selected backup changed while Artemis was copying it.',
         );
       }
 
@@ -137,7 +137,7 @@ export async function stageValidatedSelectedBackup(
   } catch (error) {
     if (stagedPath !== undefined) await cleanupStagedArtifacts(stagedPath);
     if (error instanceof SafeSelectedBackupError) throw error;
-    throw new SafeSelectedBackupError('Forgeboard could not validate the selected backup safely.');
+    throw new SafeSelectedBackupError('Artemis could not validate the selected backup safely.');
   }
 }
 
@@ -145,7 +145,7 @@ class SafeSelectedBackupError extends Error {}
 
 function assertAbsolutePath(value: string, label: string): void {
   if (!isAbsolute(value) || value.includes('\0')) {
-    throw new SafeSelectedBackupError(`Forgeboard rejected the ${label} path.`);
+    throw new SafeSelectedBackupError(`Artemis rejected the ${label} path.`);
   }
 }
 
@@ -206,7 +206,7 @@ async function copyAndHash(
     while (written < bytesRead) {
       const result = await destination.write(buffer, written, bytesRead - written, null);
       if (result.bytesWritten < 1) {
-        throw new SafeSelectedBackupError('Forgeboard could not create the private backup copy.');
+        throw new SafeSelectedBackupError('Artemis could not create the private backup copy.');
       }
       written += result.bytesWritten;
     }
@@ -277,7 +277,7 @@ async function hashStableStagedFile(
       pathStats.isSymbolicLink()
     ) {
       throw new SafeSelectedBackupError(
-        'The private backup copy changed while Forgeboard was validating it.',
+        'The private backup copy changed while Artemis was validating it.',
       );
     }
     await assertStableStagedFile(stagedPath, stagingDirectory, stagingIdentity, windows);

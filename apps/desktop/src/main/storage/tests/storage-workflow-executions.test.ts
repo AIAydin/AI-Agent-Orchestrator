@@ -268,7 +268,7 @@ describe('workflow execution storage', () => {
         .run('{"schemaVersion":1,"payload":{},"unexpected":true}', EXECUTION_ID);
     });
     expect(() => openStore(databasePath)).toThrow(
-      'The local Forgeboard database failed its startup integrity check',
+      'The local Artemis database failed its startup integrity check',
     );
   });
 

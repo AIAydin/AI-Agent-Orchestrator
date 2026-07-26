@@ -53,7 +53,7 @@ test('a preview node starts its own reviewed dev server and still embeds a typed
 
     await typeStartCommand(preview, process.execPath, previewServerPath);
 
-    const projectRoot = await realpath(joinPath(userDataDirectory, 'demo', 'forgeboard-demo'));
+    const projectRoot = await realpath(joinPath(userDataDirectory, 'demo', 'artemis-demo'));
     const executable = await realpath(process.execPath);
     const launchBinding = {
       projectRoot,
@@ -137,7 +137,7 @@ test('an occupied preview range reports a real collision without spawning a prev
     const preview = page.getByRole('region', { name: 'Web preview' });
     await typeStartCommand(preview, process.execPath, previewServerPath);
 
-    const projectRoot = await realpath(joinPath(userDataDirectory, 'demo', 'forgeboard-demo'));
+    const projectRoot = await realpath(joinPath(userDataDirectory, 'demo', 'artemis-demo'));
     const executable = await realpath(process.execPath);
     await approveNextNativePreviewLaunch(
       session.app,
@@ -216,7 +216,7 @@ async function startLoopbackPreviewServer(): Promise<LoopbackPreviewServer> {
       'cache-control': 'no-store',
     });
     response.end(
-      '<!doctype html><html><head><title>Forgeboard local preview</title></head>' +
+      '<!doctype html><html><head><title>Artemis local preview</title></head>' +
         '<body><h1>A typed port is enough</h1></body></html>',
     );
   });

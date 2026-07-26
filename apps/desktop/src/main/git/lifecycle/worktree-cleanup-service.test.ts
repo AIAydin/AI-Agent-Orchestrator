@@ -454,7 +454,7 @@ describe('WorktreeCleanupService', () => {
     const plan = await preparePlan(fixture.service, 44);
 
     await expect(fixture.service.confirm(authority(44), plan.planId)).rejects.toThrow(
-      'The cleanup finished, but Forgeboard could not restart all of its process controls',
+      'The cleanup finished, but Artemis could not restart all of its process controls',
     );
 
     expect(fixture.cleanup).toHaveBeenCalledTimes(1);
@@ -554,7 +554,7 @@ describe('WorktreeCleanupService', () => {
     const plan = await preparePlan(fixture.service, 44);
 
     await expect(fixture.service.confirm(authority(44), plan.planId)).rejects.toThrow(
-      'Cleanup completed, but Forgeboard could not finalize',
+      'Cleanup completed, but Artemis could not finalize',
     );
 
     expect(fixture.cleanup).toHaveBeenCalledTimes(1);

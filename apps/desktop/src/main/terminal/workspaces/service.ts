@@ -159,7 +159,7 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       } catch (cleanupError) {
         throw new AggregateError(
           [error, cleanupError],
-          'Forgeboard could not save or release the new Agent worktree.',
+          'Artemis could not save or release the new Agent worktree.',
         );
       }
       throw error;
@@ -650,15 +650,13 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       const candidate = this.#createId();
       if (this.store.getRun(candidate) === undefined) return candidate;
     }
-    throw new Error('Forgeboard could not create an Agent session ID. Try again.');
+    throw new Error('Artemis could not create an Agent session ID. Try again.');
   }
 
   async #cleanupPristine(ownership: WorktreeOwnership): Promise<void> {
     const impact = await this.#worktrees.cleanupImpact(ownership);
     if (impact.dirtyPaths.length > 0) {
-      throw new Error(
-        'Forgeboard preserved a new worktree because it unexpectedly contains files.',
-      );
+      throw new Error('Artemis preserved a new worktree because it unexpectedly contains files.');
     }
     await this.#cleanupFromImpact(ownership, impact);
   }

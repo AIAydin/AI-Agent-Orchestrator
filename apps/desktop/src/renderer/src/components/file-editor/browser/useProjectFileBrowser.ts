@@ -114,9 +114,7 @@ export function useProjectFileBrowser(
         if (!active) return;
         setResults(scanned);
         setBounded(wasBounded);
-        setError(
-          fileBrowserError(cause, "Forgeboard couldn't load this project's files. Try again."),
-        );
+        setError(fileBrowserError(cause, "Artemis couldn't load this project's files. Try again."));
         setStatus('error');
       }
     })();

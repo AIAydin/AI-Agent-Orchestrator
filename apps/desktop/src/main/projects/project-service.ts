@@ -57,8 +57,7 @@ const PROVIDER_DISCLOSURES = {
   gemini: 'Gemini CLI may send explicitly selected context to Google under your CLI account terms.',
   opencode: 'OpenCode may contact whichever provider you configured in OpenCode.',
   gh: 'GitHub CLI contacts GitHub only after you explicitly approve an outbound GitHub action.',
-  docker:
-    'Docker runs locally; container network access depends on the selected Forgeboard profile.',
+  docker: 'Docker runs locally; container network access depends on the selected Artemis profile.',
 } as const;
 
 const RECOVERY_CONFIRMATION_TTL_MS = 10 * 60 * 1_000;
@@ -351,7 +350,7 @@ export class ProjectService {
         throw new Error(`The selected path is not a ${input.kind === 'file' ? 'file' : 'folder'}.`);
       }
       if (canonicalPath.includes('\0') || canonicalPath.length > 32_768) {
-        throw new Error('Forgeboard cannot use the selected path.');
+        throw new Error('Artemis cannot use the selected path.');
       }
       if (!selected.includes(canonicalPath)) selected.push(canonicalPath);
     }
@@ -407,7 +406,7 @@ export class ProjectService {
     });
     await mkdir(target, { recursive: false, mode: 0o755 });
     authority?.assertCurrent();
-    await writeFile(join(target, 'README.md'), `# ${name}\n\nCreated locally with Forgeboard.\n`, {
+    await writeFile(join(target, 'README.md'), `# ${name}\n\nCreated locally with Artemis.\n`, {
       flag: 'wx',
     });
     authority?.assertCurrent();
@@ -429,7 +428,7 @@ export class ProjectService {
       await this.repositories.git.run(
         [
           '-c',
-          'user.name=Forgeboard',
+          'user.name=Artemis',
           '-c',
           'user.email=forgeboard@local.invalid',
           'commit',
@@ -488,22 +487,22 @@ export class ProjectService {
 
   async createDemo(authority?: ProjectRequestAuthority): Promise<Project> {
     authority?.assertCurrent();
-    const target = join(this.electronApp.getPath('userData'), 'demo', 'forgeboard-demo');
+    const target = join(this.electronApp.getPath('userData'), 'demo', 'artemis-demo');
     this.store.appendAudit('project', 'create-demo', 'allowed', { version: 1 });
     await mkdir(join(target, 'src'), { recursive: true, mode: 0o755 });
     authority?.assertCurrent();
-    const marker = join(target, '.forgeboard-demo-v1');
+    const marker = join(target, '.artemis-demo-v1');
     try {
       await access(marker);
     } catch {
       await writeFile(
         join(target, 'README.md'),
-        '# Forgeboard local demo\n\nThis repository is safe and fully local.\n',
+        '# Artemis local demo\n\nThis repository is safe and fully local.\n',
       );
       authority?.assertCurrent();
       await writeFile(
         join(target, 'src', 'message.ts'),
-        "export const message = 'Ready for your first Forgeboard run.';\n",
+        "export const message = 'Ready for your first Artemis run.';\n",
       );
       authority?.assertCurrent();
       await writeFile(marker, '1\n');
@@ -513,11 +512,11 @@ export class ProjectService {
       });
       authority?.assertCurrent();
       await this.repositories.git.runGuarded(
-        ['add', '--', 'README.md', 'src/message.ts', '.forgeboard-demo-v1'],
+        ['add', '--', 'README.md', 'src/message.ts', '.artemis-demo-v1'],
         {
           repositoryPath: target,
           operation: 'stage-clean',
-          paths: ['README.md', 'src/message.ts', '.forgeboard-demo-v1'],
+          paths: ['README.md', 'src/message.ts', '.artemis-demo-v1'],
         },
         { cwd: target },
       );
@@ -525,9 +524,9 @@ export class ProjectService {
       await this.repositories.git.run(
         [
           '-c',
-          'user.name=Forgeboard Demo',
+          'user.name=Artemis Demo',
           '-c',
-          'user.email=demo@forgeboard.local',
+          'user.email=demo@artemis.local',
           'commit',
           '-m',
           'Initialize local demo',
@@ -555,7 +554,7 @@ export class ProjectService {
       detail: [
         project.path,
         '',
-        'Forgeboard will set up Git version tracking with a main branch, so agents can work in their own copies and you can review their changes. Your existing files stay exactly as they are — nothing is saved into Git history yet.',
+        'Artemis will set up Git version tracking with a main branch, so agents can work in their own copies and you can review their changes. Your existing files stay exactly as they are — nothing is saved into Git history yet.',
       ].join('\n'),
     });
     authority?.assertCurrent();
@@ -586,7 +585,7 @@ export class ProjectService {
       const health = await scanRepository(current.path, this.repositories);
       if (!health.isGitRepository) {
         throw new Error(
-          'Git setup finished, but Forgeboard could not read the new repository. Try setting up Git again.',
+          'Git setup finished, but Artemis could not read the new repository. Try setting up Git again.',
         );
       }
       const updated = this.store.saveProject({ ...current, health });
@@ -993,7 +992,7 @@ export interface ProjectCloneAuthorization {
 async function prepareCloneDestination(destinationPath: string): Promise<PreparedCloneDestination> {
   const requested = resolve(destinationPath);
   if (requested.length > 32_768 || requested.includes('\0')) {
-    throw new Error('Forgeboard cannot use that destination path for the clone.');
+    throw new Error('Artemis cannot use that destination path for the clone.');
   }
   const name = basename(requested);
   if (name === '' || name === '.' || name === '..') {

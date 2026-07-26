@@ -495,7 +495,7 @@ export class WorktreeService {
       }
       throw new GitEngineError(
         'OWNERSHIP_MISMATCH',
-        'Ownership persistence failed, so Forgeboard restored the original managed branch name.',
+        'Ownership persistence failed, so Artemis restored the original managed branch name.',
         { oldBranch: impact.oldBranch, newBranch: impact.newBranch },
         { cause: error },
       );

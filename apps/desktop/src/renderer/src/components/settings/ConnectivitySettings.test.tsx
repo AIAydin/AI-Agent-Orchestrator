@@ -69,7 +69,7 @@ describe('ConnectivitySettings collaboration controls', () => {
   it('warns that shared canvas text is not checked for secrets', () => {
     render(<Harness />);
 
-    expect(screen.getByText(/Forgeboard shares only these canvas details/u)).toBeTruthy();
+    expect(screen.getByText(/Artemis shares only these canvas details/u)).toBeTruthy();
     expect(
       screen.getByText(/does not check shared titles, connection labels, or comments for secrets/u),
     ).toBeTruthy();

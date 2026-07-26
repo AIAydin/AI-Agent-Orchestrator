@@ -79,7 +79,7 @@ const CHECK_PRESENTATION: Readonly<
   },
   lost: {
     label: 'Lost',
-    description: "Forgeboard lost track of this check, so its result can't be verified.",
+    description: "Artemis lost track of this check, so its result can't be verified.",
     icon: <Unplug size={13} aria-hidden="true" />,
   },
   stale: {
@@ -342,7 +342,7 @@ function CheckRequirementSelector({
         <span>
           <strong>Verified workflow execution</strong>
           <small id={workflowHelpId}>
-            Verified by Forgeboard. Switching runs invalidates earlier delivery evidence.
+            Verified by Artemis. Switching runs invalidates earlier delivery evidence.
           </small>
         </span>
         <select

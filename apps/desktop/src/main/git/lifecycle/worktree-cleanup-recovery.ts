@@ -173,7 +173,7 @@ function completeRecoveryBinding(run: StoredRunRecord): WorktreeCleanupRecoveryB
   ) {
     throw new WorktreeCleanupRecoveryResolutionError(
       'RECOVERY_LEGACY_RUN_BINDING',
-      'This older run is missing the saved workspace records Forgeboard needs for safe cleanup recovery.',
+      'This older run is missing the saved workspace records Artemis needs for safe cleanup recovery.',
     );
   }
   return {

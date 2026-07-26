@@ -8,7 +8,7 @@ const MODEL_FLAG_BY_ADAPTER: Readonly<Record<string, string>> = {
 };
 
 /**
- * Whether Forgeboard has a built-in, deterministic interactive command shape for this adapter.
+ * Whether Artemis has a built-in, deterministic interactive command shape for this adapter.
  * Custom and extension-provided adapters intentionally stay outside the automatic-launch path.
  */
 export function builtInAgentModelFlagSupported(adapterId: string): boolean {

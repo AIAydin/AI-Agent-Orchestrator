@@ -73,6 +73,13 @@ code {
 .brand-mark {
   display: block;
   flex: none;
+  overflow: hidden;
+}
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .local-pill {
   display: inline-flex;

@@ -1,7 +1,7 @@
 /**
  * Tracks, per preview webview partition, the external origin the renderer has
  * configured (URL mode) — or nothing, meaning loopback/dev-server mode. This
- * is the security-critical channel by which the (trusted) main Forgeboard
+ * is the security-critical channel by which the (trusted) main Artemis
  * renderer tells the main process which origin a given preview node's guest
  * is allowed to load and pin, keyed by the exact partition string the
  * `<webview>` element uses.

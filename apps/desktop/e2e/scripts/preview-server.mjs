@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 
 const host = process.env.HOST;
 const port = Number(process.env.PORT);
-if (!host || !Number.isInteger(port)) throw new Error('Forgeboard did not provide HOST and PORT.');
+if (!host || !Number.isInteger(port)) throw new Error('Artemis did not provide HOST and PORT.');
 
 const server = createServer((request, response) => {
   response.writeHead(200, {
@@ -11,7 +11,7 @@ const server = createServer((request, response) => {
   });
   response.end(`<!doctype html>
     <html>
-      <head><title>Forgeboard local preview</title></head>
+      <head><title>Artemis local preview</title></head>
       <body>
         <h1>Preview server is ready</h1>
         <p data-testid="request-path">${request.url ?? '/'}</p>

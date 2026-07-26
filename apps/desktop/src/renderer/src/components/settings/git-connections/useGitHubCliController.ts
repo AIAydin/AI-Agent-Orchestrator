@@ -201,10 +201,10 @@ export function useGitHubCliController({ onError }: { readonly onError: (m: stri
 function recoveryRefreshMessage(result: RefreshResult): string {
   const subject = 'the current GitHub CLI status';
   if (result === 'applied') {
-    return `Forgeboard refreshed ${subject}; review what is shown before making another change.`;
+    return `Artemis refreshed ${subject}; review what is shown before making another change.`;
   }
   if (result === 'failed') {
-    return `Forgeboard could not refresh ${subject}; refresh it yourself before making another change.`;
+    return `Artemis could not refresh ${subject}; refresh it yourself before making another change.`;
   }
   return `A newer update replaced the recovery refresh of ${subject}; review the current state before making another change.`;
 }

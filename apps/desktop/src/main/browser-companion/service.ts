@@ -1007,7 +1007,7 @@ async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<void
 function assertOwnedProfilePath(root: string, candidate: string): void {
   const resolvedRoot = `${resolve(root)}/`;
   if (!resolve(candidate).startsWith(resolvedRoot)) {
-    throw new Error('Refusing to clear a Chrome profile outside Forgeboard storage.');
+    throw new Error('Refusing to clear a Chrome profile outside Artemis storage.');
   }
 }
 

@@ -578,9 +578,9 @@ function clearSession(
 }
 
 function unavailable(setMessage: Dispatch<SetStateAction<string | null>>): void {
-  setMessage('Collaboration is not available in this build of Forgeboard.');
+  setMessage('Collaboration is not available in this build of Artemis.');
 }
 
 function validationFailure(): string {
-  return "Forgeboard could not understand the collaboration server's response. Try again.";
+  return "Artemis could not understand the collaboration server's response. Try again.";
 }

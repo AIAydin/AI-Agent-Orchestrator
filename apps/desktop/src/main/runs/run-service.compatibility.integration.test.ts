@@ -1242,7 +1242,7 @@ async function activeFilterRepository(): Promise<{
     "require('node:fs').writeFileSync(process.argv[2], 'ran\\n'); process.stdin.pipe(process.stdout);\n",
   );
   await runFixtureGit(repository, ['init', '-b', 'main']);
-  await runFixtureGit(repository, ['config', 'user.name', 'Forgeboard Test']);
+  await runFixtureGit(repository, ['config', 'user.name', 'Artemis Test']);
   await runFixtureGit(repository, ['config', 'user.email', 'forgeboard@example.invalid']);
   await writeFile(path.join(repository, '.gitattributes'), 'README.md filter=run-filter\n');
   await writeFile(path.join(repository, 'README.md'), '# fixture\n');

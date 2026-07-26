@@ -133,8 +133,8 @@ export function DockerSettings({
         <span>
           <strong>Share this computer's sign-in details with Docker (unsupported)</strong>
           <small>
-            Forgeboard never shares your passwords, sign-in tokens, or keychain with Docker. If this
-            is on, it came from old or imported settings — you can only turn it off.
+            Artemis never shares your passwords, sign-in tokens, or keychain with Docker. If this is
+            on, it came from old or imported settings — you can only turn it off.
           </small>
         </span>
         <input

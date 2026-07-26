@@ -131,12 +131,12 @@ export function Welcome(props: WelcomeProps) {
       <header className="welcome-header">
         <span className="brand">
           <BrandMark />
-          <span>Forgeboard</span>
+          <span>Artemis</span>
           <span className="local-pill">
             <ShieldCheck size={13} /> Local
           </span>
         </span>
-        <WorkspaceTooltip content="Open Forgeboard settings">
+        <WorkspaceTooltip content="Open Artemis settings">
           <button
             className="icon-button"
             type="button"
@@ -324,7 +324,7 @@ export function Welcome(props: WelcomeProps) {
               ))}
             </span>
           </div>
-          <span>Just you on this device · No Forgeboard cloud · No tracking</span>
+          <span>Just you on this device · No Artemis cloud · No tracking</span>
         </footer>
       </section>
 
@@ -362,7 +362,7 @@ export function Welcome(props: WelcomeProps) {
               </span>
               <div>
                 <h2 id="recovery-dialog-title">Confirm moved project</h2>
-                <p>Check this folder before Forgeboard updates the saved location.</p>
+                <p>Check this folder before Artemis updates the saved location.</p>
               </div>
               <WorkspaceTooltip
                 content={

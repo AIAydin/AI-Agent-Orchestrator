@@ -568,7 +568,7 @@ export function clearAllTables(database: DatabaseSync): void {
 }
 
 /**
- * Clears only data represented by a portable Forgeboard export.
+ * Clears only data represented by a portable Artemis export.
  *
  * Backup ownership records, the trusted-extension ledger, and the selected GitHub CLI binding are
  * intentionally device-local security state. A portable replace import must not orphan verified

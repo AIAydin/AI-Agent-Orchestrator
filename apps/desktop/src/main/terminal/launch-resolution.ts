@@ -258,7 +258,7 @@ function terminalEnvironment(
     const value = actual?.value ?? '';
     if (value.includes('\0')) {
       throw new Error(
-        `Environment variable ${requested} contains a character Forgeboard cannot pass to a terminal.`,
+        `Environment variable ${requested} contains a character Artemis cannot pass to a terminal.`,
       );
     }
     const bytes = Buffer.byteLength(value, 'utf8');

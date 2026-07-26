@@ -43,7 +43,7 @@ export async function assertGitHubCliExecutableCurrent(
     });
   } catch {
     throw new Error(
-      'The selected GitHub CLI program changed on disk. Choose it again so Forgeboard can re-check it.',
+      'The selected GitHub CLI program changed on disk. Choose it again so Artemis can re-check it.',
     );
   }
 }

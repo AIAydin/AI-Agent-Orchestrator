@@ -24,7 +24,7 @@ export class GitDelegateApprovalRequiredError extends GitEngineError {
 function blockMessage(reason: GitDelegateBlockReason): string {
   if (reason === 'approval-cancelled') return 'Git filter execution was cancelled.';
   if (reason === 'configuration-missing') {
-    return 'Forgeboard blocked filtered content because its declared Git filter has no executable configuration to reproduce the repository content safely.';
+    return 'Artemis blocked filtered content because its declared Git filter has no executable configuration to reproduce the repository content safely.';
   }
   if (reason === 'plan-changed') {
     return 'The Git filter command, configuration, or affected paths changed after approval. Review the updated operation.';

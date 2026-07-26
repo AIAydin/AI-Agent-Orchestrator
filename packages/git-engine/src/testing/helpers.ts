@@ -43,7 +43,7 @@ export async function createTemporaryRepository(): Promise<TemporaryRepository> 
   await mkdir(repository);
   await mkdir(managedRoot);
   await runGit(repository, ['init', '-b', 'main']);
-  await runGit(repository, ['config', 'user.name', 'Forgeboard Test']);
+  await runGit(repository, ['config', 'user.name', 'Artemis Test']);
   await runGit(repository, ['config', 'user.email', 'forgeboard@example.invalid']);
   await writeFile(path.join(repository, 'README.md'), '# fixture\n', 'utf8');
   await runGit(repository, ['add', '--', 'README.md']);

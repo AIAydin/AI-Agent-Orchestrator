@@ -265,7 +265,7 @@ function isAllowedHttpNavigation(candidate: string): boolean {
 function browserCompatibleUserAgent(userAgent: string): string {
   return userAgent
     .replace(/\sElectron\/[^\s]+/gu, '')
-    .replace(/\sForgeboard\/[^\s]+/gu, '')
+    .replace(/\s(?:Artemis|Forgeboard)\/[^\s]+/gu, '')
     .replace(/\s{2,}/gu, ' ')
     .trim();
 }

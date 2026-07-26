@@ -25,7 +25,7 @@ test('the project rail stays bounded and can give its space back to the canvas',
     await save.click();
     await expect(settings).toBeHidden();
     await page.getByRole('button', { name: /Explore the safe demo/i }).click();
-    await expect(page.locator('.project-switcher')).toContainText('forgeboard-demo');
+    await expect(page.locator('.project-switcher')).toContainText('artemis-demo');
     await expect(page.locator('.workspace-project-tree')).toBeVisible();
 
     await electronApp.evaluate(({ BrowserWindow }) => {

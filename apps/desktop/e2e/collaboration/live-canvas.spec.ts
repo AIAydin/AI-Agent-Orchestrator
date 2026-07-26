@@ -48,7 +48,7 @@ test('two simultaneous profiles share cursors, comments, and canvas updates with
     ]);
     await useSafeDefaults(owner.page);
     await owner.page.getByRole('button', { name: /Explore the safe demo/i }).click();
-    await expect(owner.page.locator('.project-switcher')).toContainText('forgeboard-demo');
+    await expect(owner.page.locator('.project-switcher')).toContainText('artemis-demo');
     await exportLocalData(owner.app, owner.page, exportPath);
 
     const editor = await launchDesktop(join(root, 'editor'));
@@ -62,7 +62,7 @@ test('two simultaneous profiles share cursors, comments, and canvas updates with
     await useSafeDefaults(editor.page);
     await importLocalData(editor.app, editor.page, exportPath);
     await editor.page.locator('.recent-list button').click();
-    await expect(editor.page.locator('.project-switcher')).toContainText('forgeboard-demo');
+    await expect(editor.page.locator('.project-switcher')).toContainText('artemis-demo');
 
     await installCollaborationDialogHarness(owner.app);
     await installCollaborationDialogHarness(editor.app);

@@ -124,9 +124,7 @@ export function ProjectFileBrowser({
       setCandidateStatus(
         parsedCode.success && parsedCode.data === 'FILE_NOT_FOUND' ? 'missing' : 'error',
       );
-      setCandidateMessage(
-        fileBrowserError(cause, "Forgeboard couldn't check this file. Try again."),
-      );
+      setCandidateMessage(fileBrowserError(cause, "Artemis couldn't check this file. Try again."));
     }
   };
 
@@ -174,9 +172,7 @@ export function ProjectFileBrowser({
         setCandidateStatus(
           parsedCode.success && parsedCode.data === 'FILE_NOT_FOUND' ? 'missing' : 'error',
         );
-        setCandidateMessage(
-          fileBrowserError(cause, "Forgeboard couldn't show this file. Try again."),
-        );
+        setCandidateMessage(fileBrowserError(cause, "Artemis couldn't show this file. Try again."));
       });
   }, [browser.status, revealRelativePath]);
 

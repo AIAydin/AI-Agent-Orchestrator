@@ -158,7 +158,7 @@ export class AgentPeersIpcService {
     try {
       this.#assertNotDisposed();
       if (this.#paused) {
-        throw new Error('Agent peer operations are paused while Forgeboard changes local data.');
+        throw new Error('Agent peer operations are paused while Artemis changes local data.');
       }
       assertLiveMainFrame(event, 'Agent peer operation');
       this.#ownerId(event.sender);
@@ -173,7 +173,7 @@ export class AgentPeersIpcService {
           code: error instanceof z.ZodError ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message:
             error instanceof z.ZodError
-              ? 'Forgeboard rejected an invalid agent peer request.'
+              ? 'Artemis rejected an invalid agent peer request.'
               : error instanceof Error
                 ? error.message
                 : 'The agent peer operation failed.',
