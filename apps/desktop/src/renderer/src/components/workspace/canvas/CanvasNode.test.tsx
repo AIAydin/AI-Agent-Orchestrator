@@ -26,8 +26,18 @@ vi.mock('./faces/node-face-registry.js', () => ({
 }));
 
 vi.mock('@xyflow/react', () => ({
-  Handle: ({ id, type }: { id: string; type: string }) => (
-    <span data-testid={`handle-${type}-${id}`} />
+  Handle: ({
+    id,
+    type,
+    className,
+    position,
+  }: {
+    id: string;
+    type: string;
+    className?: string;
+    position?: string;
+  }) => (
+    <span data-testid={`handle-${type}-${id}`} className={className} data-position={position} />
   ),
   NodeResizer: ({
     isVisible,
@@ -233,6 +243,51 @@ describe('CanvasNode presentation interactions', () => {
     expect(node.classList.contains('agent-window')).toBe(true);
     expect(node.classList.contains('agent-drag-handle')).toBe(true);
     expect(node.getAttribute('data-provider')).toBe('claude');
+  });
+});
+
+describe('CanvasNode connection handles', () => {
+  const kinds: ReadonlyArray<Partial<WorkshopNodeData>> = [
+    { kind: 'agent', adapterId: 'codex' },
+    { kind: 'agent', adapterId: 'claude' },
+    { kind: 'agent', adapterId: 'gemini' },
+    { kind: 'file' },
+    { kind: 'whiteboard' },
+    { kind: 'terminal' },
+    { kind: 'web-preview' },
+    { kind: 'group-frame' },
+  ];
+
+  it('gives every node kind and provider the same start dot and end acceptor', () => {
+    for (const overrides of kinds) {
+      renderNode(nodeData(overrides));
+
+      const target = screen.getByTestId('handle-target-input');
+      const source = screen.getByTestId('handle-source-output');
+      // One shared class — never a provider- or kind-specific one — so the CSS
+      // that paints them cannot diverge per node.
+      expect(target.className).toBe('node-handle');
+      expect(source.className).toBe('node-handle');
+      expect(target.dataset['position']).toBe('left');
+      expect(source.dataset['position']).toBe('right');
+
+      cleanup();
+    }
+  });
+
+  it('renders the handles outside the node surface so clipped faces cannot cut them', () => {
+    for (const overrides of kinds) {
+      const { container } = renderNode(nodeData(overrides));
+
+      const surface = container.querySelector('.canvas-node');
+      expect(surface).not.toBeNull();
+      // Agent windows, previews, terminals and the document faces all clip with
+      // `overflow: hidden`; a handle inside that box renders as a half-moon.
+      expect(surface?.contains(screen.getByTestId('handle-target-input'))).toBe(false);
+      expect(surface?.contains(screen.getByTestId('handle-source-output'))).toBe(false);
+
+      cleanup();
+    }
   });
 });
 
