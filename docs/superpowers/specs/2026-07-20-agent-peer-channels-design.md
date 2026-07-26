@@ -5,7 +5,7 @@ Status: Approved (brainstorm), pending implementation plan
 
 ## Goal
 
-A `context` edge between two live agent session nodes becomes a working channel: each embedded CLI session gets ForgeBoard-provided MCP tools to discover, read, and message the agents it is connected to. Today the edge is consumed only by the headless flow-run pipeline (`main/workflow/evidence/bridge.ts` `#reconcileContext`); interactive sessions ignore it entirely. This gives the interactive lane the semantics the flow lane already has. The flow-run pipeline is untouched.
+A `context` edge between two live agent session nodes becomes a working channel: each embedded CLI session gets Artemis-provided MCP tools to discover, read, and message the agents it is connected to. Today the edge is consumed only by the headless flow-run pipeline (`main/workflow/evidence/bridge.ts` `#reconcileContext`); interactive sessions ignore it entirely. This gives the interactive lane the semantics the flow lane already has. The flow-run pipeline is untouched.
 
 ## Decisions made during brainstorming
 
@@ -22,7 +22,7 @@ A `context` edge between two live agent session nodes becomes a working channel:
 A new `agent-peers` service, started with the app:
 
 - Localhost-only HTTP endpoint (`127.0.0.1`, random port).
-- At session launch, ForgeBoard mints a per-session bearer token binding the MCP connection to its node id. Token → node resolution happens in main; a stolen token grants only that node's peer view.
+- At session launch, Artemis mints a per-session bearer token binding the MCP connection to its node id. Token → node resolution happens in main; a stolen token grants only that node's peer view.
 - Peer resolution reads the workspace edge graph: agent nodes adjacent via `context` edges. Non-agent context edges (file/brief attachments) keep their current meaning and are not peers.
 
 ### Transport: one stdio shim for all providers
@@ -41,7 +41,7 @@ Exact flags/formats are verified against the installed CLI versions during imple
 
 ## MCP tools (identical on every provider)
 
-- **`list_agents`** — peers' names (node titles, deduped), provider, and whether their session is live. The tool description doubles as orientation: "you are a node on a ForgeBoard canvas; these are your collaborators; replies arrive as `[from <name>]` messages in your input."
+- **`list_agents`** — peers' names (node titles, deduped), provider, and whether their session is live. The tool description doubles as orientation: "you are a node on a Artemis canvas; these are your collaborators; replies arrive as `[from <name>]` messages in your input."
 - **`send_message`** — delivers text into the peer's PTY via the existing terminal input path (`terminal:send-input` → `TerminalService.sendInput`): bracketed-paste the body prefixed `[from <sender>]`, then Enter to submit. Multi-line bodies stay one prompt thanks to bracketed paste. Returns delivered / no-live-session / muted / rate-limited.
 - **`read_screen`** — returns the peer's current terminal text (xterm buffer serialization requested from the renderer over IPC), so an agent can check what a collaborator is doing without interrupting it. For alt-screen TUIs this is the visible screen; for inline TUIs it includes scrollback.
 

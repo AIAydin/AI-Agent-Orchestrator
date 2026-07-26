@@ -1,4 +1,4 @@
-# Forgeboard workspace rules
+# Artemis workspace rules
 
 - Treat this repository as a production, local-first desktop product. Preserve user work and never
   substitute mock controls or fake success states for required behavior.

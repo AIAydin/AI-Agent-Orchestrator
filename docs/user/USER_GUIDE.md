@@ -1,6 +1,6 @@
-# Forgeboard user guide
+# Artemis user guide
 
-Forgeboard is a local-first desktop workspace for planning software work, running coding-agent CLIs,
+Artemis is a local-first desktop workspace for planning software work, running coding-agent CLIs,
 reviewing their output, and delivering approved changes. A normal installation is configured through
 the app. Source edits, environment files, and hand-written manifests are optional contributor paths,
 not end-user setup requirements.
@@ -31,7 +31,7 @@ Open **Settings → Agents & runtime**.
 
 - For Codex, select **Connect with OpenAI**. For Claude Code, select **Connect with Anthropic**.
   Review the native confirmation, then complete the provider CLI's official browser sign-in.
-  Forgeboard does not receive or store the OAuth token.
+  Artemis does not receive or store the OAuth token.
 - For another installed CLI, use its readiness card. **Browse** can select an executable without
   editing `PATH` or a config file.
 - Expand **Advanced** only when you need an executable override or model. Saving Settings is what
@@ -51,7 +51,7 @@ The welcome screen supports four ordinary paths:
 
 An existing non-Git folder remains usable. Select **Initialize Git** in the project rail if you want
 Git tracking; a cancel-default native dialog identifies the exact folder before `.git` metadata is
-created. Forgeboard does not make an initial commit or alter existing file contents.
+created. Artemis does not make an initial commit or alter existing file contents.
 
 If a saved project moves, use **Locate moved repository**, review the old and new locations, and
 confirm the replacement. Its canvas, snapshots, and run records remain associated with the project.
@@ -78,7 +78,7 @@ For whole-workspace handoff, open **Settings → Git & previews → External app
 exact application executable. On macOS, the chooser also accepts a normal `.app` bundle, so you do
 not have to find its internal `Contents/MacOS` binary. **Use system default** resets the selection.
 From **Changes**, **Open externally…** shows the exact executable or application bundle and literal
-workspace in a native confirmation before anything launches. Forgeboard revalidates the reviewed
+workspace in a native confirmation before anything launches. Artemis revalidates the reviewed
 identity after approval. Executables receive the workspace as their sole argument; macOS bundles are
 opened through `/usr/bin/open -a` with exact argument-array values. Neither path uses a shell.
 
@@ -86,7 +86,7 @@ opened through `/usr/bin/open -a` with exact argument-array values. Neither path
 
 1. Add and select an **Agent** node.
 2. Choose the installed adapter, optional supported model, permission profile, and prompt.
-3. Attach context by linking an existing File node or using the context picker. Forgeboard shows the
+3. Attach context by linking an existing File node or using the context picker. Artemis shows the
    receiving provider and exact attached files.
 4. Select **Review & run**. Review the executable, literal arguments, working directory, environment
    variable names, context manifest, permission profile, worktree, and network disclosure.
@@ -97,7 +97,7 @@ Writable agents run in an application-owned Git worktree, not the primary checko
 are capability-dependent. **Send “continue”** sends literal input; it does not unpause a process.
 **Pause process** and **Continue process** suspend and continue the exact same process tree only for
 a verified host process group on macOS or Linux. The controls remain unavailable on Windows, for
-Docker runs, extension-provided sessions, or whenever Forgeboard cannot verify process-group
+Docker runs, extension-provided sessions, or whenever Artemis cannot verify process-group
 ownership. **Resume review** is available only for a supported interrupted provider session and
 always launches a newly reviewed continuation. **Retry review** starts an eligible failed attempt in
 a fresh worktree.
@@ -105,7 +105,7 @@ a fresh worktree.
 The embedded terminal on an Agent node follows the same Access selection. When **Write in a
 worktree** is selected, **Start** or **Restart** creates a fresh managed worktree and branch for that
 session before the provider CLI starts. Each Agent session receives its own worktree, so edits from
-one Agent do not appear in another Agent's folder or in the primary checkout. Forgeboard records the
+one Agent do not appear in another Agent's folder or in the primary checkout. Artemis records the
 run and branch on the node without exposing the worktree path to the renderer. For built-in agents,
 that single click is the whole launch interaction: Electron main reconstructs and revalidates the
 saved executable, model, worktree, and peer-tool arguments, then starts the session without another
@@ -113,7 +113,7 @@ native approval dialog. Custom or extension-provided agents and other access pro
 launch confirmation.
 
 Attempt history retains lineage, terminal status, bounded output, provider-redacted metadata, and
-token or cost information only when the adapter reports it. Forgeboard does not invent missing usage
+token or cost information only when the adapter reports it. Artemis does not invent missing usage
 or output.
 
 ## Run terminals, previews, and checks
@@ -156,17 +156,17 @@ run.
    approval against that exact clean committed state.
 5. Deliver by fast-forward when possible. When both histories advanced, create one merge commit,
    combine the reviewed range into one squash commit, rebase the managed branch onto the exact
-   reviewed primary commit, or copy reviewed commits one by one with cherry-pick. Forgeboard leaves
+   reviewed primary commit, or copy reviewed commits one by one with cherry-pick. Artemis leaves
    authentic conflict state in the affected workspace. For bounded text files, compare Git base,
    ours, and theirs, edit the merged result inline, and separately review applying and staging that
-   exact content. Forgeboard offers exact reviewed Continue and Abort controls after every conflict
+   exact content. Artemis offers exact reviewed Continue and Abort controls after every conflict
    is staged; binary, oversized, and sensitive files stay outside the inline editor.
 6. After a fully merged, clean managed branch is reverified, use reviewed cleanup to remove its
    worktree and branch.
 
 A Git / PR node can inspect committed impact, divergence, remote readiness, pull-request status, and
 CI. Push, GitHub checks, pull-request creation, and CI reads are explicit, separately confirmed
-actions. Forgeboard never force-pushes and never stores a GitHub token. See
+actions. Artemis never force-pushes and never stores a GitHub token. See
 [Remote Git and GitHub delivery](../git/GITHUB_DELIVERY.md).
 
 ## Recover and protect local data
@@ -180,25 +180,25 @@ snapshots, imports, and deletion.
   schema-, size-, and digest-checked again before mutation. Repository files, extension sources,
   credentials, and provider tokens are not embedded.
 - **Delete all local data** requires the typed phrase and a second cancel-default native warning.
-  Source repositories remain untouched. Recorded Forgeboard backup files are deleted when they are
-  still verifiable; disconnected copies may survive outside Forgeboard.
+  Source repositories remain untouched. Recorded Artemis backup files are deleted when they are
+  still verifiable; disconnected copies may survive outside Artemis.
 
 If the primary database cannot open safely, startup remains quit-only until you select and approve a
-verified Forgeboard backup. The source backup is copied and verified; it is never edited in place.
+verified Artemis backup. The source backup is copied and verified; it is never edited in place.
 
 ## Optional collaboration
 
 Collaboration is off by default and has no localhost server configured. Under
 **Settings → Connectivity**, room owners enter the public `wss://` WebSocket and `https://`
-management addresses for their hosted Forgeboard server, then create a room and copy an invite. The
-other person pastes that one link; Forgeboard configures both addresses automatically. Localhost and
+management addresses for their hosted Artemis server, then create a room and copy an invite. The
+other person pastes that one link; Artemis configures both addresses automatically. Localhost and
 private-network endpoints remain available for advanced direct development connections, but
-Forgeboard refuses to put them into a shared invite. Every network boundary requires native review.
+Artemis refuses to put them into a shared invite. Every network boundary requires native review.
 Owner, editor, reviewer, and viewer roles are enforced in the main process and on the server.
 
 Only allowlisted canvas metadata, presence, and explicitly shared comments enter the collaboration
 document. Prompts, source, file contents, diffs, terminal output, environment data, secrets, and
-transcripts remain local. If the server goes offline, Forgeboard shows the reconnecting/offline state
+transcripts remain local. If the server goes offline, Artemis shows the reconnecting/offline state
 and preserves local work; changed shared intent may pause for review instead of silently overwriting
 either side. See [Optional self-hosted collaboration](../COLLABORATION.md).
 

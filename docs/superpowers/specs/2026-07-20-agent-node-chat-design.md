@@ -104,4 +104,4 @@ Selecting an agent node shows **no inspector panel** (the inspector renders noth
 ## Known limitations
 
 - xterm inside the zoomed canvas: text selection accuracy can drift at extreme zoom levels; usable at normal zoom.
-- Interactive session transcripts are raw terminal streams; ForgeBoard does not extract structured data from them.
+- Interactive session transcripts are raw terminal streams; Artemis does not extract structured data from them.

@@ -1,9 +1,9 @@
 # Privacy
 
-Forgeboard's default solo mode is local and private. It has no Forgeboard account, telemetry,
+Artemis's default solo mode is local and private. It has no Artemis account, telemetry,
 analytics, crash upload, session recording, model proxy, or cloud dependency.
 
-## Data Forgeboard stores locally
+## Data Artemis stores locally
 
 - repository paths and contents
 - selected context and prompts
@@ -19,19 +19,19 @@ analytics, crash upload, session recording, model proxy, or cloud dependency.
 - verified SQLite backups when local backups are enabled
 
 An enabled third-party coding-agent CLI may transmit the prompt and files that the user explicitly
-attaches to that CLI's provider. Forgeboard shows the receiving adapter/provider and exact attachment
+attaches to that CLI's provider. Artemis shows the receiving adapter/provider and exact attachment
 list before launch. Provider processing is governed by that provider's terms.
 
 ## Codex and Claude Code account connections
 
 The first-run wizard and **Settings → Agents & runtime** can ask the installed Codex or Claude Code
-CLI to start its official provider-owned browser OAuth flow. Forgeboard prepares an exact Connect,
+CLI to start its official provider-owned browser OAuth flow. Artemis prepares an exact Connect,
 Refresh, Disconnect, or Reconnect action, requires a separate native confirmation, and supervises
-the selected local CLI process. An active browser sign-in can be cancelled from the card. Forgeboard
+the selected local CLI process. An active browser sign-in can be cancelled from the card. Artemis
 shows **Connected** only after the CLI returns normalized connection evidence; cached passive status
 on Data & Privacy does not run a CLI, contact a provider, or imply a fresh check.
 
-Forgeboard never receives or stores the OAuth token, browser code, account identity, or raw auth
+Artemis never receives or stores the OAuth token, browser code, account identity, or raw auth
 output. It does not inspect OpenAI or Anthropic credential stores and does not proxy authentication
 or model traffic. Potentially sensitive CLI output is discarded. The local audit records the exact
 reviewed executable, arguments, working directory, executable hash, environment-variable names,
@@ -42,18 +42,18 @@ communicate under OpenAI's or Anthropic's own privacy policy and terms.
 An optional executable override from the current UI draft is validated, identity-bound into the
 native review, and revalidated before the CLI starts. The connection operation does not persist that
 override; only saving Settings does. The optional default-model field is launch configuration, not
-an OAuth credential. These connection controls apply only to Codex and Claude Code. Forgeboard does
+an OAuth credential. These connection controls apply only to Codex and Claude Code. Artemis does
 not claim OAuth management for Gemini, OpenCode, or custom CLIs.
 
 ## Application update checks
 
-Forgeboard does not poll for releases in the background. **Settings → Connectivity →
+Artemis does not poll for releases in the background. **Settings → Connectivity →
 Application updates** stores a stable, prerelease, or disabled channel, but a network request occurs
 only after the user selects **Check for updates** and approves a cancel-default native disclosure for
-the fixed official Forgeboard GitHub Releases endpoint. Disabled mode makes no release request. The
+the fixed official Artemis GitHub Releases endpoint. Disabled mode makes no release request. The
 response is bounded and used only to show release version, name, publication time, and channel.
 
-Forgeboard never downloads or installs an application update automatically. Opening a discovered
+Artemis never downloads or installs an application update automatically. Opening a discovered
 official release page in the system browser requires a second native confirmation over fresh,
 short-lived release evidence. An imported legacy automatic-download preference is inactive and can
 be cleared in the UI. This capability does not imply that an installer is available; availability
@@ -61,7 +61,7 @@ is determined from the official repository at check time.
 
 Selected context is copied immediately before launch into a randomized, per-run private snapshot;
 the provider receives those verified bytes rather than mutable source paths. On Windows, Host and
-Docker snapshots stay inside Forgeboard's per-user application-data directory under separate
+Docker snapshots stay inside Artemis's per-user application-data directory under separate
 scope-and-SID-hash namespaces. Their markers bind the full current SID, are limited to 4 KiB, and are
 read with stable no-follow handles. Exact current-SID/LocalSystem DACLs on the private directories and
 files are revalidated before the launch bind. A normal startup permission failure does not prevent
@@ -70,12 +70,12 @@ protected store cannot be verified.
 
 An approved project check is an ordinary, unsandboxed user process. It can read or change files and
 contact external services according to operating-system permissions and the repository tooling's
-configuration. Forgeboard does not upload the captured output itself. Output is unredacted, so a
+configuration. Artemis does not upload the captured output itself. Output is unredacted, so a
 check that prints an environment value or token can place that value in local history and JSON
 exports.
 
 Only project checks can currently be remembered. If the user selects **Remember only this exact
-check for this project for 30 days** in the native dialog, Forgeboard keeps a device-local grant over
+check for this project for 30 days** in the native dialog, Artemis keeps a device-local grant over
 the exact project, command/action fingerprint, and resolved executable/package-script identity. The
 renderer cannot choose which saved approval authorizes a launch. **Settings → Permissions → Scoped
 approvals** lists and immediately revokes these records. Agent launches, context expansion, Docker
@@ -86,7 +86,7 @@ remain unavailable.
 
 The Git / PR node can perform an exact normal push and, through an optional local `gh` CLI, explicit
 GitHub repository, pull-request, and exact-head CI actions. Every operation is initiated in the UI
-and retains an action-specific cancel-default native confirmation. Forgeboard stores no GitHub
+and retains an action-specific cancel-default native confirmation. Artemis stores no GitHub
 token, never polls CI, sends a pull-request body only through `gh` standard input, and keeps only
 bounded redacted audit metadata and digests rather than that body. Git and `gh` may use credentials
 already managed by the operating system, SSH agent, process environment, or `gh` authentication.
@@ -114,18 +114,18 @@ so users must not paste secrets or source code into shared text fields.
 The Data & Privacy screen exposes database and transcript locations, retention, passive normalized
 Codex/Claude connection state, other locally detected providers,
 outbound integrations, collaboration status, export/import, recovery, and deletion of
-Forgeboard-managed local data. A user can choose a backup folder, automatic interval, bounded backup
+Artemis-managed local data. A user can choose a backup folder, automatic interval, bounded backup
 cleanup target per folder, and whether changed local data is backed up on quit. A managed-worktree
 folder alias is rejected; a backup alias is instead disclosed and resolved to the canonical
 destination used for publication and the backup ledger. On Windows, a raw-DACL authority fails closed
 if ACL inspection is unavailable or sees an absent or unsupported DACL. An existing destination must
 exclude untrusted read/discovery as well as content mutation. New destinations, staging directories,
 and backup files receive protected current-SID/LocalSystem DACLs before private bytes are published,
-and the published hard link is rechecked. SQLite backups contain a copy of the local Forgeboard
+and the published hard link is rechecked. SQLite backups contain a copy of the local Artemis
 database and should be protected accordingly. When the primary database cannot be opened safely,
-startup can restore a user-selected Forgeboard SQLite backup without config files or source edits.
-Forgeboard never modifies the selected source: it copies it into private staging, validates exact
-Forgeboard provenance and SHA-256 identity, and uses a durable quarantine-and-rollback journal before
+startup can restore a user-selected Artemis SQLite backup without config files or source edits.
+Artemis never modifies the selected source: it copies it into private staging, validates exact
+Artemis provenance and SHA-256 identity, and uses a durable quarantine-and-rollback journal before
 installing it. A successful restore adds a path-free chained audit event containing the exact source
 and staged digests and byte count. Displaced database files remain private recovery evidence only
 until a later startup verifies the terminal journal state and removes them. Canceling the chooser,
@@ -134,7 +134,7 @@ install a backup or create an empty replacement database.
 
 Interactive Terminal output is unredacted and can contain secrets printed by the launched process.
 The UI-authored executable, literal arguments, project-relative directory, and environment names are
-stored in durable local canvas data. Forgeboard stores separate path-free, argument-redacted session
+stored in durable local canvas data. Artemis stores separate path-free, argument-redacted session
 history metadata in SQLite; resolved canonical paths and the owning live-session exact overlay remain
 in main-process memory. Raw output is kept in private per-session JSON-lines files under the
 application transcript directory. Those files are capped at 16 MiB per session, 256 MiB and 10,000
@@ -144,7 +144,7 @@ metadata and files at startup; complete local-data deletion removes both. A work
 where a process starts, not what the operating-system user can access, and the process retains that
 user's network permissions.
 
-Portable JSON export/import covers Forgeboard settings, projects, canvases, agent runs, check
+Portable JSON export/import covers Artemis settings, projects, canvases, agent runs, check
 executions, snapshots, and audit history. It never embeds repository files or extension source
 folders. Saved approvals, delivery-readiness records, the selected GitHub CLI binding, and
 settings-repair evidence are device-local and are not included in this ordinary export. Repair
@@ -157,8 +157,8 @@ and delivery-readiness records. Import is an explicit
 merge-or-replace action with a renderer disclosure and native confirmation; the selected file is
 validated again before the transaction. Deletion does not remove repository/build
 artifacts or separately exported portable JSON files. It does remove every
-Forgeboard-recorded SQLite backup from current and previously selected backup folders after
-revalidating each recorded file's identity. If a recorded file is unavailable, Forgeboard requires
+Artemis-recorded SQLite backup from current and previously selected backup folders after
+revalidating each recorded file's identity. If a recorded file is unavailable, Artemis requires
 a separate cancel-default native choice to either reconnect it or explicitly forget the missing
 record and continue. The warning explains that a forgotten copy may still exist on a detached drive
 or network location and will no longer be tracked. The **Transcript retention (days)** setting also
@@ -168,7 +168,7 @@ running records first recover honestly as lost; they are never presented as resu
 ## Audit retention and limits
 
 Audit metadata is recursively redacted before local storage, then linked with SHA-256 previous/event
-hashes. Forgeboard verifies the chain at startup and while validating SQLite backups. The **Audit
+hashes. Artemis verifies the chain at startup and while validating SQLite backups. The **Audit
 retention (days)** setting removes only a verified leading prefix and first writes a chained retention
 checkpoint; it does not delete older rows from the middle of retained history. Portable audit export
 contains the already-redacted metadata, not local chain hashes/checkpoints or a claim of an

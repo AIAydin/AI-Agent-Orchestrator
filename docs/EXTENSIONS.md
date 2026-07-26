@@ -1,13 +1,13 @@
 # Local extensions
 
-Forgeboard's extension foundation is local, declarative, versioned, and deny-by-default. It supports
+Artemis's extension foundation is local, declarative, versioned, and deny-by-default. It supports
 two contribution types:
 
 - validated local agent-adapter manifests; and
-- canvas node types assembled from Forgeboard-owned fields, ports, icons, and renderers.
+- canvas node types assembled from Artemis-owned fields, ports, icons, and renderers.
 
 An extension cannot provide renderer JavaScript, HTML, CSS, SVG, a preload, an Electron module, or
-an arbitrary Node.js entrypoint. Forgeboard parses the extension in its trusted process layer and
+an arbitrary Node.js entrypoint. Artemis parses the extension in its trusted process layer and
 passes only validated serializable records to the sandboxed renderer. The renderer never imports or
 evaluates an extension file.
 
@@ -22,7 +22,7 @@ file:
    `LocalExtensionService.planFromSelectedPath` validates it and returns the identity, version,
    contributions, exact requested permissions, optional documentation, and canonical manifest
    and complete snapshot digests without changing installed state.
-3. Forgeboard displays that complete plan. The renderer checkbox records review intent only. The
+3. Artemis displays that complete plan. The renderer checkbox records review intent only. The
    trusted main process then opens a BrowserWindow-parented system dialog showing the exact ID,
    version, both SHA-256 digests, and every permission. Cancel is the default; no registry mutation
    occurs unless that dialog is approved.
@@ -44,23 +44,23 @@ The desktop bridge validates both request and response contracts. Install, updat
 removal, and privacy-purge decisions enter the redacted local audit log. Active extension
 contributions are live declarative data: canvas definitions appear in the node palette and agent
 manifests appear in adapter detection. They do not add renderer code, and each actual agent launch
-still passes through Forgeboard's normal exact launch disclosure and approval flow.
+still passes through Artemis's normal exact launch disclosure and approval flow.
 
 ## Live declarative contributions
 
-Forgeboard activates a contribution only when the managed snapshot and an `active` ledger record
+Artemis activates a contribution only when the managed snapshot and an `active` ledger record
 exactly match on API version, extension version, canonical manifest digest, complete snapshot
 digest, and sorted permission set. A registry folder by itself is never authority. Missing,
 pending, revoked, and mismatched records are quarantined and cannot register adapters or node
 types.
 
 Trusted agent manifests use their validated namespaced IDs in detection and the normal run service.
-Forgeboard resolves the active manifest again immediately before launch, so removing, revoking, or
+Artemis resolves the active manifest again immediately before launch, so removing, revoking, or
 changing an extension after launch review prevents the process from starting. Provider,
 executable, arguments, working directory, environment names, context, permission profile, and
 warnings remain visible in the standard run approval dialog.
 
-Trusted canvas node definitions appear alongside built-in node types. Forgeboard creates and
+Trusted canvas node definitions appear alongside built-in node types. Artemis creates and
 renders the generic node, ports, inspector, and persisted values itself. Text, number, boolean, select,
 file-reference, and directory-reference fields use bounded built-in controls. File and folder
 references come only from main-owned native pickers and are stored as canonical local paths; users
@@ -74,7 +74,7 @@ The file name is fixed as `forgeboard-extension.json`. Unknown keys are rejected
 Versions use strict Semantic Versioning 2.0.0. Numeric core and prerelease identifiers reject
 leading zeroes, prerelease precedence uses ASCII ordering, and build metadata is accepted but does
 not affect update precedence.
-This small canvas-only example uses only built-in Forgeboard presentation and storage primitives:
+This small canvas-only example uses only built-in Artemis presentation and storage primitives:
 
 ```json
 {
@@ -129,7 +129,7 @@ renderer.
 An optional `documentationFile` may reference a `.md` or `.txt` file inside the selected folder.
 Traversal, absolute paths, drive prefixes, empty segments, NUL bytes, oversized files, and symlink
 escapes are rejected. Documentation is snapshotted as bounded plain text; a consumer must still use
-Forgeboard's safe text or sanitized-Markdown component rather than raw HTML.
+Artemis's safe text or sanitized-Markdown component rather than raw HTML.
 
 Agent contributions embed the stable `AgentAdapterManifestSchema` from
 `@forgeboard/agent-adapters`. That schema describes executable-plus-argument-array invocation and
@@ -194,7 +194,7 @@ await service.install(plan, approval);
 ```
 
 Do not expose `LocalExtensionService` directly to a renderer or accept renderer-supplied manifest,
-path, permission, or approval fields as proof of human intent. Forgeboard's desktop bridge keeps
+path, permission, or approval fields as proof of human intent. Artemis's desktop bridge keeps
 planning and mutation in the main process, validates every extension IPC input and output, displays
 the trusted plan, and accepts only its opaque plan ID plus an explicit confirmation. Removal and
 approval outcomes enter the redacted audit log.

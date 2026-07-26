@@ -1,8 +1,8 @@
-# Forgeboard architecture
+# Artemis architecture
 
 ## Trust boundaries
 
-Forgeboard uses three desktop trust zones:
+Artemis uses three desktop trust zones:
 
 1. The sandboxed React renderer displays untrusted repositories, transcripts, Markdown, diffs,
    and previews. It has no Node.js access.
@@ -13,7 +13,7 @@ Forgeboard uses three desktop trust zones:
 The preview runtime binds and probes loopback-only servers with validated commands and bounded
 logs. Web and mobile preview nodes display runtime-owned loopback ports in main-owned sandboxed
 `WebContentsView` surfaces with Node disabled, ephemeral restrictive sessions, validated navigation,
-denied popups/downloads/permissions, and no Forgeboard preload access. The renderer supplies only
+denied popups/downloads/permissions, and no Artemis preload access. The renderer supplies only
 validated visible bounds; main hides clipped views so native content cannot cover trusted controls.
 Native development commands are never described as an OS sandbox.
 Docker-isolated agent profiles use a separate main-owned runner with an exact worktree mount,
@@ -93,7 +93,7 @@ the private Docker snapshot bytes. Before every snapshot creation and launch bin
 the base, parent, instance, per-run directory, marker identity, snapshot-file identity, and exact
 current-SID/LocalSystem private DACLs.
 
-Snapshot crash recovery is confined to Forgeboard's dedicated marker-owned stores. Only after
+Snapshot crash recovery is confined to Artemis's dedicated marker-owned stores. Only after
 Electron wins its single-instance lock does host startup inspect direct prior instance/quarantine
 children, validate ownership, markers, containment, and directory identity, and atomically quarantine
 an eligible instance before deletion. Recent live-PID instances are preserved; dead instances and
@@ -113,7 +113,7 @@ persisted run, immutable run-to-worktree binding, active ownership record, match
 and shared Git common directory. It then reads authoritative status/diffs, serializes mutations, and
 audits each action with its target identity. Destructive hunk discard and commit use owner-bound,
 expiring, single-use plans followed by a native confirmation. The Git engine rechecks HEAD and exact
-patch or staged-content digests immediately before mutation; Forgeboard commits also bind the
+patch or staged-content digests immediately before mutation; Artemis commits also bind the
 reviewed author identity while disabling repository hooks and signing. Worktree review never writes
 primary-checkout health state.
 
@@ -140,7 +140,7 @@ executable identity, and recognized package-script metadata immediately before l
 supervises and cancels the complete process tree. The renderer cannot provide a command, working
 directory, environment value, or authorizing grant identity.
 
-Forgeboard-owned Git clone, Docker image pull, normal branch push, and GitHub status/PR/CI actions
+Artemis-owned Git clone, Docker image pull, normal branch push, and GitHub status/PR/CI actions
 use a separate outbound boundary. Main creates an owner-bound, expiring, single-use plan over the
 exact destination and impact disclosure, parents a cancel-default native dialog to the originating
 window, rebuilds the disclosure after approval, and issues an opaque permit only if its SHA-256
@@ -224,7 +224,7 @@ require a DACL and detect callback or otherwise unsupported raw ACEs before proj
 exact versioned JSON report. Missing identity/inspection services, absent DACLs, unsupported ACEs,
 unexpected report fields, and malformed values fail closed. Structural parents reject untrusted
 write/delete/permission/ownership authority; confidential backup parents also reject untrusted
-read/list/traverse; Forgeboard-created private objects require protected current-SID and LocalSystem
+read/list/traverse; Artemis-created private objects require protected current-SID and LocalSystem
 DACLs.
 
 Docker configuration starts blank rather than guessing that a generic image contains an agent CLI.
@@ -251,7 +251,7 @@ BrowserWindow-parented system confirmation, and stores a data-only snapshot. A t
 ledger is staged before mutation and activated only after success; discovery exposes contributions
 only when that active record exactly matches the snapshot. Window-bound pending plans, trust state,
 and registry mutations never cross into renderer authority. Typed discovery views contain only
-validated manifest, record, safe canvas projection, and safe-text documentation data. Forgeboard's
+validated manifest, record, safe canvas projection, and safe-text documentation data. Artemis's
 generic canvas renderer owns extension fields and native file/folder pickers, while namespaced agent
 manifests re-enter the same launch disclosure and approval pipeline as built-in adapters.
 
@@ -307,13 +307,13 @@ is local tamper evidence rather than protection from an actor able to rewrite th
 
 Canvas changes use serialized revision-aware autosave. Internal project close and native
 window/application close explicitly flush the latest revision before renderer teardown or storage
-disposal. A failed or timed-out save keeps Forgeboard open by default and requires a separate native
+disposal. A failed or timed-out save keeps Artemis open by default and requires a separate native
 choice to close without saving.
 
 The main-owned automatic-backup coordinator observes durable local-data revisions and serializes
 scheduled, manual, and quit-time SQLite backups. The UI selects a destination, an interval from 1
 through 168 hours, whether to back up changed data on quit, and a retention count from 1 through 365
-files. On POSIX systems Forgeboard requires a current-user-owned destination that is not writable by
+files. On POSIX systems Artemis requires a current-user-owned destination that is not writable by
 group/other users, creates a `0700` staging directory, and publishes a `0600` backup file. On
 Windows an existing canonical destination must pass the confidential-parent ACL check. A missing
 destination is created only after the nearest existing canonical parent passes the structural check,
@@ -326,7 +326,7 @@ size, and digest match its ledger row. A cleanup failure is persisted in Backup 
 newly verified backup remains recorded, so the selected count is a cleanup target rather than a
 reason to discard a successful backup. If the primary database fails safe startup inspection,
 Electron presents a cancel-default native backup chooser before IPC registration or window creation.
-Read-only provenance validation accepts only an exact supported Forgeboard migration schema; the
+Read-only provenance validation accepts only an exact supported Artemis migration schema; the
 source is copied into private staging and only that copy may be migrated. Atomic installation binds
 the source and staged SHA-256 identities, hashes displaced database files, persists a basename-only
 JSON-lines journal with file and directory sync barriers, and rolls back exact quarantined files on

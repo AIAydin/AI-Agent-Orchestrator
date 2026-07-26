@@ -1,6 +1,6 @@
 # Remote Git and GitHub delivery
 
-Forgeboard can configure a project's ordinary Git remotes, push a completed managed agent run and,
+Artemis can configure a project's ordinary Git remotes, push a completed managed agent run and,
 when the optional GitHub CLI is available, inspect GitHub, create a pull request from a revalidated
 pushed-commit snapshot, and read CI for the exact selected commit. Remote and GitHub CLI setup,
 delivery choices, and actions are available in the desktop UI. They do not require source edits,
@@ -8,15 +8,15 @@ environment files, JSON, or hand-written manifests.
 
 ## What you need
 
-- A Git project. Projects cloned in Forgeboard normally have an `origin` remote. Otherwise use
+- A Git project. Projects cloned in Artemis normally have an `origin` remote. Otherwise use
   **Settings → Git & previews → Git connections** to add a credential-free HTTPS/SSH target or choose
   a local bare/worktree Git repository. Local filesystem remotes can be used for push testing and
   local delivery.
-- A completed writable Agent run with committed changes in its Forgeboard-managed worktree.
+- A completed writable Agent run with committed changes in its Artemis-managed worktree.
 - One or more project checks configured under **Settings → Commands & checks**.
 - For GitHub repository, pull-request, and CI actions only: an optional `gh` executable authenticated
   for the selected GitHub or GitHub Enterprise host. Settings can use automatic desktop `PATH`
-  discovery or a native picker for a custom executable. Forgeboard reports missing, unverified,
+  discovery or a native picker for a custom executable. Artemis reports missing, unverified,
   identity-changed, or unauthenticated state and never asks for or stores a GitHub token. It resolves,
   hashes, version-validates, and pins the selected executable; disables CLI telemetry, prompts, and
   update checks; and rejects configured HTTP Unix-socket routing before API actions. Automatic
@@ -63,30 +63,30 @@ CI result URLs cross the typed boundary only so the UI can display or copy them.
    dialog defaults to **Cancel** and names the exact destination, source and destination branches,
    commit range, commits, files, change counts, and readiness evidence.
 
-Forgeboard pushes the approved source object ID to the full destination branch ref with ordinary
+Artemis pushes the approved source object ID to the full destination branch ref with ordinary
 non-force semantics. The command contains exactly one source-object-to-destination-branch refspec;
 it does not implicitly send tags or any other ref. Execution uses the exact approved URL literal
 instead of the remote name, converts a local destination to an absolute path, and enables only that
-destination's file, HTTPS, or SSH protocol. Forgeboard never offers force push. A non-fast-forward
+destination's file, HTTPS, or SSH protocol. Artemis never offers force push. A non-fast-forward
 remote rejects the push without being overwritten.
 
 ## Create a GitHub pull request
 
 1. After the exact branch is pushed, select **Check GitHub auth & repository** and approve the
    on-demand native read confirmation.
-2. Forgeboard verifies the authenticated host and repository, remote base commit, and that the
+2. Artemis verifies the authenticated host and repository, remote base commit, and that the
    remote destination branch equals the exact reviewed source HEAD.
 3. Enter the pull-request title and body in the node and choose draft mode if desired.
 4. Select **Review pull request**, review the point-in-time plan, and continue to the native
    confirmation. The native disclosure includes the exact title and body as well as their digest,
    the repository, branches, remote commits, local commits/files, and readiness evidence.
-5. After creation, Forgeboard shows the validated URL. Use **Copy pull request URL** to place it on
-   the clipboard; Forgeboard does not permit arbitrary renderer navigation.
+5. After creation, Artemis shows the validated URL. Use **Copy pull request URL** to place it on
+   the clipboard; Artemis does not permit arbitrary renderer navigation.
 
 The pull-request body is sent to `gh` through standard input, not a shell or command-line argument.
 The URL returned by `gh` is accepted only when it is HTTPS, contains no credentials/query/fragment,
 and identifies the approved host, owner, repository, and pull-request number.
-Forgeboard revalidates the reviewed remote head immediately before the create request, but GitHub
+Artemis revalidates the reviewed remote head immediately before the create request, but GitHub
 pull requests follow a branch name rather than an immutable commit ID. Concurrent movement can race
 that request, and later movement of the branch can change the pull request's contents; the UI does
 not claim atomic or permanently SHA-bound creation.
@@ -94,7 +94,7 @@ not claim atomic or permanently SHA-bound creation.
 ## Read exact-head CI
 
 Select **Check CI for exact HEAD** after a successful GitHub status check. The action is explicit and
-never polled. Forgeboard asks `gh` for at most 20 recent runs, validates every result URL, and shows
+never polled. Artemis asks `gh` for at most 20 recent runs, validates every result URL, and shows
 only runs whose branch and full head SHA match the exact selected source. A zero-run result means no
 matching current CI was returned; it is not displayed as a passing check.
 
@@ -131,28 +131,28 @@ matching current CI was returned; it is not displayed as a passing check.
 - Network Git remotes must use credential-free HTTPS or SSH transport. Plain HTTP and Git protocol
   remotes, embedded credentials, URL query values, fragments, unsupported helpers, and ambiguous
   remote identities fail closed. Repository- and worktree-scope `credential.*`, `http.*`, and URL
-  rewrite configuration is rejected for Forgeboard pushes. Matching active URL rewrites from any
+  rewrite configuration is rejected for Artemis pushes. Matching active URL rewrites from any
   scope are also rejected immediately before execution so they cannot retarget the approved
   literal.
 - Global and system Git credential and network configuration remain a user-owned trust boundary.
   This includes credential helpers, headers, cookies, client certificates, proxies, and TLS
   settings, plus the user's SSH configuration, proxy commands, and agent. Those facilities may
-  execute helpers or contact configured intermediaries; Forgeboard does not make a categorical
+  execute helpers or contact configured intermediaries; Artemis does not make a categorical
   no-redirect guarantee across that trusted stack. GitHub actions may use `gh`'s existing
-  authenticated session; Forgeboard stores neither credential.
+  authenticated session; Artemis stores neither credential.
 - A local filesystem remote's exact path stays in main and appears only in the native confirmation.
   The renderer receives the fixed label **Local Git repository**. The destination repository's
   receive hooks and Git configuration can execute as the operating-system user during a push, so a
   local destination must be trusted.
-- Before Forgeboard contacts the push destination, it verifies the complete approved source object
+- Before Artemis contacts the push destination, it verifies the complete approved source object
   closure with lazy fetching disabled. A partial clone missing an object therefore fails closed
   before destination contact instead of fetching from a promisor remote implicitly.
-- Forgeboard blocks its own push from a shallow repository or a history containing Git LFS pointer
+- Artemis blocks its own push from a shallow repository or a history containing Git LFS pointer
   content, because it cannot prove complete history or separately disclose and approve the LFS
   object upload. These push-only guards do not categorically block exact inspection, or PR/CI
   actions for an exact branch that was already pushed through another trusted workflow.
 - Executable or redirected source `pre-push` hooks and configured source hook paths block
-  Forgeboard's push. They are not a prerequisite for exact inspection, PR creation, or CI reads of
+  Artemis's push. They are not a prerequisite for exact inspection, PR creation, or CI reads of
   an already-pushed branch. Destination-side receive hooks remain part of the destination's trust
   boundary.
 - Audit rows contain bounded action metadata and digests, not the pull-request body, repository
@@ -162,14 +162,14 @@ matching current CI was returned; it is not displayed as a passing check.
 
 Actionable plans support at most 256 commits, 256 changed files, and 65,536 total disclosed path
 characters. Pull-request bodies support at most 32,768 characters. A repository can expose at most
-32 remotes to this surface. Forgeboard refuses oversized or truncated impact instead of presenting
+32 remotes to this surface. Artemis refuses oversized or truncated impact instead of presenting
 partial approval as complete.
 
 Remote status used for PR/CI planning expires after five minutes and is invalidated by a push, a
-GitHub CLI selection change, or any bound source, remote, or branch change. Forgeboard does not
+GitHub CLI selection change, or any bound source, remote, or branch change. Artemis does not
 perform a force push, merge the pull request, resolve remote conflicts, change repository visibility,
 or configure GitHub credentials. The selected `gh` executable must already be installed and
-authenticated; Forgeboard validates and uses it but does not install it or sign into GitHub.
+authenticated; Artemis validates and uses it but does not install it or sign into GitHub.
 
 Exact delivery also rejects multiple push destinations and custom remote helpers. Signed pushes,
 push options, custom receive-pack commands, and submodule-recursive pushes are unsupported and are

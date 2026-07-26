@@ -624,7 +624,7 @@ installPreviewWebviewSecurity(app, {
     const decision = await dialog.showMessageBox(parent, {
       type: 'warning',
       title: 'Open link in your browser?',
-      message: 'The preview wants to open a page outside Forgeboard.',
+      message: 'The preview wants to open a page outside Artemis.',
       detail: url,
       buttons: ['Cancel', 'Open in browser'],
       defaultId: 0,

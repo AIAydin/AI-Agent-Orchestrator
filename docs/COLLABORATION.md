@@ -1,9 +1,9 @@
 # Optional self-hosted collaboration
 
-Forgeboard's desktop application is local-first. Solo projects do not start, contact, or depend on this service. The collaboration server is an optional Hocuspocus/Yjs transport for teams that choose to share canvas metadata.
+Artemis's desktop application is local-first. Solo projects do not start, contact, or depend on this service. The collaboration server is an optional Hocuspocus/Yjs transport for teams that choose to share canvas metadata.
 
 For the ready-to-deploy hosted setup, see
-[Host Forgeboard collaboration](deployment/COLLABORATION_HOSTING.md).
+[Host Artemis collaboration](deployment/COLLABORATION_HOSTING.md).
 
 No source-code edit is required to run it. A local development server starts with safe localhost defaults:
 
@@ -29,11 +29,11 @@ In **Settings → Connectivity**, a room owner enters the hosted WebSocket and m
 room name, and identity before creating the room. A shared invite can be created only when those
 addresses use public `wss://` and `https://` endpoints that another computer can reach. Loopback,
 private-network, local-domain, insecure, and single-label addresses are rejected before invite
-creation, so Forgeboard cannot copy a link that points its recipient back at their own computer.
+creation, so Artemis cannot copy a link that points its recipient back at their own computer.
 
 Localhost remains available only for advanced direct connections and contributor development. Plain
 HTTP management is accepted only for a loopback server on the same device. The management URL is an
-explicit setting: Forgeboard does not derive or guess it from the WebSocket URL.
+explicit setting: Artemis does not derive or guess it from the WebSocket URL.
 
 The ordinary invite path accepts a trusted invite link and remains disabled until the explicit
 server, management API, and identity fields are present. The pasted link is a password-style,
@@ -89,7 +89,7 @@ even beneath a newer unsettled delivery. A later acknowledged candidate containi
 clears its quarantine. The UI also lets the user restore its text to the editor or explicitly
 discard that exact device-local copy using its rejected-delivery token; a later identical rejection
 is treated as new and appears again. Discarding does not mutate or delete server state. Because the
-stale Yjs document still carries the rejected update clock, Forgeboard blocks further shared
+stale Yjs document still carries the rejected update clock, Artemis blocks further shared
 publishing in that session and tells the user to leave and rejoin first. Recovery pauses without
 applying a room snapshot if a known rejection cannot be persisted. Solo mode does not create a
 journal entry or contact this service.
@@ -108,7 +108,7 @@ The server accepts only these Yjs top-level maps:
 
 Presence has a separate strict shape for collaborator identity, cursor position, selected node IDs, and activity status. Stateless Hocuspocus messages are disabled because they would bypass the allowlist. A proposed update is applied to an isolated Yjs clone, size-checked, role-checked, and schema-validated before it is applied to or broadcast from the live room. Unknown roots and unknown nested properties are rejected rather than stripped.
 
-Forgeboard's service does **not** accept or synchronize repository files, file contents, local paths, prompts, diffs, terminal output, environment values, secrets, or raw agent transcripts. A file node may carry an opaque local resource identifier and metadata-only availability state; each collaborator's desktop must resolve it against that person's own authorized checkout.
+Artemis's service does **not** accept or synchronize repository files, file contents, local paths, prompts, diffs, terminal output, environment values, secrets, or raw agent transcripts. A file node may carry an opaque local resource identifier and metadata-only availability state; each collaborator's desktop must resolve it against that person's own authorized checkout.
 
 Titles and comments are intentionally human-authored text. A structural allowlist cannot determine whether someone manually pasted a secret or source code into a comment, so users should never paste sensitive content there. This limitation does not create an automatic repository-read path: the collaboration service has no repository filesystem access.
 
@@ -160,26 +160,26 @@ compromised token stops authorizing HTTP and WebSocket operations.
 
 ## Configuration
 
-| Variable                                     | Development default                        | Production guidance                                                 |
-| -------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------- |
-| `NODE_ENV`                                   | `development`                              | Set `production`                                                    |
-| `FORGEBOARD_COLLAB_HOST`                     | `127.0.0.1`                                | `0.0.0.0` in a container, with a firewall/reverse proxy             |
-| `FORGEBOARD_COLLAB_PORT`                     | `PORT` from the host, otherwise `1234`     | Any unprivileged internal port                                      |
-| `FORGEBOARD_COLLAB_DATABASE_PATH`            | `./data/forgeboard-collab.sqlite`          | A persistent, encrypted volume                                      |
-| `FORGEBOARD_COLLAB_SIGNING_KEY`              | Ephemeral random key                       | Required; at least 32 random bytes, stored in a secret manager      |
-| `FORGEBOARD_COLLAB_ADMIN_TOKEN`              | Not needed for loopback bootstrap          | Required; at least 24 random characters, stored in a secret manager |
-| `FORGEBOARD_COLLAB_ALLOWED_ORIGINS`          | Forgeboard desktop plus local Vite origins | Exact comma-separated production desktop/web origins                |
-| `FORGEBOARD_COLLAB_REQUIRE_ORIGIN`           | `false`                                    | Defaults to `true`; keep enabled for browser-capable clients        |
-| `FORGEBOARD_COLLAB_PUBLIC_INVITE_URL`        | `forgeboard://collaboration/invite`        | The installed client's invite URL handler                           |
-| `FORGEBOARD_COLLAB_ACCESS_TTL_SECONDS`       | `28800` (8 hours)                          | 5 minutes to 7 days                                                 |
-| `FORGEBOARD_COLLAB_MAX_INVITE_TTL_SECONDS`   | `604800` (7 days)                          | 5 minutes to 30 days                                                |
-| `FORGEBOARD_COLLAB_HTTP_RATE_LIMIT`          | `120` per window                           | Tune behind an edge limiter                                         |
-| `FORGEBOARD_COLLAB_WS_CONNECTION_RATE_LIMIT` | `60` per window                            | Tune for reconnect patterns                                         |
-| `FORGEBOARD_COLLAB_MESSAGE_RATE_LIMIT`       | `600` per window                           | Tune for expected editing volume                                    |
-| `FORGEBOARD_COLLAB_RATE_WINDOW_MS`           | `60000`                                    | Shared in-memory rate window                                        |
-| `FORGEBOARD_COLLAB_MAX_HTTP_BODY_BYTES`      | `32768`                                    | Maximum 1 MiB                                                       |
-| `FORGEBOARD_COLLAB_MAX_MESSAGE_BYTES`        | `1048576`                                  | Maximum 16 MiB                                                      |
-| `FORGEBOARD_COLLAB_MAX_DOCUMENT_BYTES`       | `8388608`                                  | Maximum 64 MiB                                                      |
+| Variable                                     | Development default                     | Production guidance                                                 |
+| -------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------- |
+| `NODE_ENV`                                   | `development`                           | Set `production`                                                    |
+| `FORGEBOARD_COLLAB_HOST`                     | `127.0.0.1`                             | `0.0.0.0` in a container, with a firewall/reverse proxy             |
+| `FORGEBOARD_COLLAB_PORT`                     | `PORT` from the host, otherwise `1234`  | Any unprivileged internal port                                      |
+| `FORGEBOARD_COLLAB_DATABASE_PATH`            | `./data/forgeboard-collab.sqlite`       | A persistent, encrypted volume                                      |
+| `FORGEBOARD_COLLAB_SIGNING_KEY`              | Ephemeral random key                    | Required; at least 32 random bytes, stored in a secret manager      |
+| `FORGEBOARD_COLLAB_ADMIN_TOKEN`              | Not needed for loopback bootstrap       | Required; at least 24 random characters, stored in a secret manager |
+| `FORGEBOARD_COLLAB_ALLOWED_ORIGINS`          | Artemis desktop plus local Vite origins | Exact comma-separated production desktop/web origins                |
+| `FORGEBOARD_COLLAB_REQUIRE_ORIGIN`           | `false`                                 | Defaults to `true`; keep enabled for browser-capable clients        |
+| `FORGEBOARD_COLLAB_PUBLIC_INVITE_URL`        | `forgeboard://collaboration/invite`     | The installed client's invite URL handler                           |
+| `FORGEBOARD_COLLAB_ACCESS_TTL_SECONDS`       | `28800` (8 hours)                       | 5 minutes to 7 days                                                 |
+| `FORGEBOARD_COLLAB_MAX_INVITE_TTL_SECONDS`   | `604800` (7 days)                       | 5 minutes to 30 days                                                |
+| `FORGEBOARD_COLLAB_HTTP_RATE_LIMIT`          | `120` per window                        | Tune behind an edge limiter                                         |
+| `FORGEBOARD_COLLAB_WS_CONNECTION_RATE_LIMIT` | `60` per window                         | Tune for reconnect patterns                                         |
+| `FORGEBOARD_COLLAB_MESSAGE_RATE_LIMIT`       | `600` per window                        | Tune for expected editing volume                                    |
+| `FORGEBOARD_COLLAB_RATE_WINDOW_MS`           | `60000`                                 | Shared in-memory rate window                                        |
+| `FORGEBOARD_COLLAB_MAX_HTTP_BODY_BYTES`      | `32768`                                 | Maximum 1 MiB                                                       |
+| `FORGEBOARD_COLLAB_MAX_MESSAGE_BYTES`        | `1048576`                               | Maximum 16 MiB                                                      |
+| `FORGEBOARD_COLLAB_MAX_DOCUMENT_BYTES`       | `8388608`                               | Maximum 64 MiB                                                      |
 
 Changing the signing key invalidates outstanding invite and access tokens. Persisted invite history
 remains visible, but rows signed by another or unknown authority are shown as invalidated. An owner

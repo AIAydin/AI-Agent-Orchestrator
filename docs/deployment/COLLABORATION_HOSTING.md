@@ -1,6 +1,6 @@
-# Host Forgeboard collaboration
+# Host Artemis collaboration
 
-Forgeboard remains a local desktop application. Hosting this service gives separate computers a
+Artemis remains a local desktop application. Hosting this service gives separate computers a
 small authenticated coordination endpoint for allowlisted canvas metadata; it does not host
 repositories, prompts, terminal output, agent transcripts, or project files.
 
@@ -27,21 +27,21 @@ can spin down while idle, and loses a local SQLite database on restart or redepl
 3. Set **Blueprint Path** to `/config/deployment/render.yaml`.
 4. Review the paid Starter service and 1 GB disk, then apply the Blueprint.
 5. Wait for the service health check to pass.
-6. Open `https://<your-render-hostname>/healthz`. It must return an `ok` status before Forgeboard is
+6. Open `https://<your-render-hostname>/healthz`. It must return an `ok` status before Artemis is
    configured.
 7. In the Render service's Environment page, securely reveal and copy
    `FORGEBOARD_COLLAB_ADMIN_TOKEN`. Do not place it in source control or send it with an invite.
 
 Render assigns a public `onrender.com` hostname automatically. A custom domain can replace it later.
 For a hostname such as `forgeboard-collaboration.onrender.com`, enter these values in
-**Forgeboard → Settings → Connectivity**:
+**Artemis → Settings → Connectivity**:
 
 - **Collaboration server URL:** `wss://forgeboard-collaboration.onrender.com`
 - **Collaboration management API URL:** `https://forgeboard-collaboration.onrender.com`
 
-Enter the generated administrator token only when creating or recovering a room. Forgeboard clears
+Enter the generated administrator token only when creating or recovering a room. Artemis clears
 it immediately. After the room connects, **Create room + copy 10-minute invite** produces the
-one-use link for the other person's Forgeboard installation.
+one-use link for the other person's Artemis installation.
 
 ## Required production properties
 

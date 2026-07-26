@@ -166,7 +166,7 @@ that?" applies to every advanced option. When in doubt, delete.
 
 ## WS-K — Branding
 
-1. New Forgeboard logo (30:33): the current wordmark/monogram "looks like
+1. New Artemis logo (30:33): the current wordmark/monogram "looks like
    crap" — design a nicer, modern logo (SVG) and use it in the app chrome,
    launcher, and about screens.
 

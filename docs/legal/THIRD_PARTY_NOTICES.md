@@ -1,6 +1,6 @@
 # Third-party notices
 
-Forgeboard is distributed under the MIT License. Its desktop installers also contain the
+Artemis is distributed under the MIT License. Its desktop installers also contain the
 following separately licensed software.
 
 ## Transformers.js 3.8.1
@@ -50,7 +50,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 ## Bundled Git toolchain / dugite-native v2.53.0-3
 
-Forgeboard invokes a separately built Git executable distributed by
+Artemis invokes a separately built Git executable distributed by
 [`dugite-native`](https://github.com/desktop/dugite-native/tree/v2.53.0-3). Git is licensed under
 GNU General Public License version 2. A verbatim copy is installed at `licenses/git/COPYING` and is
 also tracked at [`third_party/git/COPYING`](../../third_party/git/COPYING).
@@ -67,10 +67,10 @@ The Windows MinGit payload corresponds to Git for Windows commit
 [`5fa7116896c82164996a609accd1c5ad90fe730a`](https://github.com/git-ecosystem/git-credential-manager/commit/5fa7116896c82164996a609accd1c5ad90fe730a)
 (`v2.7.3`).
 
-Every tagged Forgeboard GitHub Release attaches immutable source archives for all five commits
+Every tagged Artemis GitHub Release attaches immutable source archives for all five commits
 alongside the installers. [`third_party/dugite-sources.json`](../../third_party/dugite-sources.json) is the
 machine-checked source/version ledger; CI fails if the pinned Dugite package or its embedded native
 Git metadata drifts from it. The embedded distribution's additional dependency notices remain
 available at `git/libexec/git-core/NOTICE` inside the application resources.
 
-Bundled Git remains a separate program; Forgeboard's own source continues to be MIT licensed.
+Bundled Git remains a separate program; Artemis's own source continues to be MIT licensed.

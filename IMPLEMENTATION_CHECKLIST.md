@@ -1,4 +1,4 @@
-# Forgeboard implementation checklist
+# Artemis implementation checklist
 
 This file is the authoritative completion ledger for the build goal. A checked item means the
 behavior exists in current source and has direct verification evidence. Required unchecked items may
@@ -46,7 +46,7 @@ not be reclassified as future work.
 - [x] Sandboxed preview surface and sanitized Markdown, Mermaid, SVG, and imports.
 - [x] Data & Privacy screen with locations, integrations, retention, backup configuration/health,
       portable export/import, canvas recovery, and deletion.
-- [x] No telemetry or Forgeboard-owned outbound requests in default solo mode, proven by tests.
+- [x] No telemetry or Artemis-owned outbound requests in default solo mode, proven by tests.
 
 ## Agent adapters and execution
 
@@ -171,7 +171,7 @@ not be reclassified as future work.
 - [x] Interrupt/fail/retry/restart restoration integration test.
 - [x] Two-worktree preview integration test.
 - [x] Test/review gate and bounded revision integration tests.
-- [x] Sensitive-context and zero-Forgeboard-outbound integration tests.
+- [x] Sensitive-context and zero-Artemis-outbound integration tests.
 - [x] Collaboration allowlist/two-client privacy integration tests.
 - [x] Complete onboarding-to-merge Electron E2E flow.
 - [x] Keyboard-only, themes/reduced-motion, permissions/cancel, and multiplayer E2E flows.
@@ -253,7 +253,7 @@ unchecked when only a subset of their required behavior has proof.
 - 2026-07-15: all 5 Electron Playwright E2E tests passed. The added project-check flow configured
   lint, test, and build commands entirely in Settings; exercised exact renderer disclosure and
   cancel-default native approval; verified raw and parsed output, terminal-state persistence across
-  relaunch, full-tree cancellation, graceful shutdown cleanup, and zero Forgeboard external
+  relaunch, full-tree cancellation, graceful shutdown cleanup, and zero Artemis external
   requests.
 - 2026-07-15: focused project-check coverage proved strict IPC and settings schemas, owner-bound
   expiring single-use plans, concurrent prepare/launch reservations, stale executable/root/settings
@@ -460,7 +460,7 @@ unchecked when only a subset of their required behavior has proof.
   narrower resized nodes still scale proportionally. Focused layout and face coverage verifies both
   full-size and constrained-node behavior.
 - 2026-07-22: the source-development renderer now binds explicitly to port 5174 with strict-port
-  enforcement, so Forgeboard fails clearly instead of silently moving to another port when 5174 is
+  enforcement, so Artemis fails clearly instead of silently moving to another port when 5174 is
   unavailable. User-configured Web and Mobile Preview ports remain independent.
 - 2026-07-22: Web and Mobile Preview address fields accept bare local ports, loopback URLs, and
   public HTTPS addresses. Public sites never mount inside Electron: both renderer selection and the
@@ -471,8 +471,8 @@ unchecked when only a subset of their required behavior has proof.
   Disconnect, and native-confirmed profile clearing; privacy reset erases every companion profile.
   The Chrome node is interactive: it forwards validated resize, pointer, wheel, keyboard, paste,
   back, forward, and reload events over that private pipe, restores replaced page sessions, and
-  returns focus to Forgeboard after launch while retaining a native-Chrome escape hatch for OS-level
-  sign-in dialogs. Chrome pushes compressed frames only as page pixels change; Forgeboard
+  returns focus to Artemis after launch while retaining a native-Chrome escape hatch for OS-level
+  sign-in dialogs. Chrome pushes compressed frames only as page pixels change; Artemis
   acknowledges them immediately, transfers each frame sequence once, and maps the resulting image
   edge-to-edge onto the exact node viewport instead of repeatedly polling full PNG screenshots.
   Compact nodes retain that exact aspect ratio but receive at least a 1280-by-720 desktop-class CSS
@@ -511,11 +511,11 @@ unchecked when only a subset of their required behavior has proof.
   closes only the named two-worktree preview integration test; automatic side-by-side UI binding
   remains unchecked.
 - 2026-07-15: a production-composed default-solo workflow integration now proves that `.env*`, Git-
-  ignored, Forgeboard-ignored, symlink-escape, and corrupted traversal context is denied before
+  ignored, Artemis-ignored, symlink-escape, and corrupted traversal context is denied before
   planning or process spawn without secret bytes entering audits. For allowed context, the exact
   canonical path, SHA-256, manifest, provider, and `provider-controlled` network status are
   disclosed before approval; only afterward does a local context-recording child receive that one
-  file. The fixture traps Forgeboard-owned HTTP, HTTPS, TCP, TLS, DNS, UDP, fetch, and WebSocket
+  file. The fixture traps Artemis-owned HTTP, HTTPS, TCP, TLS, DNS, UDP, fetch, and WebSocket
   seams and observes zero attempts and zero `external-send` audits. Two real-process tests and 85
   mapped unit tests passed with typecheck, lint, formatting, structure, and whitespace gates. This
   closes the named integration-test requirement only: it is not packet capture or an OS firewall,
@@ -571,7 +571,7 @@ unchecked when only a subset of their required behavior has proof.
   repositories and adopts likely development/test commands with one UI action. Missing executable,
   missing script, unavailable-project, relative-path, orphaned-argument, stale-evidence, and bridge
   failures all produce actionable in-app remediation. External dependencies remain user-installed;
-  Forgeboard gives provider/runtime-specific install-or-Browse guidance and intentionally performs
+  Artemis gives provider/runtime-specific install-or-Browse guidance and intentionally performs
   no surprise package installation. Fifty-five focused tests across six files, desktop strict
   typecheck, the 637-file structure gate, targeted zero-warning lint/format checks, production build
   with the sandboxed preload policy, `git diff --check`, and the real Electron first-run readiness
@@ -710,7 +710,7 @@ unchecked when only a subset of their required behavior has proof.
   verification is recorded separately.
 - 2026-07-16: the Windows filesystem authority now reads the raw descriptor before trusting projected
   ACL rules, rejects absent DACLs and callback/unsupported raw ACEs, and requires exact protected
-  current-SID/LocalSystem DACLs for Forgeboard-created private objects. Managed-worktree readiness
+  current-SID/LocalSystem DACLs for Artemis-created private objects. Managed-worktree readiness
   rejects destination and ancestor aliases; backup readiness checks and warns about the canonical
   target. Backup creation protects a new destination and staging directory before SQLite writes,
   protects the staged file, publishes the same inode by hard link, rechecks the final DACL and
@@ -896,7 +896,7 @@ unchecked when only a subset of their required behavior has proof.
   `fad932874c77e0ba0bd89827ee94a2d53860c7014d027622517ae9b665b57d6a`. Electron Builder skipped
   Developer ID signing; the executable is ad-hoc/linker-signed, strict code-signing and Gatekeeper
   assessment fail, and neither the app nor DMG has a notarization ticket. Fresh Windows, Linux, and
-  macOS Intel proof remains open. Forgeboard validates and uses `gh` but does not install it or
+  macOS Intel proof remains open. Artemis validates and uses `gh` but does not install it or
   authenticate the user. An operating-system or process interruption inside the remote config
   transaction can leave its Git lock/recovery staging artifact, and UI repair for that state is not
   implemented. At this checkpoint the repository was private with no tags or GitHub Release, so
@@ -1030,10 +1030,10 @@ unchecked when only a subset of their required behavior has proof.
   Windows/Linux/macOS Intel artifacts, signing/notarization, a tag, and GitHub Release publication
   remain open; hosted Actions are still blocked before workflow steps by the account billing gate.
 - 2026-07-17: Codex CLI and Claude Code gained OAuth-first, UI-only provider connections in
-  onboarding and Settings. Forgeboard invokes each official CLI's browser sign-in, status, and
+  onboarding and Settings. Artemis invokes each official CLI's browser sign-in, status, and
   logout commands only after a cancel-default native review bound to the exact executable path,
   SHA-256, literal arguments, working directory, environment names, provider, and network
-  disclosure. The provider CLI owns OAuth credentials; Forgeboard neither receives nor stores
+  disclosure. The provider CLI owns OAuth credentials; Artemis neither receives nor stores
   tokens, reads provider auth stores, proxies model traffic, nor exposes raw status output or account
   identity across IPC. Connection plans are owner-bound, single-use, expiring, cancellable, and
   revalidate executable identity before launch. Restart restores only an honest Needs refresh state;
@@ -1076,11 +1076,11 @@ unchecked when only a subset of their required behavior has proof.
   the 1,058-file structure gate, formatting, zero-warning lint, all eight strict typechecks, all
   workspace builds, 1,987 unit tests across 307 files, and 280 real-process integration tests across
   32 files. The broad Agent node item remains open solely because a real pause/continue backend is not
-  yet available; Forgeboard continues to expose that limitation honestly.
+  yet available; Artemis continues to expose that limitation honestly.
 - 2026-07-17: agent-authored Review edges and reviewer-backed Review Gates now use a strict,
   main-composed assessment protocol instead of user-authored identifiers or prose parsing. Reviewer
   runs switch only Codex and Claude into their official headless JSON event modes while ordinary
-  Agent runs retain interactive PTY behavior. Forgeboard accepts one exact current-attempt final
+  Agent runs retain interactive PTY behavior. Artemis accepts one exact current-attempt final
   record only after the matching
   provider terminal and successful process result, and rejects stderr lookalikes, prose/fences,
   duplicate or later assistant output, mixed Claude tool content, and failed or incomplete runs.
@@ -1130,7 +1130,7 @@ unchecked when only a subset of their required behavior has proof.
   gates the fixed official GitHub Releases API request; the main process enforces a one-MiB response
   limit, ten-second deadline, no redirects or compressed responses, strict release contracts and
   version ordering, cancellation, per-window concurrency, five-minute release authority, and a
-  second native review before opening the exact release page. Forgeboard never downloads or installs
+  second native review before opening the exact release page. Artemis never downloads or installs
   an update automatically, and any imported legacy automatic-download preference is labeled inactive
   and can be cleared in the UI. Twenty-seven focused transport, service, preload, shared-contract,
   renderer, and installer-integrity tests passed. The broad Settings requirements and public release
@@ -1166,7 +1166,7 @@ unchecked when only a subset of their required behavior has proof.
   files passed sequentially (43 of 43 tests). `git diff --check` also passed.
 - 2026-07-17: startup database recovery now fails closed instead of silently creating a replacement
   database when an initialized profile loses, corrupts, or receives a foreign primary database.
-  The native cancel-default flow can choose one verified SQLite backup; Forgeboard stages and hashes
+  The native cancel-default flow can choose one verified SQLite backup; Artemis stages and hashes
   it without modifying the source, proves an exact migration-aware schema and audit-trigger
   provenance, then installs it through a durable journal with byte-exact rollback, interrupted-startup
   reconciliation, and path-free audit evidence. A private durable initialized-profile marker
@@ -1275,7 +1275,7 @@ unchecked when only a subset of their required behavior has proof.
   recovery journey evidence.
 - 2026-07-18: a direct moved-project Electron journey now completes the aggregate persistence
   requirement. It opens a real temporary project through the UI, creates and deletes a node to leave
-  a durable undo checkpoint, fully closes Forgeboard, moves the folder on disk, and relaunches with
+  a durable undo checkpoint, fully closes Artemis, moves the folder on disk, and relaunches with
   the same local profile. The welcome screen detects the missing folder; the native Locate chooser
   discloses its exact directory-only options; the in-app review shows canonical old/new paths and
   preservation scope; Cancel leaves the saved location unchanged; and explicit reconfirmation opens
@@ -1370,7 +1370,7 @@ unchecked when only a subset of their required behavior has proof.
   the existing persisted `mermaidSource`, with stale asynchronous renders discarded as source
   changes. Mermaid runs with strict security, HTML labels disabled, and security-sensitive options
   locked against init directives; generated output is rebuilt through the inert SVG sanitizer and
-  shown only as an encoded image, never injected into the Forgeboard DOM. External links, active
+  shown only as an encoded image, never injected into the Artemis DOM. External links, active
   markup, foreign HTML, event attributes, remote paint resources, and unsafe XML are removed or
   rejected. SVG export uses a cancel-default native save dialog, returns no path to the renderer,
   and is structurally revalidated against the same bounded inert subset in main before a private
@@ -1393,7 +1393,7 @@ unchecked when only a subset of their required behavior has proof.
   explicit prohibition on renderer JavaScript, HTML, CSS, Electron, or arbitrary Node entrypoints.
   Main, preload, renderer, and runtime implementations validate both request and response contracts,
   resolve active adapter authority again before launch, and render extension nodes only through
-  Forgeboard-owned controls. Thirty-six focused schema, service, manager, IPC, node, and real UI
+  Artemis-owned controls. Thirty-six focused schema, service, manager, IPC, node, and real UI
   integration-action tests passed.
 - 2026-07-18: the existing Product Brief, Task, and Diff/Review node implementations were re-audited
   against their complete checklist contracts rather than their earlier partial milestones. Product
@@ -1408,7 +1408,7 @@ unchecked when only a subset of their required behavior has proof.
 - 2026-07-18: the complete untrusted-content boundary was re-audited after Mermaid rendering landed.
   Preview pages run in a main-owned sandboxed `WebContentsView` with Node/preload disabled and strict
   loopback navigation, popup, permission, download, and bounds policies. Markdown is tokenized into
-  Forgeboard-owned React elements; Mermaid runs with locked strict settings; generated/imported SVG
+  Artemis-owned React elements; Mermaid runs with locked strict settings; generated/imported SVG
   is rebuilt into an inert allowlisted image document; and canvas JSON import is strictly parsed,
   canonicalized, integrity-checked, and committed transactionally. Eighty-one focused preview,
   URL-policy, Markdown, SVG, Mermaid, canvas-adapter, import, retention, and recovery tests passed.
@@ -1438,7 +1438,7 @@ unchecked when only a subset of their required behavior has proof.
   with desktop strict typecheck and focused zero-warning lint.
 - 2026-07-18: Whiteboard/Mockup nodes now provide UI-only rectangle, ellipse, diamond, arrow, and
   text-annotation editing backed by bounded Excalidraw-compatible version-2 JSON. The preview is
-  rendered solely with Forgeboard-owned inert React SVG primitives. Image export crosses a strict
+  rendered solely with Artemis-owned inert React SVG primitives. Image export crosses a strict
   preload contract, opens a cancel-default native save dialog, revalidates the SVG allowlist in the
   main process, writes with private permissions, and returns only the selected basename. An explicit
   Agent picker creates a typed Context edge rather than silently attaching data; workflow evidence
@@ -1497,7 +1497,7 @@ unchecked when only a subset of their required behavior has proof.
   requires a second, cancel-default native confirmation before any service reset or storage
   mutation. The trusted dialog enumerates local projects/canvases, execution history, settings,
   integrations, approvals, audit history, snapshots, and tracked backups; it also distinguishes
-  Forgeboard data from untouched source repositories and warns that disconnected backup copies can
+  Artemis data from untouched source repositories and warns that disconnected backup copies can
   survive. Native cancellation records one redacted denial event. Four focused confirmation tests
   passed. The deletion coordinator also revalidates its scoped authority before and after every
   awaited stage, and a focused race test proves revoked authority cannot reach service reset or
@@ -1506,7 +1506,7 @@ unchecked when only a subset of their required behavior has proof.
   the product's delete-all-data promise.
 - 2026-07-18: Git review gained a path-free `Open externally…` handoff for both the primary project
   and a resolver-owned agent worktree. The renderer supplies only an opaque project/run target;
-  main resolves it, presents a cancel-default native warning about leaving Forgeboard's sandbox,
+  main resolves it, presents a cancel-default native warning about leaving Artemis's sandbox,
   re-resolves it after approval, persists the redacted allowed audit before calling the operating
   system, and returns no path. It revalidates the live owner window immediately before the allowed
   audit and operating-system handoff; a replacement-window integration test proves a stale approval
@@ -1656,7 +1656,7 @@ unchecked when only a subset of their required behavior has proof.
   copy/purge, project directory, Git metadata, service reset, or storage deletion occurs. Delete-all
   now records its final authorization immediately before service reset and deliberately erases that
   event with the audit table, reconciling audit-before-effect with the user's promise to erase all
-  Forgeboard local data. Checklist items 43 and 44 remain open: startup database restore/quarantine
+  Artemis local data. Checklist items 43 and 44 remain open: startup database restore/quarantine
   can mutate recovery files before the restored audit database is available and currently relies on
   its durable recovery journal, ordinary compare-and-swap project-file saves still need an explicit
   policy decision on security-audit/impact-confirmation scope, and filesystem-effect coverage does
@@ -1758,7 +1758,7 @@ unchecked when only a subset of their required behavior has proof.
   184 remain honestly open because, at this checkpoint, the private repository had no published
   GitHub Release and hosted Windows/Linux installation plus signing/notarization evidence required
   restored GitHub Actions billing and the optional platform credentials.
-- 2026-07-21: Forgeboard gained an opt-in local voice-command path backed by pinned Transformers.js,
+- 2026-07-21: Artemis gained an opt-in local voice-command path backed by pinned Transformers.js,
   ONNX Runtime, and the exact `onnx-community/whisper-tiny.en` revision. Settings owns model
   install/removal and safe-action auto-run; the one-time model download uses the main outbound gate
   and cancel-default native disclosure, while subsequent loads force remote models off. Only the
@@ -1815,7 +1815,7 @@ unchecked when only a subset of their required behavior has proof.
   selected outside the project is signature-checked and copied without overwrite into the project's
   `forgeboard-videos` folder before playback and agent sharing. All three focused video-service
   tests and desktop strict typecheck passed after that correction.
-  Claude and other connected agent sessions now receive a `list_videos` Forgeboard MCP tool plus
+  Claude and other connected agent sessions now receive a `list_videos` Artemis MCP tool plus
   initialization guidance. The authenticated localhost hub returns only configured Video nodes
   explicitly attached to the caller or joined by an unmuted context edge, with project-relative
   path and availability metadata; unrelated videos and absolute paths remain private. Seven MCP
@@ -1891,10 +1891,10 @@ unchecked when only a subset of their required behavior has proof.
   collaboration service used for bind verification was stopped afterward.
 - 2026-07-23: the collaboration service is ready for a single-instance hosted deployment. Its
   production image now honors a hosting provider's standard `PORT` while preserving the explicit
-  Forgeboard override and safe local fallback, and its container health check follows the same
+  Artemis override and safe local fallback, and its container health check follows the same
   resolved port. A Render Blueprint provisions the Docker service with generated signing and admin
   secrets, a durable `/data` disk for SQLite, a public health check, and the native-app origin
-  policy; the hosting guide documents the exact owner setup, Forgeboard addresses, backup and
+  policy; the hosting guide documents the exact owner setup, Artemis addresses, backup and
   scaling constraints, and Railway/VPS alternatives. Dedicated configuration and deployment
   contract tests passed, the collaboration-server strict typecheck and production bundle passed,
   and the exact production Docker image built successfully. A real container then ran as the
@@ -2025,11 +2025,11 @@ unchecked when only a subset of their required behavior has proof.
   previously failing E2E scenarios passed locally. Reviewed Windows `.cmd`/`.bat` GitHub CLI shims
   now launch through a metacharacter-rejecting `cmd.exe` boundary while executable identity,
   validation auditing, and the shell-free native-executable path remain intact; the full Git
-  connections E2E flow uses a program fixture outside Forgeboard's Windows ACL-hardened user-data
+  connections E2E flow uses a program fixture outside Artemis's Windows ACL-hardened user-data
   root and passed locally. Structure (1,479 files), controls (861 files), formatting, zero-warning
   lint, workspace typecheck, all 3,155 unit tests, all 333 integration tests, three docs tests,
   seven quality tests, and every production build passed.
-- 2026-07-24: running Agent and Terminal sessions no longer have Forgeboard-wide or per-window
+- 2026-07-24: running Agent and Terminal sessions no longer have Artemis-wide or per-window
   count caps; ordinary launches are limited only by the computer's available resources. Transcript
   creation likewise has no product-level file-count ceiling while retaining per-session and global
   byte bounds. A 12-session same-window regression exceeds both retired limits, and OpenCode's
