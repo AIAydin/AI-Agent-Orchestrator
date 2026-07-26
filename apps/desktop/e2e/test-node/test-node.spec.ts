@@ -16,10 +16,10 @@ const DESCRIPTION = 'Writes a file if it ever runs.';
 
 /**
  * The Test node is now a single command line, a description, and Run with an output preview.
- * The exact command the user typed has to survive a full restart, and nothing may execute until
- * the user actually asks for a run.
+ * The exact command the user typed has to survive a full restart, nothing may execute until the
+ * user actually asks for a run, and Run alone has to be enough to execute it.
  */
-test('a Test node keeps its exact command line and description across a restart', async () => {
+test('a Test node keeps its exact command line across a restart and runs it on request', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-test-node-e2e-'));
   const sideEffectPath = join(userDataDirectory, 'demo', 'forgeboard-demo', SIDE_EFFECT_FILE);
   let electronApp: ElectronApplication | null = null;
@@ -59,6 +59,14 @@ test('a Test node keeps its exact command line and description across a restart'
       await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Not run');
       // Configuring a command must never be enough to execute it.
       await expect(access(sideEffectPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    await test.step('Run executes that exact command and reports the result on the node', async () => {
+      await panel.getByRole('button', { name: 'Run' }).click();
+      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Passed', {
+        timeout: 60_000,
+      });
+      await expect(access(sideEffectPath)).resolves.toBeUndefined();
     });
 
     expect(externalRequests).toEqual([]);
