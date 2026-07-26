@@ -22,16 +22,16 @@ export const PERMISSION_PROFILE_OPTIONS: readonly {
       'The agent works in its own copy of your project (a Git worktree). You review its changes before they reach your main branch.',
   },
   {
+    value: 'project-write',
+    label: 'Write in current directory',
+    description:
+      'The CLI runs right in your project folder — no worktree. Changes land directly in your files.',
+  },
+  {
     value: 'docker-isolated',
     label: 'Docker isolated',
     description:
       'The agent runs inside Docker, limited to one worktree and kept away from the rest of your system.',
-  },
-  {
-    value: 'custom',
-    label: 'Custom',
-    description:
-      'Use the access rules from Settings. Docker enforces its limits; rules for runs on this computer are stated to the agent, not enforced by the operating system.',
   },
 ] as const;
 

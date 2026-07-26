@@ -11,6 +11,7 @@ import type { NodeKind, WorkshopNode } from '../canvas/CanvasNode.js';
 import { WorkspaceProjectTree } from '../context-dnd/WorkspaceProjectTree.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import type { ExtensionTemplate } from '../model/types.js';
+import { providerBrandLogo } from '../node-registry/brand-logos.js';
 import { providerTheme } from '../node-registry/provider-themes.js';
 import { BUILT_IN_NODE_REGISTRY, type NodeTypeRegistry } from '../node-registry/registry.js';
 
@@ -173,13 +174,14 @@ function ProjectTemplates({
         <div className="template-list">
           {runnableAgents.map((agent) => {
             const theme = providerTheme(agent.id);
+            const Logo = providerBrandLogo(agent.id);
             return (
               <button type="button" key={agent.id} onClick={() => onAddAgentNode(agent.id)}>
                 <span
                   className="agent-monogram-badge"
                   style={{ background: theme?.accent ?? '#d4a85b' }}
                 >
-                  {theme?.monogram ?? 'A'}
+                  {Logo === null ? (agent.label.slice(0, 1).toUpperCase() || 'A') : <Logo size={14} />}
                 </span>
                 <span>
                   <strong>{theme?.label ?? agent.label}</strong>

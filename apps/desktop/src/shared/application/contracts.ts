@@ -1085,6 +1085,7 @@ export const IPC_CHANNELS = Object.freeze({
   settingsCheckFolderReadiness: 'settings:check-folder-readiness',
   agentsDetect: 'agents:detect',
   agentsCheckReadiness: 'agents:check-readiness',
+  agentSessionCreatePr: 'agent-session:create-pr',
   commandsCheckReadiness: 'commands:check-readiness',
   approvalsList: 'approvals:list',
   approvalsRevoke: 'approvals:revoke',

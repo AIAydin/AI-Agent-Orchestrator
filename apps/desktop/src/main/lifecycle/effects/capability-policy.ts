@@ -112,6 +112,7 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
     'node:fs/promises#unlink',
     'node:fs/promises#writeFile',
   ]),
+  'agent-pr/service.ts': entry('reviewed-runtime', ['node:child_process#execFile']),
   'browser-companion/service.ts': entry('reviewed-runtime', [
     'node:child_process#spawn',
     'node:fs/promises#mkdir',
@@ -256,7 +257,6 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
   ]),
   'projects/project-service.ts': entry('audited-authority', [
     '@forgeboard/git-engine#RepositoryService',
-    'node:child_process#execFile',
     'node:fs/promises#mkdir',
     'node:fs/promises#writeFile',
   ]),
@@ -368,6 +368,7 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
   'storage/workflow/executions.ts': entry('durable-internal-state', ['node:sqlite#DatabaseSync']),
   'storage/writes.ts': entry('durable-internal-state', ['node:sqlite#DatabaseSync']),
   'storage.ts': entry('durable-internal-state', ['node:sqlite#DatabaseSync']),
+  'terminal/login-shell-path.ts': entry('reviewed-runtime', ['node:child_process#execFile']),
   'terminal/pty-process.ts': entry('reviewed-runtime', ['node:fs/promises#chmod']),
   'terminal/workspaces/service.ts': entry('reviewed-package-capability', [
     '@forgeboard/git-engine#RepositoryService',

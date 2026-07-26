@@ -4,8 +4,8 @@ import {
   ArrowRight,
   Bot,
   Check,
-  Container,
   FolderGit2,
+  FolderOpen,
   GitBranch,
   HardDrive,
   ShieldCheck,
@@ -28,6 +28,7 @@ import type {
   ProviderConnectionStatus,
 } from '../../../../shared/provider-connections/index.js';
 import { unwrap } from '../../lib/ipc.js';
+import { DockerLogo } from '../workspace/node-registry/brand-logos.js';
 import { CommandBuilder } from '../configuration/CommandBuilder.js';
 import { FirstRunTour } from '../help/tour/FirstRunTour.js';
 import { BrandMark } from '../shell/BrandMark.js';
@@ -46,7 +47,6 @@ import {
 } from '../readiness/readiness-ui.js';
 import { DockerConfiguration } from '../docker/DockerConfiguration.js';
 import type { DockerReadinessEvidence } from '../docker/readiness-evidence.js';
-import { CustomPermissionProfileEditor } from '../permissions/CustomPermissionProfileEditor.js';
 import {
   initialCommandSuggestionProjectId,
   ProjectCommandSuggestions,
@@ -609,7 +609,7 @@ export function SetupWizard(props: SetupWizardProps) {
                 <ChoiceCard
                   title="Docker isolated"
                   description="Run in a Docker container, walled off from the rest of your computer."
-                  icon={<Container size={20} />}
+                  icon={<DockerLogo size={20} />}
                   checked={draft.defaultPermissionProfile === 'docker-isolated'}
                   onSelect={() =>
                     setDraft({
@@ -620,33 +620,18 @@ export function SetupWizard(props: SetupWizardProps) {
                   }
                 />
                 <ChoiceCard
-                  title="Custom"
-                  description="Set your own rules, on this computer or in Docker."
-                  icon={<ShieldCheck size={20} />}
-                  checked={draft.defaultPermissionProfile === 'custom'}
+                  title="Write in current directory"
+                  description="Run right in your project folder — changes land directly."
+                  icon={<FolderOpen size={20} />}
+                  checked={draft.defaultPermissionProfile === 'project-write'}
                   onSelect={() =>
                     setDraft({
                       ...draft,
-                      defaultPermissionProfile: 'custom',
-                      ...(draft.customPermissionProfile.runtime === 'docker'
-                        ? { dockerEnabled: true }
-                        : {}),
+                      defaultPermissionProfile: 'project-write',
                     })
                   }
                 />
               </div>
-              {draft.defaultPermissionProfile === 'custom' && (
-                <div className="setup-inline-settings">
-                  <CustomPermissionProfileEditor
-                    draft={draft}
-                    setDraft={setDraft}
-                    activeProject={null}
-                    busy={busy}
-                    compact
-                    onError={props.onError}
-                  />
-                </div>
-              )}
               {selectedPermissionNeedsDocker && (
                 <div className="setup-inline-settings">
                   {draft.defaultPermissionProfile === 'docker-isolated' && (

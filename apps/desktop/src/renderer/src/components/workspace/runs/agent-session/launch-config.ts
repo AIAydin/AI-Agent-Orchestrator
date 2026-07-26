@@ -62,7 +62,11 @@ export function agentSessionLaunch(
       enforced = true;
     }
   }
-  if (profile === 'worktree-write' || profile === 'docker-isolated') enforced = true;
+  // worktree-write runs in a managed worktree; project-write runs right in the project
+  // directory; docker-isolated runs the worktree inside a container — all three do exactly
+  // what their labels promise.
+  if (profile === 'worktree-write' || profile === 'project-write' || profile === 'docker-isolated')
+    enforced = true;
   return {
     configuration: {
       executable,
@@ -84,7 +88,11 @@ export function agentSessionLaunch(
                 runtime: 'docker' as const,
               },
             }
-          : {}),
+          : profile === 'project-write'
+            ? // Runs right in the project directory; main reconstructs and authorizes the launch
+              // from the persisted node, so no native confirmation interrupts the zero-click start.
+              { workspace: { kind: 'project' as const } }
+            : {}),
       ...(activePeers !== null ? { peerProvisionId: activePeers.provisionId } : {}),
     },
     profileNote: enforced

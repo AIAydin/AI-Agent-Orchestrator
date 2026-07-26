@@ -282,6 +282,56 @@
   opacity: 0.55;
 }
 
+.agent-title-logo {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.agent-workspace-line {
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.agent-pr-button {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-subtle) 76%, transparent);
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.agent-pr-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--node-accent) 68%, var(--line));
+  background: color-mix(in srgb, var(--node-accent) 10%, var(--surface-subtle));
+}
+
+.agent-pr-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.agent-pr-note {
+  flex-basis: 100%;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.agent-pr-note.warning {
+  color: var(--warning, #d6b567);
+}
+
 .agent-profile-note {
   flex-basis: 100%;
   color: var(--text-faint);

@@ -637,7 +637,7 @@ describe('SetupWizard', () => {
     expect(screen.getByText(/Do not enter passwords, tokens, or other secrets here/u)).toBeTruthy();
   });
 
-  it('configures a truthful host Custom profile in the Safety step without file editing', async () => {
+  it('offers Write in current directory instead of a Custom profile in the Safety step', async () => {
     const onComplete = vi.fn<(settings: AppSettings) => Promise<void>>(() => Promise.resolve());
     render(
       <SetupWizard
@@ -653,23 +653,17 @@ describe('SetupWizard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
     await continueFromAgentStep();
-    fireEvent.click(screen.getByRole('radio', { name: /Custom/u }));
+    expect(screen.queryByRole('radio', { name: /Custom/u })).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: /Write in current directory/u }));
 
-    expect(screen.getByText('Limits are stated, not enforced')).toBeTruthy();
-    expect(screen.getByText(/folder lists tell the agent your intent/u)).toBeTruthy();
-    expect(screen.getByRole('checkbox', { name: /Ask the agent to allow tests/u })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
-    expect(screen.getByText('Custom', { selector: 'dd' })).toBeTruthy();
+    expect(screen.getByText('Write in current directory', { selector: 'dd' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Open Forgeboard/ }));
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
     expect(onComplete.mock.calls[0]?.[0]).toMatchObject({
-      defaultPermissionProfile: 'custom',
-      customPermissionProfile: {
-        runtime: 'host',
-        filesystem: 'assigned-worktree-read-only',
-      },
+      defaultPermissionProfile: 'project-write',
     });
   });
 });

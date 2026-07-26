@@ -12,7 +12,9 @@ function hasNoControlCharacters(value: string): boolean {
 export const PermissionProfileSchema = z.enum([
   'plan-read-only',
   'worktree-write',
+  'project-write',
   'docker-isolated',
+  // Legacy: no longer offered in any select, kept so saved canvases/settings still parse.
   'custom',
 ]);
 export type PermissionProfile = z.infer<typeof PermissionProfileSchema>;

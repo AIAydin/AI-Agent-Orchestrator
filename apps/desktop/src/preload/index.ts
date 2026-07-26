@@ -283,6 +283,9 @@ const api: ForgeboardApi = {
       return () => ipcRenderer.removeListener(channel, handler);
     },
   ),
+  agentPr: {
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentSessionCreatePr, input),
+  },
   previews: {
     listTargets: (input) =>
       invokeValidated(PREVIEW_TARGET_IPC_CHANNELS.list, PreviewTargetListSchema, input),

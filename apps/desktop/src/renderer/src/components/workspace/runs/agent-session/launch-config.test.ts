@@ -121,6 +121,18 @@ describe('agentSessionLaunch', () => {
     expect(launch.profileNote).toMatch(/project root/i);
   });
 
+  it('runs Write in current directory right in the project — no worktree, no caveat note', () => {
+    const launch = agentSessionLaunch(claude, undefined, 'project-write');
+    expect(launch.configuration).toEqual({
+      executable: '/usr/local/bin/claude',
+      arguments: [],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+      workspace: { kind: 'project' },
+    });
+    expect(launch.profileNote).toBeNull();
+  });
+
   it('appends peer extra arguments after the provider flags and sets peerProvisionId', () => {
     const launch = agentSessionLaunch(claude, 'claude-sonnet-5', 'plan-read-only', {
       provisionId: '11111111-1111-4111-8111-111111111111',

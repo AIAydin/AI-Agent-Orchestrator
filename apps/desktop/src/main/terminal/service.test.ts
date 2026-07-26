@@ -25,6 +25,7 @@ import {
 } from './service.js';
 import type {
   AutomaticTerminalAgentLaunch,
+  AutomaticTerminalProjectLaunch,
   PreparedTerminalWorkspace,
   TerminalWorkspaceManager,
 } from './workspaces/contracts.js';
@@ -217,6 +218,79 @@ describe('TerminalService', () => {
           Reflect.get(audit[3], 'authorization') === 'managed-agent-automatic',
       ),
     ).toBe(true);
+  });
+
+  it('passes the full user environment through to managed automatic Agent launches', async () => {
+    const workspaceManager = new FakeTerminalWorkspaceManager();
+    workspaceManager.automaticLaunch = {
+      executable: '/bin/sh',
+      arguments: [],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+    };
+    const harness = await fixture({ workspaceManager });
+    const plan = await harness.service.prepareLaunch('owner-a', {
+      ...harness.input,
+      nodeId: 'agent-one',
+      workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
+    });
+
+    await harness.service.confirmLaunch('owner-a', plan.planId, () => Promise.resolve('denied'));
+
+    expect(harness.spawnedLaunch()?.environmentPassthrough).toBe(true);
+  });
+
+  it('automatically launches a project-directory Agent session (no worktree, no dialog)', async () => {
+    const workspaceManager = new FakeTerminalWorkspaceManager();
+    workspaceManager.automaticProjectLaunch = {
+      executable: '/bin/sh',
+      arguments: ['--model', 'trusted-model'],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+      adapterId: 'claude',
+    };
+    const harness = await fixture({ workspaceManager });
+    const plan = await harness.service.prepareLaunch('owner-a', {
+      ...harness.input,
+      nodeId: 'agent-one',
+      arguments: ['--renderer-controlled'],
+      workspace: { kind: 'project' },
+    });
+    let authorizationCalls = 0;
+
+    const session = await harness.service.confirmLaunch('owner-a', plan.planId, () => {
+      authorizationCalls += 1;
+      return Promise.resolve('denied');
+    });
+
+    expect(authorizationCalls).toBe(0);
+    expect(session?.arguments).toEqual(['--model', 'trusted-model']);
+    expect(harness.spawnedLaunch()?.cwd).toBe(harness.project.path);
+    expect(harness.spawnedLaunch()?.environmentPassthrough).toBe(true);
+    expect(session?.workspace).toEqual({ kind: 'project', directory: harness.project.path });
+    // No worktree is provisioned or tracked for a project-directory session.
+    expect(workspaceManager.prepared).toBeUndefined();
+    expect(workspaceManager.running).toHaveLength(0);
+  });
+
+  it('keeps a project workspace request on native review when reconstruction returns null', async () => {
+    const workspaceManager = new FakeTerminalWorkspaceManager();
+    workspaceManager.automaticProjectLaunch = null;
+    const harness = await fixture({ workspaceManager });
+    const plan = await harness.service.prepareLaunch('owner-a', {
+      ...harness.input,
+      nodeId: 'agent-one',
+      workspace: { kind: 'project' },
+    });
+    let authorizationCalls = 0;
+
+    const session = await harness.service.confirmLaunch('owner-a', plan.planId, () => {
+      authorizationCalls += 1;
+      return Promise.resolve('denied');
+    });
+
+    expect(authorizationCalls).toBe(1);
+    expect(session).toBeNull();
   });
 
   it('blocks an automatic Agent launch when peer material belongs to another node', async () => {
@@ -948,6 +1022,7 @@ describe('TerminalService', () => {
 class FakeTerminalWorkspaceManager implements TerminalWorkspaceManager {
   prepared: PreparedTerminalWorkspace | undefined;
   automaticLaunch: AutomaticTerminalAgentLaunch | null = null;
+  automaticProjectLaunch: AutomaticTerminalProjectLaunch | null = null;
   readonly running: TerminalSessionView[] = [];
   readonly finished: TerminalSessionView[] = [];
   readonly discarded: PreparedTerminalWorkspace[] = [];
@@ -988,6 +1063,10 @@ class FakeTerminalWorkspaceManager implements TerminalWorkspaceManager {
 
   resolveAutomaticAgentLaunch(): Promise<AutomaticTerminalAgentLaunch | null> {
     return Promise.resolve(this.automaticLaunch);
+  }
+
+  resolveAutomaticProjectLaunch(): Promise<AutomaticTerminalProjectLaunch | null> {
+    return Promise.resolve(this.automaticProjectLaunch);
   }
 
   assertCurrent(): Promise<void> {
