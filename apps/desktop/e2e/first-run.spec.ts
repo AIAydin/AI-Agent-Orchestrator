@@ -180,8 +180,9 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       const releasePlanBox = await releasePlan.boundingBox();
       if (!canvasBox || !releasePlanBox)
         throw new Error('The canvas and release-plan node must be visible before adding a note.');
+      const minimapBox = await page.locator('.react-flow__minimap').boundingBox();
       await templates.getByRole('button', { name: /^Note/ }).dragTo(canvasRegion, {
-        targetPosition: separatedDropPosition(canvasBox, releasePlanBox),
+        targetPosition: separatedDropPosition(canvasBox, releasePlanBox, minimapBox),
       });
       const noteNode = page.getByRole('article', { name: /^Note: /u });
       await expect(noteNode).toBeVisible();
@@ -376,19 +377,39 @@ async function exposedHandlePoint(
   return result.point ?? { x: 0, y: 0 };
 }
 
+/**
+ * Where to drop a second node so both it and its connection handles stay
+ * reachable. Small CI windows push the clamped position into the bottom-right,
+ * where the minimap floats over the canvas and swallows the handles — so the
+ * drop keeps clear of the minimap's real rectangle when one is on screen.
+ */
 function separatedDropPosition(
   canvas: { x: number; y: number; width: number; height: number },
   source: { x: number; y: number; width: number; height: number },
+  minimap: { x: number; y: number; width: number; height: number } | null,
 ): { x: number; y: number } {
+  const estimatedNodeWidth = 250;
   const estimatedNodeHeight = 120;
   const gap = 90;
+  // Handles hang outside the node box, so keep a margin beyond its edges.
+  const handleMargin = 24;
   const sourceTop = source.y - canvas.y;
   const above = sourceTop - estimatedNodeHeight - gap;
   const below = sourceTop + source.height + gap;
-  return {
-    x: Math.min(Math.max(source.x - canvas.x, 80), canvas.width - 250),
-    y: above >= 70 ? above : Math.min(below, canvas.height - estimatedNodeHeight - 40),
-  };
+  const x = Math.min(Math.max(source.x - canvas.x, 80), canvas.width - estimatedNodeWidth);
+  const y = above >= 70 ? above : Math.min(below, canvas.height - estimatedNodeHeight - 40);
+  if (minimap === null) return { x, y };
+
+  const minimapLeft = minimap.x - canvas.x;
+  const minimapTop = minimap.y - canvas.y;
+  const overlaps =
+    x + estimatedNodeWidth + handleMargin > minimapLeft &&
+    y + estimatedNodeHeight + handleMargin > minimapTop;
+  if (!overlaps) return { x, y };
+
+  const clearAbove = minimapTop - estimatedNodeHeight - handleMargin;
+  if (clearAbove >= 70) return { x, y: clearAbove };
+  return { x: Math.max(minimapLeft - estimatedNodeWidth - handleMargin, 80), y };
 }
 
 async function clickExposedNodeEdge(page: Page, node: Locator): Promise<void> {
