@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { loadProjectIgnoreMatcher, resolveCanonicalPath } from '@forgeboard/core';
+import { resolveCanonicalPath } from '@forgeboard/core';
 import type { Dialog } from 'electron';
 
 import {
@@ -15,7 +15,7 @@ import {
 } from '../../../shared/files/images/contracts.js';
 import { resolveProjectFileRoot, type FileProjectStore } from '../authority.js';
 import { FileDomainError, fileDomainBoundary, normalizeFileDomainError } from '../errors.js';
-import { assertFileContentAllowed } from '../policy.js';
+import { assertFileContentNotSensitive } from '../policy.js';
 import { readStableProjectImage, type ProjectImageReaderIo } from './reader.js';
 
 type ImageDialog = Pick<Dialog, 'showOpenDialog'>;
@@ -96,8 +96,7 @@ export class ProjectImageService {
     input: ProjectImageLoadInput,
   ): Promise<{ readonly view: ProjectImageLoadResult; readonly sha256?: string }> {
     const root = await resolveProjectFileRoot(this.store, input.projectId);
-    const matcher = await loadProjectIgnoreMatcher(root);
-    assertFileContentAllowed(matcher, input.relativePath);
+    assertFileContentNotSensitive(input.relativePath);
     try {
       const loaded = await readStableProjectImage(
         root,

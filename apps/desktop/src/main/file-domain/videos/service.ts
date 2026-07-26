@@ -4,7 +4,7 @@ import { copyFile, lstat, mkdir, open, realpath, stat, unlink } from 'node:fs/pr
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { loadProjectIgnoreMatcher, resolveCanonicalPath } from '@forgeboard/core';
+import { resolveCanonicalPath } from '@forgeboard/core';
 import type { Dialog } from 'electron';
 
 import {
@@ -20,7 +20,7 @@ import {
 } from '../../../shared/files/videos/contracts.js';
 import { resolveProjectFileRoot, type FileProjectStore } from '../authority.js';
 import { FileDomainError, fileDomainBoundary, normalizeFileDomainError } from '../errors.js';
-import { assertFileContentAllowed } from '../policy.js';
+import { assertFileContentNotSensitive } from '../policy.js';
 
 type VideoDialog = Pick<Dialog, 'showOpenDialog'>;
 
@@ -174,8 +174,7 @@ async function importExternalVideo(root: string, selectedPath: string): Promise<
   await inspectVideoFile(canonicalSource, path.basename(canonicalSource));
 
   const importFolder = 'forgeboard-videos';
-  const matcher = await loadProjectIgnoreMatcher(root);
-  assertFileContentAllowed(matcher, importFolder, true);
+  assertFileContentNotSensitive(importFolder);
   await mkdir(path.join(root, importFolder), { recursive: true });
   const canonicalFolder = await canonicalProjectVideoDirectory(root, importFolder);
   const parsed = path.parse(path.basename(canonicalSource));
@@ -185,7 +184,7 @@ async function importExternalVideo(root: string, selectedPath: string): Promise<
         ? `${parsed.name}${parsed.ext}`
         : `${parsed.name}-${String(suffix)}${parsed.ext}`;
     const relativePath = `${canonicalFolder}/${fileName}`;
-    assertFileContentAllowed(matcher, relativePath);
+    assertFileContentNotSensitive(relativePath);
     const destinationPath = path.join(root, relativePath);
     try {
       await copyFile(canonicalSource, destinationPath, constants.COPYFILE_EXCL);
@@ -231,8 +230,7 @@ async function inspectVideo(
   readonly sizeBytes: number;
 }> {
   const relativePath = await canonicalProjectVideo(root, candidate, false);
-  const matcher = await loadProjectIgnoreMatcher(root);
-  assertFileContentAllowed(matcher, relativePath);
+  assertFileContentNotSensitive(relativePath);
   const absolutePath = path.resolve(root, relativePath);
   const inspected = await inspectVideoFile(absolutePath, relativePath);
   return { relativePath, ...inspected };

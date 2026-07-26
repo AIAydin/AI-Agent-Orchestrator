@@ -5,7 +5,7 @@ import {
   type FileSearchMatch,
   type FileSearchResult,
 } from '../../shared/files/contracts.js';
-import { assertFileContentAllowed } from './policy.js';
+import { assertFileContentNotSensitive } from './policy.js';
 import { readProjectDocument } from './reader.js';
 import { listProjectDirectory } from './tree.js';
 
@@ -24,9 +24,14 @@ export interface ProjectFileSearchOptions {
 }
 
 /**
- * Searches only policy-approved ordinary UTF-8 files beneath a canonical project root. Every
+ * Searches only ordinary UTF-8 files with a `normal` policy beneath a canonical project root. Every
  * resource dimension is bounded; files that race, disappear, become sensitive, or cannot be read
  * safely are counted as skipped instead of weakening the rest of the result.
+ *
+ * Ignored entries are skipped here even though a directly requested read of an ignored file
+ * succeeds: crawling node_modules, .venv, and build output would dominate every query for results
+ * nobody asked for. Search scope and the content boundary are deliberately different — the boundary
+ * (assertFileContentNotSensitive) is about secrets, this filter is about cost.
  */
 export async function searchProjectFiles(
   root: string,
@@ -65,6 +70,7 @@ export async function searchProjectFiles(
         directories.push(entry.relativePath);
         continue;
       }
+      // Scope, not security: ignored files stay out of project-wide search for cost reasons.
       if (entry.kind !== 'file' || !entry.canOpen || entry.policy.status !== 'normal') continue;
       if (scannedFiles >= options.maxFiles) {
         truncated = true;
@@ -80,7 +86,7 @@ export async function searchProjectFiles(
       }
 
       try {
-        assertFileContentAllowed(matcher, entry.relativePath);
+        assertFileContentNotSensitive(entry.relativePath);
         const document = await readProjectDocument(root, projectId, entry.relativePath, {
           maxTextBytes: options.maxFileBytes,
         });
