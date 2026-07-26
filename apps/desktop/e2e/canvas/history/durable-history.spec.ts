@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
 import {
+  closeElectronAfterTest,
   launchDesktop,
   runCanvasNodeContextAction,
   watchExternalRequests,
@@ -44,7 +45,7 @@ test('canvas undo and redo checkpoints survive full process restarts', async () 
     await expect(page.getByRole('article', { name: /^Agent: /u })).toHaveCount(0);
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { force: true, recursive: true });
   }
 });

@@ -227,7 +227,10 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
     '@forgeboard/git-engine#ChangeService',
     '@forgeboard/git-engine#RepositoryService',
   ]),
-  'index.ts': entry('audited-authority', ['electron#shell']), // external-open handoff for preview webviews
+  'index.ts': entry('audited-authority', [
+    'electron#shell', // external-open handoff for preview webviews
+    'node:fs#appendFileSync', // optional E2E startup diagnostics
+  ]),
   'ipc.ts': entry('audited-authority', [
     '@forgeboard/git-engine#GitRemoteConfigurationService',
     'electron#shell',
@@ -301,6 +304,7 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
     ],
   ),
   'recovery/database/startup-adapter/open-store.ts': entry('journaled-startup-recovery', [
+    'node:fs#appendFileSync', // optional E2E startup diagnostics
     'node:fs/promises#chmod',
     'node:fs/promises#mkdir',
     'node:fs/promises#mkdtemp',
@@ -308,9 +312,6 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
   ]),
   'recovery/import-file.ts': entry('audited-authority', ['node:fs/promises#open']),
   'runs/run-service.ts': entry('reviewed-runtime', ['@forgeboard/git-engine#RepositoryService']),
-  'security/windows/filesystem-acl.ts': entry('durable-internal-state', [
-    'node:child_process#execFile',
-  ]),
   'settings/settings-ipc.ts': entry('audited-authority', ['node:fs/promises#writeFile']),
   'smoke/packaged.ts': entry('test-and-packaging', ['node:fs#unlinkSync']),
   'storage/backup/health.ts': entry('durable-internal-state', ['node:sqlite#DatabaseSync']),
@@ -412,11 +413,14 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
     [
       'node:fs#fsyncSync',
       'node:fs#openSync',
-      'node:fs#renameSync',
       'node:fs#unlinkSync',
       'node:fs/promises#open',
       'node:fs/promises#unlink',
     ],
+  ),
+  'packages/git-engine/src/repository/remotes/windows-durable-replace.ts': entry(
+    'reviewed-domain-operation',
+    ['node:fs#renameSync'],
   ),
   'packages/git-engine/src/repository/service.ts': entry('reviewed-domain-operation', [
     'node:fs/promises#open',

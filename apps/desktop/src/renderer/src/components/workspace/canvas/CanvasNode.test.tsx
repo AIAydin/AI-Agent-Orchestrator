@@ -234,6 +234,53 @@ describe('CanvasNode presentation interactions', () => {
     expect(node.classList.contains('agent-drag-handle')).toBe(true);
     expect(node.getAttribute('data-provider')).toBe('claude');
   });
+
+  it('renders the text kind frameless: no handles, no collapse, rotation transform', () => {
+    renderNode(nodeData({ kind: 'text', rotationDeg: 30, text: 'Hi' }));
+
+    expect(screen.queryByRole('button', { name: /Collapse|Expand/ })).toBeNull();
+    const article = screen.getByRole('article');
+    expect(article.className).toContain('text-node');
+    expect(article.getAttribute('style')).toContain('--text-rotation: 30deg');
+    expect(document.querySelectorAll('.node-handle')).toHaveLength(0);
+  });
+
+  it('shows the text rotate handle only while selected and mutable', () => {
+    renderNode(nodeData({ kind: 'text' }), { selected: true });
+    expect(screen.getByRole('button', { name: 'Rotate text' })).toBeTruthy();
+
+    cleanup();
+    renderNode(nodeData({ kind: 'text' }), { selected: false });
+    expect(screen.queryByRole('button', { name: 'Rotate text' })).toBeNull();
+
+    cleanup();
+    renderNode(nodeData({ kind: 'text', locked: true }), { selected: true });
+    expect(screen.queryByRole('button', { name: 'Rotate text' })).toBeNull();
+  });
+
+  it('shows size controls in the text node header, mutating fontSize on click', () => {
+    const updateNodeData = vi.fn();
+    render(
+      <CanvasNodeInteractionProvider readOnly={false} setCollapsed={vi.fn()}>
+        <AgentSessionProvider value={{ ...sessionValue(), updateNodeData }}>
+          <CanvasNode {...nodeProps(nodeData({ kind: 'text', fontSize: 's' }), true)} />
+        </AgentSessionProvider>
+      </CanvasNodeInteractionProvider>,
+    );
+
+    const large = screen.getByRole('button', { name: 'Large text' });
+    fireEvent.click(large);
+    expect(updateNodeData).toHaveBeenCalledWith('node-1', { fontSize: 'l' });
+  });
+
+  it('disables size controls for a locked text node and enables them once unlocked and selected', () => {
+    renderNode(nodeData({ kind: 'text', locked: true }), { selected: true });
+    expect(screen.getByRole('button', { name: 'Small text' })).toHaveProperty('disabled', true);
+
+    cleanup();
+    renderNode(nodeData({ kind: 'text', locked: false }), { selected: true });
+    expect(screen.getByRole('button', { name: 'Small text' })).toHaveProperty('disabled', false);
+  });
 });
 
 function renderNode(

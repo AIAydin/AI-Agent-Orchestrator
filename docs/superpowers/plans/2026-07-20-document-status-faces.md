@@ -27,7 +27,7 @@
 
 ## Global Constraints
 
-- **Execute in the Phase 2 worktree:** `/Users/aydin/ai-agent-orchestrator-phase2` on branch `feature/content-on-node`. Do NOT touch `/Users/aydin/AI Agent Orchestrator` (another session owns that checkout). The worktree's tree is CLEAN — plain `git add <exact paths>` is fine, but still stage only the files each task names; never `git add -A`.
+- **Execute in the Phase 2 worktree:** use the checkout for branch `feature/content-on-node`. Do not touch another session's checkout. The worktree's tree is clean — plain `git add <exact paths>` is fine, but still stage only the files each task names; never `git add -A`.
 - **Renderer-only, no new IPC:** this sub-plan adds no IPC channels, no preload surface, and no main-process code. Faces may call only preload APIs the inspectors already call (`files.chooseImage`/`loadImage`, `git.remote.*` + `runs.list` via `useGitPrNodeController`, `workflows.revealArtifact`/`openArtifact`). Any deviation requires explicit justification in the commit message.
 - **Panels stay functional:** do not delete or degrade any inspector panel; sidebar removal is sub-plan 2d. Update panel code only for the extractions named in Files lists. Never weaken an existing test assertion — add provider wrappers when a test newly needs context, nothing else.
 - **Faces must keep node chrome intact:** collapse (35px pill), lock, group membership, and resize continue to work for all eight kinds; every face root is `.node-face` inside the existing `<article class="canvas-node">`, and scroll/drag isolation uses `nowheel nodrag` exactly like `PreviewNodeFace`.

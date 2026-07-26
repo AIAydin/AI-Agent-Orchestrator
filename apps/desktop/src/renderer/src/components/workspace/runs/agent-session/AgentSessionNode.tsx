@@ -41,6 +41,26 @@ const EMPTY_CONFIGURATION: TerminalNodeConfiguration = {
 /** Shown whenever the hub could not hand back a usable peer channel, whatever the cause. */
 const PEER_TOOLS_UNAVAILABLE_HINT = 'Peer tools unavailable.';
 
+const POSIX_SIGNAL_NAMES: Readonly<Record<string, string>> = {
+  '1': 'SIGHUP',
+  '2': 'SIGINT',
+  '3': 'SIGQUIT',
+  '6': 'SIGABRT',
+  '9': 'SIGKILL',
+  '15': 'SIGTERM',
+};
+
+function sessionEndLabel(status: TerminalSessionView['status'] | undefined): string {
+  if (status === 'terminated') return 'Session stopped';
+  if (status === 'interrupted') return 'Session interrupted';
+  if (status === 'lost') return 'Session disconnected';
+  return 'Session ended';
+}
+
+function signalLabel(signal: string): string {
+  return POSIX_SIGNAL_NAMES[signal] ?? signal;
+}
+
 /**
  * The canvas window that hosts a real CLI session for an agent node. It renders the provider-tinted
  * title bar, the embedded terminal (or a start/exit card), and a bottom
@@ -125,9 +145,10 @@ export function AgentSessionNode({
   // still says "Session ended" hides launch failures, so surface whatever the process reported.
   const exitCode = controller.session?.exitCode ?? null;
   const exitSignal = controller.session?.exitSignal ?? null;
+  const endLabel = sessionEndLabel(controller.session?.status);
   const exitDetail =
     (exitCode !== null ? ` · exit ${String(exitCode)}` : '') +
-    (exitSignal !== null ? ` · ${exitSignal}` : '');
+    (exitSignal !== null ? ` · signal ${signalLabel(exitSignal)}` : '');
 
   // Restart-to-apply: remember the config key that was live when the session was last (re)launched;
   // when the desired launch config drifts from it while a session is live, prompt to restart.
@@ -392,7 +413,10 @@ export function AgentSessionNode({
             />
           </div>
           <div className="agent-exit-strip">
-            <span>Session ended{exitDetail}</span>
+            <span>
+              {endLabel}
+              {exitDetail}
+            </span>
             <button
               type="button"
               className="button"

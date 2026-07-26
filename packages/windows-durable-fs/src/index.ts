@@ -22,11 +22,14 @@ export interface WindowsDurableFilesystemAuthority {
 }
 
 export interface WindowsDurableNativeBinding {
+  readonly currentUserSid: () => string;
+  readonly inspectFilesystemAcl: (path: string) => string;
   readonly moveFileWriteThrough: (
     source: string,
     destination: string,
     replaceExisting: boolean,
   ) => void;
+  readonly protectFilesystemAcl: (path: string, currentUserSid: string, directory: boolean) => void;
 }
 
 type LoadNativeBinding = () => WindowsDurableNativeBinding;
@@ -34,6 +37,52 @@ type LoadNativeBinding = () => WindowsDurableNativeBinding;
 const MAXIMUM_WINDOWS_PATH_CHARACTERS = 32_767;
 const BOUNDED_MOVE_FAILURE = 'Forgeboard could not complete the durable Windows move.';
 let defaultAuthority: WindowsDurableFilesystemAuthority | undefined;
+let defaultNativeBinding: WindowsDurableNativeBinding | undefined;
+
+export function currentWindowsUserSid(): Promise<string> {
+  if (process.platform !== 'win32') {
+    return Promise.reject(new Error('Forgeboard Windows identity authority is unavailable.'));
+  }
+  try {
+    const sid = defaultWindowsNativeBinding().currentUserSid();
+    return Promise.resolve(validWindowsSid(sid));
+  } catch {
+    return Promise.reject(new Error('Forgeboard could not verify the current Windows account.'));
+  }
+}
+
+export function inspectWindowsFilesystemAcl(path: string): Promise<string> {
+  if (process.platform !== 'win32') {
+    return Promise.reject(new Error('Forgeboard Windows permission authority is unavailable.'));
+  }
+  try {
+    return Promise.resolve(
+      defaultWindowsNativeBinding().inspectFilesystemAcl(validWindowsPath(path)),
+    );
+  } catch {
+    return Promise.reject(new Error('Forgeboard could not inspect Windows permissions.'));
+  }
+}
+
+export function protectWindowsFilesystemAcl(
+  path: string,
+  currentUserSid: string,
+  directory: boolean,
+): Promise<void> {
+  if (process.platform !== 'win32') {
+    return Promise.reject(new Error('Forgeboard Windows permission authority is unavailable.'));
+  }
+  try {
+    defaultWindowsNativeBinding().protectFilesystemAcl(
+      validWindowsPath(path),
+      validWindowsSid(currentUserSid),
+      directory,
+    );
+    return Promise.resolve();
+  } catch {
+    return Promise.reject(new Error('Forgeboard could not protect Windows permissions.'));
+  }
+}
 
 /** Generic production entrypoint for startup markers and atomic database restore namespaces. */
 export async function moveFileWriteThrough(
@@ -124,6 +173,14 @@ function validWindowsPath(value: string): string {
   return value;
 }
 
+function validWindowsSid(value: string): string {
+  const normalized = value.toUpperCase();
+  if (!/^S-\d(?:-\d+){1,15}$/u.test(normalized) || normalized.length > 184) {
+    throw new Error('Forgeboard rejected the Windows identity response.');
+  }
+  return normalized;
+}
+
 function hasStrictWindowsComponents(value: string): boolean {
   const driveAbsolute = /^[A-Za-z]:\\/u.test(value);
   const components = value.slice(driveAbsolute ? 3 : 2).split('\\');
@@ -150,11 +207,21 @@ function loadWindowsNativeBinding(): WindowsDurableNativeBinding {
   return loaded;
 }
 
+function defaultWindowsNativeBinding(): WindowsDurableNativeBinding {
+  defaultNativeBinding ??= loadWindowsNativeBinding();
+  return defaultNativeBinding;
+}
+
 function isNativeBinding(value: unknown): value is WindowsDurableNativeBinding {
   return (
     typeof value === 'object' &&
     value !== null &&
+    typeof (value as { readonly currentUserSid?: unknown }).currentUserSid === 'function' &&
+    typeof (value as { readonly inspectFilesystemAcl?: unknown }).inspectFilesystemAcl ===
+      'function' &&
     typeof (value as { readonly moveFileWriteThrough?: unknown }).moveFileWriteThrough ===
+      'function' &&
+    typeof (value as { readonly protectFilesystemAcl?: unknown }).protectFilesystemAcl ===
       'function'
   );
 }

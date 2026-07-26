@@ -11,6 +11,11 @@ async function verifyElectronAbiAndDirectoryPublication() {
   const binding = require('../loader.cjs');
   const root = await mkdtemp(join(tmpdir(), 'forgeboard-windows-electron-abi-'));
   try {
+    const sid = binding.currentUserSid();
+    binding.protectFilesystemAcl(root, sid, true);
+    const acl = JSON.parse(binding.inspectFilesystemAcl(root));
+    assert.equal(acl.ownerSid, sid);
+    assert.equal(acl.protected, true);
     const staging = join(root, 'restore.staging');
     const published = join(root, 'restore');
     await mkdir(staging);

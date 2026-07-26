@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
 import {
+  closeElectronAfterTest,
   launchDesktop,
   renameCanvasNode,
   runCanvasNodeContextAction,
@@ -127,7 +128,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
       .toHaveLength(1);
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

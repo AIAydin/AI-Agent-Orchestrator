@@ -29,10 +29,19 @@ test('the collaboration image copies local core sources before bundling the serv
     path.join(repositoryRoot, 'apps', 'collab-server', 'Dockerfile'),
     'utf8',
   );
+  const workspaceCopy = source.indexOf('COPY package.json pnpm-lock.yaml pnpm-workspace.yaml');
+  const patchesCopy = source.indexOf('COPY patches ./patches');
+  const install = source.indexOf('pnpm install --frozen-lockfile');
   const manifestCopy = source.indexOf('COPY packages/core/package.json');
   const sourceCopy = source.indexOf('COPY packages/core/src');
   const serverBuild = source.indexOf('RUN pnpm --filter @forgeboard/collab-server build');
 
+  assert.ok(workspaceCopy >= 0, 'Dockerfile must copy the pnpm workspace inputs');
+  assert.ok(
+    patchesCopy > workspaceCopy,
+    'Dockerfile must copy managed patches after workspace inputs',
+  );
+  assert.ok(install > patchesCopy, 'Dockerfile must copy managed patches before install');
   assert.ok(manifestCopy >= 0, 'Dockerfile must copy the core package manifest before install');
   assert.ok(sourceCopy > manifestCopy, 'Dockerfile must copy the core package source');
   assert.ok(

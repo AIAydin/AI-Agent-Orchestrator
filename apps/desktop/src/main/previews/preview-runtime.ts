@@ -55,6 +55,7 @@ export interface PreviewRuntimeStore {
 export interface PreviewRuntimeOptions {
   serviceOptions?: ConstructorParameters<typeof PreviewService>[0];
   targetResolver?: Pick<PreviewTargetResolver, 'resolve' | 'list'>;
+  repositories?: RepositoryService;
 }
 
 interface PreviewAttempt {
@@ -152,7 +153,7 @@ export class PreviewRuntime {
               }),
           listProjectRuns: (projectId, limit) => store.listProjectRuns?.(projectId, limit) ?? [],
         },
-        new RepositoryService(),
+        options.repositories ?? new RepositoryService(),
         getSettings,
       );
     this.#service = new PreviewService({

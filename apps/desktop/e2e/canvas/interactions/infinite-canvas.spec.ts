@@ -106,7 +106,12 @@ test('infinite-canvas interactions persist locally without outbound requests', a
         exact: true,
       });
       await clickExposedCorner(alpha);
-      await clickExposedCorner(beta, [shortcutModifier]);
+      await page.keyboard.down(shortcutModifier);
+      try {
+        await clickExposedCorner(beta, [shortcutModifier]);
+      } finally {
+        await page.keyboard.up(shortcutModifier);
+      }
       await expect(page.locator('.react-flow__node.selected')).toHaveCount(2);
 
       await flowNode(beta).focus();

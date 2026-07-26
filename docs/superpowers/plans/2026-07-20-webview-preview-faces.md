@@ -22,7 +22,7 @@
 
 ## Global Constraints
 
-- **Execute in the Phase 2 worktree:** `/Users/aydin/ai-agent-orchestrator-phase2` on branch `feature/content-on-node`. Do NOT touch `/Users/aydin/AI Agent Orchestrator` (another session owns that checkout). The worktree's tree is CLEAN — plain `git add <exact paths>` is fine, but still stage only the files each task names; never `git add -A`.
+- **Execute in the Phase 2 worktree:** use the checkout for branch `feature/content-on-node`. Do not touch another session's checkout. The worktree's tree is clean — plain `git add <exact paths>` is fine, but still stage only the files each task names; never `git add -A`.
 - **Never weaken existing WebContents security tests.** The workspace-window policies in `main/index.ts` (window-open deny, will-navigate lock, frame-navigation filter) and their behavior are untouched. When the WebContentsView surface tests are deleted in Task 6, every enforcement they covered (navigation denial, window.open denial, permission denial, download denial, request filtering, nested-webview denial) must already have equivalent-or-stronger coverage in `webview-security.test.ts` (Task 1). Update test expectations only to reflect the removed surface — never to loosen an assertion.
 - Security ordering: Task 1 (hardening) must be merged before Tasks 4-5 render any `<webview>`. Task 6 (removal of the old path) runs last, after the modal migration. The app must build, typecheck, and pass tests after every task.
 - `webviewTag` is enabled only in the workspace window's `webPreferences` (the app's single `BrowserWindow`); attach requests are denied unless the partition matches the preview pattern. Guest preferences are force-hardened (no preload, no nodeIntegration, contextIsolation on, sandbox on).

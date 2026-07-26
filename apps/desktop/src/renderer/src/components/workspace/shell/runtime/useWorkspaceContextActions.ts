@@ -179,6 +179,10 @@ export function useWorkspaceContextActions({
         onError('Unlock both nodes before connecting them.');
         return;
       }
+      if (source.data.kind === 'text' || target.data.kind === 'text') {
+        onError('Text nodes are annotations and cannot be connected.');
+        return;
+      }
       const alreadyConnected = edgesRef.current.some(
         (edge) =>
           edge.data?.edgeType === 'context' &&

@@ -71,6 +71,7 @@ import { performAuditedLocalEffect } from './lifecycle/audit/local-effect.js';
 import { OutboundActionGate } from './outbound/outbound-action-gate.js';
 import { createGitHubCliCommandRunner } from './outbound/git/executors.js';
 import { PreviewIpcService } from './previews/preview-ipc.js';
+import { PreviewRuntime } from './previews/preview-runtime.js';
 import { BrowserCompanionIpcService } from './browser-companion/ipc.js';
 import { BrowserCompanionService } from './browser-companion/service.js';
 import { PreviewAgentBrowser } from './previews/webview/preview-agent-browser.js';
@@ -411,8 +412,12 @@ export function registerIpcHandlers(
     undefined,
     (owner) => collaboration.assertAgentMutationAuthorized(owner),
   );
-  const previews = new PreviewIpcService(dialog, store, () =>
-    store.getSettings(createDefaultSettings()),
+  const getPreviewSettings = (): AppSettings => store.getSettings(createDefaultSettings());
+  const previews = new PreviewIpcService(
+    dialog,
+    store,
+    getPreviewSettings,
+    (emit) => new PreviewRuntime(store, getPreviewSettings, emit, { repositories }),
   );
   const browserCompanion = new BrowserCompanionIpcService(
     new BrowserCompanionService({

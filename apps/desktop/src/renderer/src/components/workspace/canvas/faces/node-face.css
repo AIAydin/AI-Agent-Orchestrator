@@ -7,10 +7,18 @@
 .canvas-node[data-node-kind='task']:not(.collapsed),
 .canvas-node[data-node-kind='review-gate']:not(.collapsed),
 .canvas-node[data-node-kind='git-pr']:not(.collapsed),
-.canvas-node[data-node-kind='test']:not(.collapsed) {
+.canvas-node[data-node-kind='test']:not(.collapsed),
+.canvas-node[data-node-kind='text']:not(.collapsed) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+/* The text node's floating header pill (top: -38px) and rotate handle (top: -64px) live outside
+   the node's own box by design (canvas.css). The shared clip above hides them entirely for mouse
+   and screen interaction, so text nodes opt back out of it; other kinds keep clipping content
+   that overflows their fixed-height card. */
+.canvas-node[data-node-kind='text']:not(.collapsed) {
+  overflow: visible;
 }
 .canvas-node[data-node-kind='diagram']:not(.collapsed) > header,
 .canvas-node[data-node-kind='whiteboard']:not(.collapsed) > header,
@@ -19,7 +27,8 @@
 .canvas-node[data-node-kind='task']:not(.collapsed) > header,
 .canvas-node[data-node-kind='review-gate']:not(.collapsed) > header,
 .canvas-node[data-node-kind='git-pr']:not(.collapsed) > header,
-.canvas-node[data-node-kind='test']:not(.collapsed) > header {
+.canvas-node[data-node-kind='test']:not(.collapsed) > header,
+.canvas-node[data-node-kind='text']:not(.collapsed) > header {
   flex: 0 0 auto;
 }
 .canvas-node[data-node-kind='terminal']:not(.collapsed),

@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../support/electron.js';
 
 const shortcutModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
@@ -90,7 +94,7 @@ test('onboarding and appearance controls work with only the keyboard', async () 
 
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

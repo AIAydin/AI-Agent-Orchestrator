@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
 import {
+  closeElectronAfterTest,
   launchDesktop,
   openCanvasNodeDetails,
   renameCanvasNode,
@@ -136,7 +137,7 @@ test('two simultaneous profiles share cursors, comments, and canvas updates with
   } finally {
     await Promise.all(
       applications.toReversed().map(async (application) => {
-        await application.close().catch(() => undefined);
+        await closeElectronAfterTest(application);
       }),
     );
     await server?.stop().catch(() => undefined);

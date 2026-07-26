@@ -107,6 +107,22 @@ describe('CanvasNodeContextMenu', () => {
     expect(callbacks.onRun).not.toHaveBeenCalled();
   });
 
+  it('disables Collapse for a text node, since a collapsed text node has no visible chrome', () => {
+    const callbacks = props();
+    render(
+      <CanvasNodeContextMenu
+        {...callbacks}
+        node={{ ...node(), data: { ...node().data, kind: 'text' } }}
+      />,
+    );
+    const collapse = screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Collapse' });
+    expect(collapse.disabled).toBe(true);
+    const reason = screen.getByRole('tooltip', { name: 'Text nodes cannot be collapsed.' });
+    expect(collapse.getAttribute('aria-describedby')).toBe(reason.id);
+    fireEvent.click(collapse);
+    expect(callbacks.onSetCollapsed).not.toHaveBeenCalled();
+  });
+
   it('dismisses for an outside pointer without running an action', () => {
     const callbacks = props();
     render(<CanvasNodeContextMenu {...callbacks} />);

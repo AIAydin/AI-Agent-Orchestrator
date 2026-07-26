@@ -1,4 +1,4 @@
-import { chmod, copyFile, mkdir, readFile, realpath } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,9 +13,20 @@ export interface FixtureInvocation {
 
 export async function installOAuthCliFixture(root: string): Promise<string> {
   const fixtureDirectory = join(root, 'provider-oauth-fixture');
-  const executable = join(fixtureDirectory, 'forgeboard-oauth-cli');
   await mkdir(fixtureDirectory, { recursive: true });
   const source = fileURLToPath(new URL('./fixtures/scripts/oauth-cli.mjs', import.meta.url));
+  if (process.platform === 'win32') {
+    const script = join(fixtureDirectory, 'oauth-cli.mjs');
+    const executable = join(fixtureDirectory, 'forgeboard-oauth-cli.cmd');
+    await copyFile(source, script);
+    await writeFile(
+      executable,
+      ['@echo off', `"${process.execPath}" "${script}" %*`].join('\r\n'),
+      'utf8',
+    );
+    return await realpath(executable);
+  }
+  const executable = join(fixtureDirectory, 'forgeboard-oauth-cli');
   await copyFile(source, executable);
   await chmod(executable, 0o700);
   return await realpath(executable);

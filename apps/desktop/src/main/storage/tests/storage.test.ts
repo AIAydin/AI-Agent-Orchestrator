@@ -563,7 +563,7 @@ describe('LocalStore', () => {
       'project-query-secret',
       'project-fragment-secret',
       'script-token-secret',
-      'sk_live_51abcdefghijklmnopqrstuv',
+      ['sk', 'live', '51FAKEVALUEFORREDACTIONCOVERAGE'].join('_'),
     ];
 
     store.appendAudit('agent', 'launch', 'denied', {

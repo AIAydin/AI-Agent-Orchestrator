@@ -97,7 +97,7 @@ export function expectProviderDisclosure(
   );
   expect(detail).toContain('Working directory:');
   expect(detail).toContain('Environment variable names:');
-  expect(detail).toContain('"HOME"');
+  expect(detail).toContain(process.platform === 'win32' ? '"USERPROFILE"' : '"HOME"');
   expect(detail).toContain('"PATH"');
   expect(detail).toContain('Provider: OpenAI Codex');
   expect(detail).toContain('Network disclosure: Codex opens and owns its official sign-in flow');

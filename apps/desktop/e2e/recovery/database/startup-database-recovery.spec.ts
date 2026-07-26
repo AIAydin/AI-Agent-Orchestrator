@@ -4,7 +4,12 @@ import { join, resolve } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, renameCanvasNode, watchExternalRequests } from '../../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  renameCanvasNode,
+  watchExternalRequests,
+} from '../../support/electron.js';
 
 test('startup restores a corrupt local database from the verified backup chosen by the user', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-startup-recovery-e2e-'));
@@ -95,7 +100,7 @@ test('startup restores a corrupt local database from the verified backup chosen 
     ]);
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

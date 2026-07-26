@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../support/electron.js';
 
 test('project checks configure, approve, execute, cancel, and persist entirely through the UI', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-checks-e2e-'));
@@ -132,7 +136,7 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
     expect(await fileSize(heartbeat)).toBe(stoppedSize);
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

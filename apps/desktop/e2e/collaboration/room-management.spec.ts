@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../support/electron.js';
 import {
   expectCancelDefaultDialog,
   installCollaborationDialogHarness,
@@ -98,7 +102,7 @@ test('room creation, owner administration, audit, and renewal work through the U
     await expect(owner.page.getByRole('article', { name: /^Product brief: /u })).toBeVisible();
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await server?.stop().catch(() => undefined);
     await rm(root, { recursive: true, force: true });
   }

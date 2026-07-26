@@ -4,7 +4,11 @@ import { join, resolve } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchNetworkRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchNetworkRequests,
+} from '../support/electron.js';
 import { readTripwireLog } from './fixtures/tripwire-log.js';
 
 const desktopRoot = resolve(import.meta.dirname, '../..');
@@ -62,7 +66,7 @@ test('first launch, safe demo, idle, shutdown, and relaunch stay local by defaul
       { cause: error },
     );
   } finally {
-    await app?.close().catch(() => undefined);
+    await closeElectronAfterTest(app);
     await rm(root, { recursive: true, force: true });
   }
 });

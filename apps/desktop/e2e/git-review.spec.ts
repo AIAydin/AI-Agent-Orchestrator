@@ -6,7 +6,11 @@ import { join } from 'node:path';
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
 import type { IpcResult, Project } from '../src/shared/application/contracts.js';
-import { launchDesktop, watchExternalRequests } from './support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from './support/electron.js';
 
 test('authoritative Git review stages, unstages, and discloses the exact local commit', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-git-review-e2e-'));
@@ -76,7 +80,7 @@ test('authoritative Git review stages, unstages, and discloses the exact local c
     expect(gitHead(projectPath)).toBe(headBefore);
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

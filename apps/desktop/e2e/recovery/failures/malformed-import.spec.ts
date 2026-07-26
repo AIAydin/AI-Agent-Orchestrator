@@ -4,7 +4,12 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, renameCanvasNode, watchExternalRequests } from '../../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  renameCanvasNode,
+  watchExternalRequests,
+} from '../../support/electron.js';
 
 test('a malformed replace-import fails before confirmation and preserves local work', async () => {
   const root = await mkdtemp(join(tmpdir(), 'forgeboard-malformed-import-e2e-'));
@@ -80,7 +85,7 @@ test('a malformed replace-import fails before confirmation and preserves local w
     ).toBeVisible();
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(root, { force: true, recursive: true });
   }
 });

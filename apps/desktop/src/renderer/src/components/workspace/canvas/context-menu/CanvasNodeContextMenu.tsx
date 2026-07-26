@@ -71,7 +71,9 @@ export function CanvasNodeContextMenu(props: CanvasNodeContextMenuProps) {
   }, []);
 
   const mutationDisabled = props.readOnly;
-  const presentationDisabled = mutationDisabled || props.node.data.locked || props.inheritedLock;
+  const isText = props.node.data.kind === 'text';
+  const presentationDisabled =
+    mutationDisabled || props.node.data.locked || props.inheritedLock || isText;
   const lockDisabled = mutationDisabled || props.inheritedLock;
   const deleteDisabled = mutationDisabled || props.node.data.locked || props.deletionProtected;
 
@@ -222,7 +224,9 @@ function presentationReason(props: CanvasNodeContextMenuProps): string | undefin
       ? 'Unlock the containing group frame before changing this node.'
       : props.node.data.locked
         ? 'Unlock this node before changing its presentation.'
-        : undefined)
+        : props.node.data.kind === 'text'
+          ? 'Text nodes cannot be collapsed.'
+          : undefined)
   );
 }
 

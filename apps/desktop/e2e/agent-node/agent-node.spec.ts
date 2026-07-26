@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Locator } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../support/electron.js';
 import { createRepository, findFiles, primarySnapshot } from './fixture.js';
 import { choosePath } from './native-confirmation.js';
 
@@ -44,9 +48,12 @@ test('Agent sessions launch a reconstructed built-in command in a managed worktr
       .locator('.agent-readiness-list')
       .getByRole('button', { name: /Check OpenCode again/u });
     await openCodeReadiness.click();
+    await expect(openCodeReadiness).toBeEnabled({ timeout: 20_000 });
+    const readinessMessages = await settings.locator('.agent-readiness-list').allTextContents();
     await expect(
       settings.locator('.agent-readiness-list').getByText(/executable is ready/u),
-    ).toBeVisible();
+      `OpenCode readiness: ${readinessMessages.join(' | ')}`,
+    ).toBeVisible({ timeout: 20_000 });
     const saveSettings = settings.getByRole('button', {
       name: /Save settings/u,
     });
@@ -95,7 +102,7 @@ test('Agent sessions launch a reconstructed built-in command in a managed worktr
     expect(await readFile(proofFiles[0]!, 'utf8')).toBe('managed worktree session\n');
     expect(externalRequests).toEqual([]);
   } finally {
-    await app?.close().catch(() => undefined);
+    await closeElectronAfterTest(app);
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -138,11 +145,11 @@ async function writeFakeOpenCode(root: string): Promise<string> {
       executablePath,
       [
         '@echo off',
-        'if "%1"=="--version" (',
+        'if "%~1"=="--version" (',
         '  echo 1.2.3',
         '  exit /b 0',
         ')',
-        'if "%1"=="--help" (',
+        'if "%~1"=="--help" (',
         '  echo --session --model --prompt',
         '  exit /b 0',
         ')',
@@ -179,10 +186,24 @@ function shellQuote(value: string): string {
 }
 
 async function expectTerminalText(agent: Locator, expected: string): Promise<void> {
-  await expect
-    .poll(
-      async () => (await agent.getByRole('application', { name: 'Terminal' }).textContent()) ?? '',
-      { timeout: 20_000 },
-    )
-    .toContain(expected);
+  const terminal = agent.getByRole('application', { name: 'Terminal' });
+  try {
+    await expect
+      .poll(async () => (await terminal.textContent()) ?? '', {
+        timeout: 20_000,
+      })
+      .toContain(expected);
+  } catch (cause) {
+    const terminalText =
+      (await terminal.count()) === 0
+        ? '<terminal not mounted>'
+        : await terminal.textContent({ timeout: 1_000 }).catch(() => '<terminal unavailable>');
+    const agentText = await agent
+      .textContent({ timeout: 1_000 })
+      .catch(() => '<agent node unavailable>');
+    throw new Error(
+      `Agent terminal did not contain ${JSON.stringify(expected)}. Terminal: ${JSON.stringify(terminalText)}. Agent: ${JSON.stringify(agentText)}.`,
+      { cause },
+    );
+  }
 }

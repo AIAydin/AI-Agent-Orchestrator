@@ -17,10 +17,11 @@
   },
   "dependencies": {
     "@forgeboard/core": "workspace:*",
+    "@forgeboard/windows-durable-fs": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
     "tsup": "catalog:",
-    "vitest": "3.2.4"
+    "vitest": "3.2.6"
   }
 }

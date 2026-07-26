@@ -392,7 +392,7 @@ describe('GitRemoteConfigurationService', () => {
     }
   });
 
-  it('runs final authority with a staged config and lock immediately before synchronous commit', async () => {
+  it('runs final authority with a staged config and lock immediately before atomic commit', async () => {
     const fixture = await fixtureRepository(fixtures);
     const executor = new RecordingGitExecutor();
     const service = new GitRemoteConfigurationService(new RepositoryService(executor));
