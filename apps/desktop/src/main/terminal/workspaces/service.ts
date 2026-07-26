@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
 import path from 'node:path';
 
 import {
@@ -16,13 +17,22 @@ import {
   type TerminalSessionView,
 } from '../../../shared/terminal/index.js';
 import { synchronizeCanvasDocument } from '../../../shared/canvas/adapter.js';
+import { resolveDockerSessionLaunch } from '../../docker/docker-session.js';
 import type { LocalStore, StoredRunRecord } from '../../storage.js';
 import { assertPersistedAgentNodeMutable } from '../../runs/context/persisted-agent-context.js';
+import { environmentWithLoginShellPath, loginShellPath } from '../environment/login-shell-path.js';
 import type {
   AutomaticTerminalAgentLaunch,
+  AutomaticTerminalProjectLaunch,
   PreparedTerminalWorkspace,
   TerminalWorkspaceManager,
 } from './contracts.js';
+import {
+  linkSessionHistoryForWorktree,
+  nodeSessionHistoryFileSystem,
+  type SessionHistoryFileSystem,
+  type SessionHistoryLinkOutcome,
+} from './session-history-link.js';
 
 type ManagedTerminalWorkspaceStore = Pick<
   LocalStore,
@@ -34,6 +44,9 @@ interface ManagedTerminalWorkspaceOptions {
   readonly worktrees?: WorktreeService;
   readonly createId?: () => string;
   readonly now?: () => Date;
+  /** Injectable so tests exercise session-history linking without touching the real `~`. */
+  readonly homeDirectory?: () => string;
+  readonly sessionHistoryFileSystem?: SessionHistoryFileSystem;
 }
 
 /**
@@ -46,6 +59,8 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
   readonly #worktrees: WorktreeService;
   readonly #createId: () => string;
   readonly #now: () => Date;
+  readonly #homeDirectory: () => string;
+  readonly #sessionHistoryFileSystem: SessionHistoryFileSystem;
 
   public constructor(
     private readonly store: ManagedTerminalWorkspaceStore,
@@ -56,18 +71,24 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     this.#worktrees = options.worktrees ?? new WorktreeService(this.#repositories);
     this.#createId = options.createId ?? randomUUID;
     this.#now = options.now ?? (() => new Date());
+    this.#homeDirectory = options.homeDirectory ?? homedir;
+    this.#sessionHistoryFileSystem =
+      options.sessionHistoryFileSystem ?? nodeSessionHistoryFileSystem;
   }
 
   public async provision(input: {
     readonly project: Project;
     readonly nodeId: string;
     readonly adapterId: string;
+    readonly runtime?: 'host' | 'docker';
   }): Promise<PreparedTerminalWorkspace> {
-    const configuration = this.#persistedAgentConfiguration(
-      input.project.id,
-      input.nodeId,
-      input.adapterId,
-    );
+    const runtime = input.runtime ?? 'host';
+    const configuration = this.#persistedAgentConfiguration(input.project.id, input.nodeId, {
+      expectedAdapterId: input.adapterId,
+      profiles: ['worktree-write'],
+      profileLabel: '“Write in a worktree”',
+      runtime,
+    });
     const currentProject = this.store.getProject(input.project.id);
     if (
       currentProject === undefined ||
@@ -105,7 +126,7 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       nodeId: input.nodeId,
       adapterId: input.adapterId,
       model: configuration.model,
-      permissionProfile: 'worktree-write',
+      permissionProfile: runtime === 'docker' ? 'docker-isolated' : 'worktree-write',
       providerSessionId: null,
       resumeSupported: null,
       resumeCapabilitySource: null,
@@ -143,19 +164,30 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       }
       throw error;
     }
+    await this.#inheritProjectSessionHistory({
+      runtime,
+      adapterId: input.adapterId,
+      ownership: provisioned.ownership,
+      projectId: currentProject.id,
+      nodeId: input.nodeId,
+      runId,
+    });
     const workspace: PreparedTerminalWorkspace = {
       ownership: provisioned.ownership,
       rootPath: provisioned.ownership.worktreePath,
+      runtime,
       view: {
         kind: 'managed-agent-worktree',
         runId,
         branch: provisioned.ownership.branch,
+        directory: provisioned.ownership.worktreePath,
       },
     };
     this.#safeAudit('provision', 'allowed', {
       projectId: currentProject.id,
       nodeId: input.nodeId,
       adapterId: input.adapterId,
+      runtime,
       runId,
       worktreeId: provisioned.ownership.id,
       branch: provisioned.ownership.branch,
@@ -167,13 +199,18 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
   public async resolveAutomaticAgentLaunch(
     workspace: PreparedTerminalWorkspace,
   ): Promise<AutomaticTerminalAgentLaunch | null> {
+    const runtime = workspace.runtime ?? 'host';
     const record = this.#boundRun(workspace);
-    const configuration = this.#persistedAgentConfiguration(
-      record.projectId,
-      record.nodeId,
-      record.adapterId,
-    );
+    const configuration = this.#persistedAgentConfiguration(record.projectId, record.nodeId, {
+      expectedAdapterId: record.adapterId,
+      profiles: ['worktree-write'],
+      profileLabel: '“Write in a worktree”',
+      runtime,
+    });
     this.#assertRecordedConfiguration(record, configuration);
+    if (runtime === 'docker') {
+      return await this.#resolveDockerAgentLaunch(workspace, record, configuration);
+    }
     const manifest = getBuiltInAgentManifest(record.adapterId);
     if (manifest === undefined) return null;
 
@@ -191,6 +228,8 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
         ? {}
         : { executable: executableOverride }),
       cwd: workspace.rootPath,
+      // The user's login-shell PATH resolves the newest installed CLI, not the stale GUI PATH.
+      environment: environmentWithLoginShellPath(process.env, await loginShellPath()),
     });
     if (!location.available || location.executable === null) {
       throw new Error(
@@ -201,7 +240,11 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     const currentConfiguration = this.#persistedAgentConfiguration(
       record.projectId,
       record.nodeId,
-      record.adapterId,
+      {
+        expectedAdapterId: record.adapterId,
+        profiles: ['worktree-write'],
+        profileLabel: '“Write in a worktree”',
+      },
     );
     this.#assertRecordedConfiguration(record, currentConfiguration);
     const currentOverride = this.getSettings().agentExecutableOverrides[record.adapterId]?.trim();
@@ -216,6 +259,111 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     };
   }
 
+  /**
+   * A Docker-isolated session never falls back to the host CLI: the launch is the docker CLI with
+   * the worktree bind-mounted, or a terse thrown error. The agent CLI runs inside the container.
+   */
+  async #resolveDockerAgentLaunch(
+    workspace: PreparedTerminalWorkspace,
+    record: StoredRunRecord,
+    configuration: { readonly model: string | null },
+  ): Promise<AutomaticTerminalAgentLaunch> {
+    const launch = await resolveDockerSessionLaunch({
+      settings: this.getSettings(),
+      adapterId: record.adapterId,
+      model: configuration.model,
+      worktreePath: workspace.rootPath,
+      containerName: `forgeboard-agent-${this.#createId()}`,
+    });
+    const currentConfiguration = this.#persistedAgentConfiguration(
+      record.projectId,
+      record.nodeId,
+      {
+        expectedAdapterId: record.adapterId,
+        profiles: ['docker-isolated'],
+        profileLabel: '“Docker isolated”',
+        runtime: 'docker',
+      },
+    );
+    this.#assertRecordedConfiguration(record, currentConfiguration);
+    return {
+      executable: launch.executable,
+      arguments: [...launch.arguments],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+    };
+  }
+
+  /**
+   * Reconstructs a built-in Agent command for the "Write in current directory" profile from
+   * persisted main-process state: the CLI runs right in the project checkout, no worktree.
+   * `null` keeps custom/extension adapters on the explicit native-review path.
+   */
+  public async resolveAutomaticProjectLaunch(input: {
+    readonly project: Project;
+    readonly nodeId: string;
+  }): Promise<AutomaticTerminalProjectLaunch | null> {
+    const configuration = this.#persistedAgentConfiguration(input.project.id, input.nodeId, {
+      profiles: ['project-write'],
+      profileLabel: '“Write in current directory”',
+    });
+    const currentProject = this.store.getProject(input.project.id);
+    if (
+      currentProject === undefined ||
+      currentProject.missing ||
+      currentProject.path !== input.project.path
+    ) {
+      throw new Error('The selected Agent project changed before the session started.');
+    }
+    const manifest = getBuiltInAgentManifest(configuration.adapterId);
+    if (manifest === undefined) return null;
+
+    const arguments_ = builtInAgentSessionArguments(
+      configuration.adapterId,
+      configuration.model,
+      'project-write',
+    );
+    if (arguments_ === null) return null;
+
+    const settings = this.getSettings();
+    const executableOverride = settings.agentExecutableOverrides[configuration.adapterId]?.trim();
+    const location = await locateAgentExecutable(manifest, {
+      ...(executableOverride === undefined || executableOverride === ''
+        ? {}
+        : { executable: executableOverride }),
+      cwd: currentProject.path,
+      // The user's login-shell PATH resolves the newest installed CLI, not the stale GUI PATH.
+      environment: environmentWithLoginShellPath(process.env, await loginShellPath()),
+    });
+    if (!location.available || location.executable === null) {
+      throw new Error(
+        `${manifest.name} is not available: ${location.reason ?? 'executable not found'}`,
+      );
+    }
+
+    // Re-read after the async gap so the launch always reflects the currently saved node.
+    const currentConfiguration = this.#persistedAgentConfiguration(input.project.id, input.nodeId, {
+      expectedAdapterId: configuration.adapterId,
+      profiles: ['project-write'],
+      profileLabel: '“Write in current directory”',
+    });
+    if (currentConfiguration.model !== configuration.model) {
+      throw new Error('The saved Agent model changed. Save and start the session again.');
+    }
+    const currentOverride =
+      this.getSettings().agentExecutableOverrides[configuration.adapterId]?.trim();
+    if ((currentOverride ?? '') !== (executableOverride ?? '')) {
+      throw new Error('The saved Agent executable changed. Save and start the session again.');
+    }
+    return {
+      executable: location.executable,
+      arguments: arguments_,
+      cwdRelative: '.',
+      environmentVariableNames: [],
+      adapterId: configuration.adapterId,
+    };
+  }
+
   public async assertCurrent(
     workspace: PreparedTerminalWorkspace,
     project: Project,
@@ -223,7 +371,12 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     const configuration = this.#persistedAgentConfiguration(
       project.id,
       workspace.ownership.taskId ?? '',
-      workspace.ownership.agentId,
+      {
+        expectedAdapterId: workspace.ownership.agentId,
+        profiles: ['worktree-write'],
+        profileLabel: '“Write in a worktree”',
+        runtime: workspace.runtime ?? 'host',
+      },
     );
     this.#assertRecordedConfiguration(this.#boundRun(workspace), configuration);
     const currentProject = this.store.getProject(project.id);
@@ -369,12 +522,63 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     });
   }
 
+  /**
+   * A managed worktree is a directory the agent CLI has never seen, and CLIs that key their session
+   * history by working directory therefore start it empty -- the resume picker says "No sessions
+   * yet" even though the project has years of history. Before the CLI ever runs, point the
+   * worktree's history directory at the project's, so resume lists the owner's real sessions and
+   * sessions started in the worktree are written into the project's history (and so stay resumable
+   * from the project checkout after the worktree is cleaned up).
+   *
+   * Best effort in every direction: a missing project history, an occupied destination, a read-only
+   * home, or a platform without symbolic links is audited and ignored, never surfaced into the
+   * launch path. Docker-isolated sessions are skipped outright -- that runtime bind-mounts the
+   * worktree at a container path and shares nothing else from the host, so the container's CLI
+   * never reads the host's history at all.
+   */
+  async #inheritProjectSessionHistory(input: {
+    readonly runtime: 'host' | 'docker';
+    readonly adapterId: string;
+    readonly ownership: WorktreeOwnership;
+    readonly projectId: string;
+    readonly nodeId: string;
+    readonly runId: string;
+  }): Promise<void> {
+    if (input.runtime !== 'host') return;
+    const outcome = await linkSessionHistoryForWorktree(
+      {
+        adapterId: input.adapterId,
+        repositoryRoot: input.ownership.repositoryRoot,
+        worktreePath: input.ownership.worktreePath,
+        homeDirectory: this.#homeDirectory(),
+      },
+      this.#sessionHistoryFileSystem,
+    );
+    this.#safeAudit('session-history-link', sessionHistoryAuditOutcome(outcome), {
+      projectId: input.projectId,
+      nodeId: input.nodeId,
+      runId: input.runId,
+      adapterId: input.adapterId,
+      ...(outcome.linked
+        ? {
+            projectHistoryDirectory: outcome.location.projectHistoryDirectory,
+            worktreeHistoryDirectory: outcome.location.worktreeHistoryDirectory,
+          }
+        : { reason: outcome.reason, detail: outcome.detail }),
+    });
+  }
+
   #persistedAgentConfiguration(
     projectId: string,
     nodeId: string,
-    adapterId: string,
-  ): { readonly model: string | null } {
-    if (nodeId === '') throw new Error('The managed Agent worktree has no owning node.');
+    options: {
+      readonly expectedAdapterId?: string;
+      readonly profiles: readonly string[];
+      readonly profileLabel: string;
+      readonly runtime?: 'host' | 'docker';
+    },
+  ): { readonly model: string | null; readonly adapterId: string } {
+    if (nodeId === '') throw new Error('The managed Agent session has no owning node.');
     assertPersistedAgentNodeMutable(this.store, projectId, nodeId);
     const stored = this.store.loadCanvas(projectId);
     if (stored === undefined) throw new Error('Save this canvas before starting an Agent session.');
@@ -384,20 +588,32 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     }
     const agent = synchronized.document.canonical.nodes.find((node) => node.id === nodeId);
     if (agent === undefined || agent.type !== 'agent') {
-      throw new Error('A managed Agent worktree requires an exact persisted Agent node.');
+      throw new Error('An Agent session requires an exact persisted Agent node.');
     }
     const settings = this.getSettings();
     const persistedAdapter = agent.data.adapterId ?? settings.defaultAgent;
     const profile = agent.data.permissionProfileId ?? settings.defaultPermissionProfile;
-    if (persistedAdapter !== adapterId) {
+    if (options.expectedAdapterId !== undefined && persistedAdapter !== options.expectedAdapterId) {
       throw new Error('The saved Agent adapter changed. Save and start the session again.');
     }
-    if (profile !== 'worktree-write') {
+    if ((options.runtime ?? 'host') === 'docker') {
+      if (profile !== 'docker-isolated') {
+        throw new Error(
+          'The saved Agent no longer selects “Docker isolated”. Save and start it again.',
+        );
+      }
+      if (!settings.dockerEnabled) {
+        throw new Error('Turn on Docker in Settings to use Docker isolated.');
+      }
+    } else if (!options.profiles.includes(profile)) {
       throw new Error(
-        'The saved Agent no longer selects “Write in a worktree”. Save and start it again.',
+        `The saved Agent no longer selects ${options.profileLabel}. Save and start it again.`,
       );
     }
-    return { model: effectiveAgentModel(agent, settings, persistedAdapter) };
+    return {
+      model: effectiveAgentModel(agent, settings, persistedAdapter),
+      adapterId: persistedAdapter,
+    };
   }
 
   #assertRecordedConfiguration(
@@ -480,6 +696,17 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       // The worktree/session result must not be rewritten if audit storage is already unavailable.
     }
   }
+}
+
+/**
+ * `denied` covers the deliberate no-ops -- an adapter whose history is not directory-keyed, no
+ * project history to inherit, something already at the destination -- and is never an error.
+ */
+function sessionHistoryAuditOutcome(
+  outcome: SessionHistoryLinkOutcome,
+): 'allowed' | 'denied' | 'failed' {
+  if (outcome.linked) return 'allowed';
+  return outcome.reason === 'link-failed' ? 'failed' : 'denied';
 }
 
 function effectiveAgentModel(

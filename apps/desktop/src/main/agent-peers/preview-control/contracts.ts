@@ -32,6 +32,22 @@ export function parseScrollRequest(value: unknown): { previewId: string; deltaY:
   return { previewId, deltaY };
 }
 
+export function parseNavigateRequest(value: unknown): { previewId: string; url: string } | null {
+  const record = unknownRecord(value);
+  const previewId = record?.['previewId'];
+  const url = record?.['url'];
+  if (
+    typeof previewId !== 'string' ||
+    previewId.length < 1 ||
+    previewId.length > 512 ||
+    typeof url !== 'string' ||
+    url.length < 1 ||
+    url.length > 2_048
+  )
+    return null;
+  return { previewId, url };
+}
+
 export function parseActionRequest(
   value: unknown,
 ): { previewId: string; action: AgentPreviewAction } | null {

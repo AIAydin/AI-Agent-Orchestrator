@@ -5,11 +5,13 @@ import type {
   Project,
   RunAdapterId,
 } from '../../../../../shared/application/contracts.js';
+import type { FileTreeEntry } from '../../../../../shared/files/contracts.js';
 import type { ProjectFileBrowserOperations } from '../../file-editor/browser/useProjectFileBrowser.js';
 import type { NodeKind, WorkshopNode } from '../canvas/CanvasNode.js';
 import { WorkspaceProjectTree } from '../context-dnd/WorkspaceProjectTree.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import type { ExtensionTemplate } from '../model/types.js';
+import { providerBrandLogo } from '../node-registry/brand-logos.js';
 import { providerTheme } from '../node-registry/provider-themes.js';
 import { BUILT_IN_NODE_REGISTRY, type NodeTypeRegistry } from '../node-registry/registry.js';
 
@@ -37,6 +39,7 @@ interface WorkspaceRailProps {
     targetNodeId: string,
     payload: WorkspaceContextDragPayload,
   ) => Promise<void>;
+  onOpenProjectFile: (entry: FileTreeEntry) => void;
 }
 
 export function WorkspaceRail({
@@ -60,6 +63,7 @@ export function WorkspaceRail({
   onInitializeGit,
   onSelectNode,
   onAttachAgentContext,
+  onOpenProjectFile,
 }: WorkspaceRailProps) {
   return (
     <aside id="workspace-project-sidebar" className="project-rail" hidden={hidden}>
@@ -99,6 +103,7 @@ export function WorkspaceRail({
             agentTargets={nodes}
             readOnly={collaborationGraphReadOnly}
             onAttach={onAttachAgentContext}
+            onOpenFile={onOpenProjectFile}
           />
           <ProjectTemplates
             project={project}
@@ -147,22 +152,8 @@ function ProjectTemplates({
 }: ProjectTemplatesProps) {
   return (
     <>
-      <section className="repository-summary">
-        <header>
-          <GitBranch size={14} />
-          <strong>{project.health.branch ?? 'Git not set up yet'}</strong>
-          <span
-            className={project.health.dirty ? 'dirty-dot' : 'clean-dot'}
-            role="img"
-            aria-label={
-              project.health.dirty
-                ? 'Project has changes not yet recorded in Git'
-                : 'All project changes are recorded in Git'
-            }
-          />
-        </header>
-        <small>{project.path}</small>
-        {!project.health.isGitRepository && (
+      {!project.health.isGitRepository && (
+        <section className="repository-summary">
           <div className="repository-initialize">
             <p>
               Set up Git so agents can work in their own copies and you can review their changes.
@@ -173,15 +164,8 @@ function ProjectTemplates({
             </button>
             <small>Your files stay exactly as they are.</small>
           </div>
-        )}
-        {project.health.frameworks.length > 0 && (
-          <div>
-            {project.health.frameworks.map((framework) => (
-              <span key={framework}>{framework}</span>
-            ))}
-          </div>
-        )}
-      </section>
+        </section>
+      )}
       <section className="template-section">
         <header>
           <h2>Agents</h2>
@@ -190,13 +174,18 @@ function ProjectTemplates({
         <div className="template-list">
           {runnableAgents.map((agent) => {
             const theme = providerTheme(agent.id);
+            const Logo = providerBrandLogo(agent.id);
             return (
               <button type="button" key={agent.id} onClick={() => onAddAgentNode(agent.id)}>
                 <span
                   className="agent-monogram-badge"
                   style={{ background: theme?.accent ?? '#d4a85b' }}
                 >
-                  {theme?.monogram ?? 'A'}
+                  {Logo === null ? (
+                    agent.label.slice(0, 1).toUpperCase() || 'A'
+                  ) : (
+                    <Logo size={14} />
+                  )}
                 </span>
                 <span>
                   <strong>{theme?.label ?? agent.label}</strong>

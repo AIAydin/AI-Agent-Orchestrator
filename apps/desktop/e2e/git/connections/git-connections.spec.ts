@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { access, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -18,67 +17,17 @@ import {
   nativeDialogs,
   selectNextNativePath,
 } from './native-dialogs.js';
-import { currentProjectPath, git, gitRef, gitRemoteUrl } from './repository.js';
-import { openGitConnectionsSettings } from './settings.js';
+import { openGitHubCliSettings } from './settings.js';
 
-const FIRST_NETWORK_URL = 'git@github.invalid:forgeboard/connections.git';
-const REPLACEMENT_NETWORK_URL = 'ssh://git@github.invalid/forgeboard/connections-replacement.git';
-const TRACKING_REF = 'refs/remotes/origin/main';
-
-test('Enter in Git connection text fields cannot submit Settings or create a remote plan', async () => {
-  const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-git-connections-enter-e2e-'));
-  let electronApp: ElectronApplication | null = null;
-
-  try {
-    const session = await launchDesktop(userDataDirectory);
-    electronApp = session.app;
-    const page = session.page;
-    await page.getByRole('button', { name: 'Use safe defaults' }).click();
-    await page.getByRole('button', { name: /Explore the safe demo/i }).click();
-    await expect(page.locator('.canvas-title')).toContainText('0 nodes · 0 connections');
-    const projectPath = await currentProjectPath(page);
-    await installNativeDialogHarness(electronApp);
-
-    const settings = await openGitConnectionsSettings(page);
-    const remoteName = settings.getByLabel('Remote name');
-    const remoteUrl = settings.getByLabel('Remote URL');
-    const addRemote = settings.getByRole('button', { name: 'Add remote' });
-    const saveSettings = settings.getByRole('button', { name: 'Save settings' });
-    const reviewPlan = page.getByRole('alertdialog', { name: 'Review remote addition' });
-    const guardedRemoteName = 'enter-guard';
-
-    await remoteName.fill(guardedRemoteName);
-    await remoteUrl.fill('https://github.invalid/forgeboard/enter-guard.git');
-    await expect(addRemote).toBeEnabled();
-    await expect(saveSettings).toBeEnabled();
-    const dialogsBeforeEnter = (await nativeDialogs(electronApp)).length;
-
-    await remoteName.press('Enter');
-    await expect(settings).toBeVisible();
-    await expect(settings).toHaveAttribute('aria-busy', 'false');
-    await expect(reviewPlan).toHaveCount(0);
-    expect(gitRemoteUrl(projectPath, guardedRemoteName)).toBeNull();
-    expect(await nativeDialogs(electronApp)).toHaveLength(dialogsBeforeEnter);
-
-    await remoteUrl.press('Enter');
-    await expect(settings).toBeVisible();
-    await expect(settings).toHaveAttribute('aria-busy', 'false');
-    await expect(reviewPlan).toHaveCount(0);
-    expect(gitRemoteUrl(projectPath, guardedRemoteName)).toBeNull();
-    expect(await nativeDialogs(electronApp)).toHaveLength(dialogsBeforeEnter);
-  } finally {
-    await closeElectronAfterTest(electronApp);
-    await rm(userDataDirectory, { recursive: true, force: true });
-    await expect(access(userDataDirectory)).rejects.toMatchObject({ code: 'ENOENT' });
-  }
-});
-
-test('Git connections are configured, reviewed, cancelled, and persisted entirely in Settings', async () => {
+/**
+ * Remote add/replace/remove left the product with the Git connections settings panel. What
+ * remains — and still has to be reviewed, cancel-safe, path-free, and durable — is choosing the
+ * GitHub CLI program that reviewed GitHub actions run.
+ */
+test('the GitHub CLI identity is reviewed, cancel-safe, and persisted entirely in Settings', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-git-connections-e2e-'));
   const fixtureDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-git-connections-fixture-'));
-  const sandboxRoot = await realpath(userDataDirectory);
   const fixtureRoot = await realpath(fixtureDirectory);
-  const localRemotePath = join(sandboxRoot, 'local-backup.git');
   const fakeGhExecutable = join(
     fixtureRoot,
     process.platform === 'win32' ? 'fake-gh.cmd' : 'fake-gh.mjs',
@@ -109,129 +58,9 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
     await page.getByRole('button', { name: 'Use safe defaults' }).click();
     await page.getByRole('button', { name: /Explore the safe demo/i }).click();
     await expect(page.locator('.canvas-title')).toContainText('0 nodes · 0 connections');
-    const projectPath = await currentProjectPath(page);
-    execFileSync('git', ['clone', '--quiet', '--bare', projectPath, localRemotePath], {
-      env: process.env,
-      stdio: 'pipe',
-    });
     await installNativeDialogHarness(electronApp);
 
-    let settings = await openGitConnectionsSettings(page);
-    await expect(settings.getByRole('combobox', { name: 'Project', exact: true })).toContainText(
-      'forgeboard-demo',
-    );
-
-    await test.step('network addition cancellation opens no connection and approval adds it', async () => {
-      await settings.getByLabel('Remote name').fill('origin');
-      await settings.getByLabel('Remote URL').fill(FIRST_NETWORK_URL);
-      await settings.getByRole('button', { name: 'Add remote' }).click();
-      let plan = page.getByRole('alertdialog', { name: 'Review remote addition' });
-      await expect(plan).toContainText('SSH · github.invalid/forgeboard/connections');
-      await expect(plan).toContainText('No internet access needed');
-      const cancelled = await continuePlanWithNativeResponse({
-        app: electronApp!,
-        plan,
-        response: 0,
-        title: 'Add Git remote?',
-        buttons: ['Cancel', 'Add remote'],
-      });
-      expect(nativeDialogText(cancelled)).toContain(
-        'nothing is fetched, pushed, or sent over the network',
-      );
-      await expect(settings).toContainText('Confirmation cancelled. No Git settings were changed.');
-      expect(gitRemoteUrl(projectPath, 'origin')).toBeNull();
-
-      await settings.getByRole('button', { name: 'Add remote' }).click();
-      plan = page.getByRole('alertdialog', { name: 'Review remote addition' });
-      await continuePlanWithNativeResponse({
-        app: electronApp!,
-        plan,
-        response: 1,
-        title: 'Add Git remote?',
-        buttons: ['Cancel', 'Add remote'],
-      });
-      try {
-        await expect(
-          settings.getByRole('button', { name: 'Remove origin' }),
-          'The approved local Git mutation should settle in Settings before an external Git reader opens the config.',
-        ).toBeVisible({ timeout: 20_000 });
-      } catch (cause) {
-        throw new Error(
-          `The approved Git addition did not settle. Settings: ${JSON.stringify(await settings.textContent())}.`,
-          { cause },
-        );
-      }
-      expect(gitRemoteUrl(projectPath, 'origin')).toBe(FIRST_NETWORK_URL);
-    });
-
-    await test.step('simple remote replacement changes only the reviewed URL', async () => {
-      await settings.getByRole('button', { name: 'Replace origin with a new URL' }).click();
-      await settings.getByLabel('New URL for origin').fill(REPLACEMENT_NETWORK_URL);
-      await settings.getByRole('button', { name: 'Review replacement' }).click();
-      const plan = page.getByRole('alertdialog', { name: 'Review remote replacement' });
-      await expect(plan).toContainText('SSH · github.invalid/forgeboard/connections-replacement');
-      await continuePlanWithNativeResponse({
-        app: electronApp!,
-        plan,
-        response: 1,
-        title: 'Replace Git remote?',
-        buttons: ['Cancel', 'Replace remote'],
-      });
-      await expect(settings).toContainText('Replaced remote origin.', { timeout: 20_000 });
-      expect(gitRemoteUrl(projectPath, 'origin')).toBe(REPLACEMENT_NETWORK_URL);
-    });
-
-    await test.step('local picker paths stay native-only and the selected local remote is added', async () => {
-      await settings.getByLabel('Remote name').fill('local-backup');
-      await selectNextNativePath(electronApp!, null);
-      await settings
-        .getByRole('button', { name: 'Choose a folder on this computer', exact: true })
-        .click();
-      await expect(settings).toContainText('Folder selection cancelled. Nothing changed.');
-      expect(gitRemoteUrl(projectPath, 'local-backup')).toBeNull();
-
-      await selectNextNativePath(electronApp!, localRemotePath);
-      await settings
-        .getByRole('button', { name: 'Choose a folder on this computer', exact: true })
-        .click();
-      const plan = page.getByRole('alertdialog', { name: 'Review remote addition' });
-      await expect(plan).toContainText('Folder on this computer');
-      await expect(plan).not.toContainText(localRemotePath);
-      await expect(page.locator('body')).not.toContainText(localRemotePath);
-      const approved = await continuePlanWithNativeResponse({
-        app: electronApp!,
-        plan,
-        response: 1,
-        title: 'Add Git remote?',
-        buttons: ['Cancel', 'Add remote'],
-      });
-      expect(nativeDialogText(approved)).toContain(localRemotePath);
-      await expect(settings.getByRole('button', { name: 'Remove local-backup' })).toBeVisible({
-        timeout: 20_000,
-      });
-      expect(gitRemoteUrl(projectPath, 'local-backup')).toBe(await realpath(localRemotePath));
-    });
-
-    await test.step('removal discloses and deletes only the exact managed tracking refs', async () => {
-      git(projectPath, ['update-ref', TRACKING_REF, 'HEAD']);
-      await settings.getByRole('button', { name: 'Remove origin' }).click();
-      const plan = page.getByRole('alertdialog', { name: 'Review remote removal' });
-      await expect(plan).toContainText(TRACKING_REF);
-      await expect(plan).toContainText('Your own branches, commits, other remotes');
-      await continuePlanWithNativeResponse({
-        app: electronApp!,
-        plan,
-        response: 1,
-        title: 'Remove Git remote?',
-        buttons: ['Cancel', 'Remove remote'],
-      });
-      await expect(settings.getByRole('button', { name: 'Remove origin' })).toBeHidden({
-        timeout: 20_000,
-      });
-      expect(gitRemoteUrl(projectPath, 'origin')).toBeNull();
-      expect(gitRef(projectPath, TRACKING_REF)).toBeNull();
-      expect(gitRemoteUrl(projectPath, 'local-backup')).toBe(await realpath(localRemotePath));
-    });
+    let settings = await openGitHubCliSettings(page);
 
     await test.step('custom GitHub CLI review is path-free, cancel-safe, and version validated', async () => {
       await selectNextNativePath(electronApp!, fakeGhExecutable);
@@ -276,7 +105,7 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
     page = secondSession.page;
     watchExternalRequests(page, externalRequests);
     await installNativeDialogHarness(electronApp);
-    settings = await openGitConnectionsSettings(page);
+    settings = await openGitHubCliSettings(page);
 
     await test.step('custom CLI identity persists across restart and automatic remains reviewed', async () => {
       try {

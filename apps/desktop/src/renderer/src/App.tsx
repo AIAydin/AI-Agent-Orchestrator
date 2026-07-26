@@ -15,7 +15,10 @@ import { Welcome } from './components/onboarding/Welcome.js';
 import { Workspace } from './components/workspace/shell/Workspace.js';
 import type { WorkspaceHandle } from './components/workspace/model/types.js';
 import { unwrap } from './lib/ipc.js';
+import { applyAppearance, watchSystemTheme } from './lib/appearance/appearance.js';
 import { BootstrapScreen } from './components/application/bootstrap/BootstrapScreen.js';
+
+const ERROR_TOAST_MS = 8_000;
 
 interface BootstrapState {
   info: AppInfo;
@@ -35,6 +38,14 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const workspaceRef = useRef<WorkspaceHandle>(null);
+
+  // Error toasts clear themselves; the Dismiss button stays for impatient reads.
+  // Bootstrap failures keep their message — that screen pairs it with Retry.
+  useEffect(() => {
+    if (error === null || bootstrap === null) return;
+    const timer = window.setTimeout(() => setError(null), ERROR_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [bootstrap, error]);
 
   useEffect(
     () =>
@@ -82,12 +93,9 @@ export function App() {
 
   useEffect(() => {
     if (!bootstrap) return;
-    const dark =
-      bootstrap.settings.theme === 'dark' ||
-      (bootstrap.settings.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    document.documentElement.dataset.density = bootstrap.settings.density;
-    document.documentElement.dataset.reducedMotion = String(bootstrap.settings.reducedMotion);
+    applyAppearance(bootstrap.settings);
+    if (bootstrap.settings.theme !== 'system') return;
+    return watchSystemTheme(() => applyAppearance(bootstrap.settings));
   }, [bootstrap]);
 
   const run = useCallback(
@@ -155,6 +163,7 @@ export function App() {
         />
       ) : activeProject ? (
         <Workspace
+          key={activeProject.id}
           ref={workspaceRef}
           project={activeProject}
           settings={bootstrap.settings}
@@ -165,6 +174,12 @@ export function App() {
             setActiveProject(project);
             await loadBootstrap();
           }}
+          onSwitchProject={(target) =>
+            run(async () => unwrap(await window.forgeboard.projects.open(target.path)))
+          }
+          onCreateProject={(input) =>
+            run(async () => unwrap(await window.forgeboard.projects.create(input)))
+          }
           onOpenSettings={() => openSettings()}
           onError={setError}
         />
@@ -227,7 +242,6 @@ export function App() {
             await loadBootstrap();
             setShowSettings(false);
           }}
-          onExtensionsChanged={loadBootstrap}
           onDeleteAll={async (confirmation) => {
             const deleted = unwrap(await window.forgeboard.privacy.deleteAll(confirmation));
             if (!deleted) return;

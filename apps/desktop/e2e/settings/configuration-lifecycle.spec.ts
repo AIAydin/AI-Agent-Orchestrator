@@ -26,7 +26,6 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
     electronApp = session.app;
     watchExternalRequests(session.page, externalRequests);
     await useSafeDefaults(session.page);
-    const terminalExecutable = await electronApp.evaluate(() => process.execPath);
 
     await test.step('representative controls from every ordinary settings category save together', async () => {
       const settings = await openSettings(session.page);
@@ -37,12 +36,8 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
       await settings.getByLabel('Keyboard preset').selectOption('vscode');
 
       await settings.getByRole('button', { name: 'Agents & runtime' }).click();
-      await settings.getByLabel('Default terminal executable').fill(terminalExecutable);
-      await settings
-        .getByLabel('Environment variable names allowed into processes')
-        .fill('PATH, HOME');
       await settings.getByLabel('Docker executable').fill('docker');
-      await settings.getByLabel('Container image').fill('example.invalid/forgeboard-agent:1');
+      await settings.getByLabel('Container image').selectOption('node:22-bookworm');
       await settings.getByLabel('Agent executable inside image').fill('/usr/local/bin/agent');
       await settings.getByLabel('CPU limit').fill('1.5');
       await settings.getByLabel('Memory limit (MB)').fill('2048');
@@ -51,22 +46,15 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
       await expect(settings.getByLabel('Default permission profile')).toBeVisible();
 
       await settings.getByRole('button', { name: 'Git & previews' }).click();
-      await settings.getByLabel('Branch prefix').fill('ui-proof/');
       await settings.getByLabel('Managed worktree location').fill(worktreeDirectory);
-      await settings.getByLabel('Git identity name').fill('UI Proof');
-      await settings.getByLabel('Git identity email').fill('ui-proof@example.invalid');
-      await settings.getByLabel('Default remote').fill('upstream');
       await settings.getByLabel('Preview port start').fill('43000');
       await settings.getByLabel('Preview port end').fill('43100');
-      await settings.getByLabel('Trusted preview hosts').fill('127.0.0.1, localhost');
 
-      await settings.getByRole('button', { name: 'Checks', exact: true }).click();
-      await expect(settings.getByRole('heading', { name: 'Project checks' })).toBeVisible();
-      await settings.getByRole('button', { name: 'Extensions' }).click();
-      await expect(settings.getByRole('heading', { name: 'Local extensions' })).toBeVisible();
+      await expect(settings.getByRole('button', { name: 'Checks', exact: true })).toHaveCount(0);
+      await expect(settings.getByRole('button', { name: 'Extensions' })).toHaveCount(0);
 
       await settings.getByRole('button', { name: 'Connectivity' }).click();
-      await settings.getByText('Server and advanced options').click();
+      await settings.getByText('Advanced', { exact: true }).click();
       await settings.getByLabel('Collaboration server URL').fill('ws://127.0.0.1:1234');
       await settings.getByLabel('Collaboration management API URL').fill('http://127.0.0.1:1234');
       await settings.getByLabel('Collaboration display name').fill('UI Proof User');
@@ -98,7 +86,6 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
       );
       await expect(settings.getByLabel('Canvas grid size')).toHaveValue('24');
       await settings.getByRole('button', { name: 'Git & previews' }).click();
-      await expect(settings.getByLabel('Branch prefix')).toHaveValue('ui-proof/');
       await expect(settings.getByLabel('Managed worktree location')).toHaveValue(worktreeDirectory);
       await settings.getByRole('button', { name: 'Connectivity' }).click();
       await expect(settings.getByLabel('Collaboration display name')).toHaveValue('UI Proof User');

@@ -40,6 +40,7 @@ import type {
   BrowserCompanionStatus,
   BrowserCompanionViewportInput,
 } from './browser-companion/contracts.js';
+import type { AgentSessionPrInput, AgentSessionPrView } from './agent-pr/index.js';
 import type { AgentReadinessRequest, AgentReadinessResult } from './readiness/contracts.js';
 import type { CanvasHistorySaveInput, CanvasWorkspaceState } from './canvas/history/contracts.js';
 import type {
@@ -103,6 +104,8 @@ import type {
   CollaborationUpdateAwarenessInput,
 } from './collaboration/index.js';
 import type {
+  DockerLocalList,
+  DockerLocalListInput,
   DockerPullResult,
   DockerReadiness,
   DockerReadinessInput,
@@ -350,6 +353,7 @@ export interface ForgeboardApi {
   docker: {
     check(input: DockerReadinessInput): Promise<IpcResult<DockerReadiness | null>>;
     pull(input: DockerReadinessInput): Promise<IpcResult<DockerPullResult>>;
+    listLocal(input: DockerLocalListInput): Promise<IpcResult<DockerLocalList>>;
   };
   projects: {
     recent(): Promise<IpcResult<Project[]>>;
@@ -481,6 +485,9 @@ export interface ForgeboardApi {
   agentPeers: {
     provision(input: AgentPeersProvisionInput): Promise<IpcResult<AgentPeersProvisionView>>;
     onEvent(listener: (event: AgentPeersEvent) => void): () => void;
+  };
+  agentPr: {
+    create(input: AgentSessionPrInput): Promise<IpcResult<AgentSessionPrView>>;
   };
   previews: {
     listTargets(input: PreviewTargetListInput): Promise<IpcResult<PreviewTargetView[]>>;

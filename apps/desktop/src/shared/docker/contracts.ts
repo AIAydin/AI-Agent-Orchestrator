@@ -4,6 +4,12 @@ import { MachineSpecificValueSchema } from '../settings/values.js';
 
 export const DockerExecutableSettingSchema = MachineSpecificValueSchema;
 
+/** Default session image: Debian with git preinstalled plus Node for `npx`-launched agent CLIs. */
+export const DEFAULT_DOCKER_SESSION_IMAGE = 'node:22-bookworm';
+
+/** Where Node lives inside the default session image; used as the readiness-probe entrypoint. */
+export const DEFAULT_DOCKER_SESSION_CONTAINER_EXECUTABLE = '/usr/local/bin/node';
+
 export const DockerImageReferenceSchema = z
   .string()
   .trim()
@@ -72,6 +78,38 @@ export const DockerReadinessSchema = z
   })
   .strict();
 export type DockerReadiness = z.infer<typeof DockerReadinessSchema>;
+
+export const DockerLocalImageSchema = z
+  .object({
+    reference: DockerImageReferenceSchema,
+    imageId: z.string().min(1).max(512).optional(),
+  })
+  .strict();
+export type DockerLocalImage = z.infer<typeof DockerLocalImageSchema>;
+
+export const DockerLocalContainerSchema = z
+  .object({
+    name: z.string().min(1).max(256),
+    image: DockerImageReferenceSchema,
+    state: z.string().min(1).max(64),
+  })
+  .strict();
+export type DockerLocalContainer = z.infer<typeof DockerLocalContainerSchema>;
+
+export const DockerLocalListInputSchema = z
+  .object({ dockerExecutable: DockerExecutableSettingSchema })
+  .strict();
+export type DockerLocalListInput = z.infer<typeof DockerLocalListInputSchema>;
+
+export const DockerLocalListSchema = z
+  .object({
+    daemonAvailable: z.boolean(),
+    images: z.array(DockerLocalImageSchema).max(256),
+    containers: z.array(DockerLocalContainerSchema).max(256),
+    reason: z.string().min(1).max(4_096).optional(),
+  })
+  .strict();
+export type DockerLocalList = z.infer<typeof DockerLocalListSchema>;
 
 export const DockerPullResultSchema = z
   .object({

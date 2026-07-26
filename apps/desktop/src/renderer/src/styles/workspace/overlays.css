@@ -188,6 +188,13 @@
   justify-content: flex-start;
   color: var(--success);
 }
+
+.voice-guess-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
 .toast {
   position: fixed;
   z-index: 2000;

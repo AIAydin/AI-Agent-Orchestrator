@@ -16,12 +16,18 @@ import {
   type ReactFlowInstance,
   type Viewport,
 } from '@xyflow/react';
-import { Bot, LayoutGrid } from 'lucide-react';
+import { LayoutGrid } from 'lucide-react';
 
 import type { AppSettings, CanvasDocument } from '../../../../../shared/application/contracts.js';
 import type { CollaborationAwarenessEntry } from '../../../../../shared/collaboration/index.js';
 import type { WorkflowStartInput } from '../../../../../shared/workflow/contracts.js';
-import { NODE_KINDS, WORKSHOP_NODE_TYPES, type NodeKind, type WorkshopNode } from './CanvasNode.js';
+import {
+  TEMPLATE_NODE_KINDS,
+  WORKSHOP_NODE_TYPES,
+  type NodeKind,
+  type WorkshopNode,
+} from './CanvasNode.js';
+import { CanvasEmptyState } from './empty-state/CanvasEmptyState.js';
 import { CollaborationPresence } from '../collaboration/CollaborationPresence.js';
 import { CollaboratorRoster } from '../collaboration/presence/CollaboratorRoster.js';
 import {
@@ -110,6 +116,7 @@ interface WorkspaceCanvasProps {
   agentRunBlockReason?: AgentRunBlockReason;
   onRunWorkflowScope: (scope: WorkflowStartInput['scope']) => void;
   onAddNode: (kind: NodeKind, position?: { x: number; y: number }) => void;
+  onAddAgent: () => void;
   onAddExtensionNode: (template: ExtensionTemplate, position?: { x: number; y: number }) => void;
   onAttachAgentContext: (
     targetNodeId: string,
@@ -155,6 +162,7 @@ export function WorkspaceCanvas({
   agentRunBlockReason,
   onRunWorkflowScope,
   onAddNode,
+  onAddAgent,
   onAddExtensionNode,
   onAttachAgentContext,
   onContextDropError,
@@ -332,7 +340,7 @@ export function WorkspaceCanvas({
           return;
         }
         const kind = event.dataTransfer.getData('application/x-forgeboard-node') as NodeKind;
-        if (!(NODE_KINDS as readonly string[]).includes(kind)) return;
+        if (!(TEMPLATE_NODE_KINDS as readonly string[]).includes(kind)) return;
         onAddNode(kind, dropPosition(kind));
       }}
     >
@@ -540,32 +548,10 @@ export function WorkspaceCanvas({
                 </span>
                 {nodes.length === 0 && (
                   <Panel position="top-center" className="canvas-empty">
-                    <span className="empty-orbit">
-                      <Bot size={22} />
-                    </span>
-                    <h2>Plan the work before it runs</h2>
-                    <p>
-                      Add a brief, a task, and an agent from the side panel, then connect them to
-                      show what the agent needs.
-                    </p>
-                    <div>
-                      <button
-                        type="button"
-                        className="button primary"
-                        disabled={collaborationGraphReadOnly}
-                        onClick={() => onAddNode('brief')}
-                      >
-                        Add a product brief
-                      </button>
-                      <button
-                        type="button"
-                        className="button"
-                        disabled={collaborationGraphReadOnly}
-                        onClick={() => onAddNode('task')}
-                      >
-                        Add a task
-                      </button>
-                    </div>
+                    <CanvasEmptyState
+                      readOnly={collaborationGraphReadOnly}
+                      onAddAgent={onAddAgent}
+                    />
                   </Panel>
                 )}
               </ReactFlow>

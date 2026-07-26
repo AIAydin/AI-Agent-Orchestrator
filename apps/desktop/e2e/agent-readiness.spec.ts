@@ -106,11 +106,8 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
     const settings = page.locator('.settings-modal');
     await settings.getByRole('button', { name: /Agents & runtime/ }).click();
     await expect(settings.getByLabel('Default agent')).toHaveValue('custom');
-    await expect(settings.getByLabel('Program file', { exact: true })).toHaveValue(executable);
-    await settings.getByRole('button', { name: 'Checks', exact: true }).click();
-    const tests = settings.getByRole('group', { name: 'Tests command' });
-    await expect(tests.getByLabel('Executable', { exact: true })).toHaveValue(executable);
-    await expect(tests.getByLabel('Arguments')).toHaveValue('-e\nprocess.stdout.write("READY")');
+    await expect(settings.getByLabel('Program file')).toHaveCount(0);
+    await expect(settings.getByRole('button', { name: 'Checks', exact: true })).toHaveCount(0);
     await settings.getByRole('button', { name: 'Help & shortcuts' }).click();
     await settings.getByText('Replay Getting started tour').click();
     await expect(settings.getByRole('region', { name: 'Getting started tour' })).toBeVisible();

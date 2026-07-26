@@ -6,6 +6,7 @@ import type {
   PermissionProfile,
 } from '../../../../../shared/application/contracts.js';
 import type { RunHistoryTokenUsage } from '../../../../../shared/runs/contracts.js';
+import type { PreviewTarget } from '../../../../../shared/preview/targets.js';
 import { minimumNodeDimensionsForKind } from '../../../../../shared/canvas/node-dimensions.js';
 import type { ExtensionNodeAvailability } from '../../extensions/extension-nodes.js';
 import { permissionProfileLabel } from '../../permissions/permission-profile-ui.js';
@@ -25,6 +26,7 @@ import type { RunStatus } from '@forgeboard/core/domain';
 export {
   NODE_DEFINITIONS,
   NODE_KINDS,
+  TEMPLATE_NODE_KINDS,
   type BuiltInNodeKind,
   type NodeKind,
 } from '../node-registry/registry.js';
@@ -152,6 +154,13 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   transcriptUpdatedAt?: string;
   lastRunSummary?: string;
   changedFiles?: string[];
+  /**
+   * Literal dev-server command typed on the preview node itself. Clearing it
+   * means sending an explicit `undefined`, which the canvas adapter reads as
+   * "drop the stored command" rather than "keep the previous one".
+   */
+  previewCommand?: WorkshopCommandConfiguration | undefined;
+  previewTarget?: PreviewTarget;
   previewCwdRelative?: string;
   previewPackageScript?: string;
   previewReadinessPath?: string;
@@ -206,52 +215,14 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
   const isText = data.kind === 'text';
   const Face = data.collapsed ? null : nodeFaceForKind(data.kind);
   const theme = isAgent ? providerTheme(data.adapterId) : null;
+  /* Connection handles are siblings of the node surface, not children of it.
+     Agent windows, previews, terminals and the document faces all need
+     `overflow: hidden` for their rounded chrome, which clipped the handles into
+     half-moons and chevron slivers at the border. React Flow finds handles
+     anywhere inside the node wrapper, so hoisting them out of the clipped
+     surface renders each one whole while keeping edge geometry intact. */
   return (
-    <article
-      className={[
-        'canvas-node',
-        selected ? 'selected' : '',
-        data.collapsed ? 'collapsed' : '',
-        groupFrame ? 'group-frame' : '',
-        isAgent ? 'agent-window' : '',
-        isAgent && data.collapsed ? 'agent-drag-handle' : '',
-        isText ? 'text-node' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      style={
-        {
-          '--node-accent': theme?.accent ?? data.color,
-          '--provider-tint': theme?.titleBarTint ?? 'transparent',
-          ...(isText ? { '--text-rotation': `${data.rotationDeg ?? 0}deg` } : {}),
-        } as React.CSSProperties
-      }
-      role={groupFrame ? 'group' : undefined}
-      aria-roledescription={groupFrame ? 'group' : 'canvas node'}
-      aria-label={`${definition.label}: ${data.title}`}
-      data-node-kind={data.kind}
-      data-provider={isAgent ? (theme?.id ?? 'generic') : undefined}
-    >
-      <NodeResizer
-        nodeId={id}
-        isVisible={
-          definition.behaviors.resizable &&
-          selected &&
-          canChangePresentation &&
-          !data.collapsed &&
-          !automaticallySized
-        }
-        minWidth={minimum.width}
-        minHeight={minimum.height}
-        handleClassName="canvas-node-resize-handle"
-        lineClassName="canvas-node-resize-line"
-        color={data.color}
-        onResizeStart={() => {
-          if (selected && canChangePresentation && !data.collapsed && !automaticallySized) {
-            interactions.onResizeStart?.(id);
-          }
-        }}
-      />
+    <>
       {!isText && (
         <>
           {targetHandles.map((port, index) => (
@@ -266,116 +237,6 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
               }}
             />
           ))}
-        </>
-      )}
-      <header>
-        {isText ? (
-          <>
-            <TextSizeControls
-              id={id}
-              fontSize={data.fontSize ?? 'm'}
-              disabled={!canChangePresentation}
-            />
-            {data.locked && <Lock size={12} aria-label="Locked" />}
-            <CanvasNodeDetailsPopover id={id} data={data} readOnly={!canChangePresentation} />
-          </>
-        ) : (
-          <>
-            <span
-              className="node-kind-icon"
-              role="img"
-              aria-label={definition.label}
-              title={definition.label}
-            >
-              <Icon size={15} aria-hidden="true" />
-            </span>
-            {/* Agent nodes keep their own inline rename (in AgentSessionNode's title bar), so the
-                generic header only shows their collapsed title as static text. Every other kind gets
-                the double-click-to-rename header title — the node name is the header's primary text,
-                with the kind conveyed by the icon beside it. */}
-            {isAgent ? (
-              data.collapsed && (
-                <strong className="collapsed-node-title" title={data.title}>
-                  {data.title}
-                </strong>
-              )
-            ) : (
-              <CanvasNodeHeaderTitle id={id} title={data.title} readOnly={!canChangePresentation} />
-            )}
-            {data.collapsed && data.status !== 'idle' && (
-              <span className={`node-status-label ${data.status}`}>{data.status}</span>
-            )}
-            <span
-              className={`run-status ${data.status}`}
-              role="status"
-              aria-label={`Status: ${data.status}`}
-            />
-            {data.locked && <Lock size={12} aria-label="Locked" />}
-            {/* Agent nodes surface their settings/comments/history through their own window, so the
-                generic details popover is only mounted for the other node kinds. */}
-            {!isAgent && (
-              <CanvasNodeDetailsPopover id={id} data={data} readOnly={!canChangePresentation} />
-            )}
-            <WorkspaceTooltip
-              content={
-                interactions.readOnly
-                  ? 'Your collaboration role cannot change this node.'
-                  : data.locked
-                    ? 'Unlock this node before changing how it looks.'
-                    : data.collapsed
-                      ? 'Expand node'
-                      : 'Collapse node'
-              }
-            >
-              <button
-                className="node-collapse-button nodrag"
-                type="button"
-                aria-label={`${data.collapsed ? 'Expand' : 'Collapse'} ${data.title}`}
-                aria-expanded={!data.collapsed}
-                disabled={!canChangePresentation}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  interactions.setCollapsed(id, !data.collapsed);
-                }}
-              >
-                <ChevronDown className="collapse-glyph" size={13} aria-hidden="true" />
-              </button>
-            </WorkspaceTooltip>
-          </>
-        )}
-      </header>
-      {Face !== null && <Face id={id} data={data} />}
-      {isText && selected && canChangePresentation && <TextRotateHandle id={id} />}
-      {Face === null && definition.behaviors.collapsible && !data.collapsed && (
-        <div className="node-body">
-          <p>{data.description || definition.description}</p>
-          {data.status !== 'idle' && (
-            <span className={`node-status-label ${data.status}`}>
-              <Play size={10} aria-hidden="true" />
-              {data.status}
-            </span>
-          )}
-          {data.kind === 'agent' && data.permissionProfile !== undefined && (
-            <span className="node-permission-chip">
-              {permissionProfileLabel(data.permissionProfile)}
-            </span>
-          )}
-          {data.kind === 'agent' &&
-            (data.branch !== undefined || data.worktreeRecordedActive === true) && (
-              <span className="node-worktree-badges" aria-label="Agent Git workspace">
-                {data.branch !== undefined && <span>Branch · {data.branch}</span>}
-                {data.worktreeRecordedActive === true && <span>Worktree assigned</span>}
-              </span>
-            )}
-          {data.kind === 'extension' && data.extensionAvailability !== 'active' && (
-            <span className="extension-node-state">
-              {data.extensionAvailability === 'quarantined' ? 'Quarantined' : 'Unavailable'}
-            </span>
-          )}
-        </div>
-      )}
-      {!isText && (
-        <>
           {sourceHandles.map((port, index) => (
             <Handle
               key={port.id}
@@ -390,7 +251,163 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
           ))}
         </>
       )}
-    </article>
+      <article
+        className={[
+          'canvas-node',
+          selected ? 'selected' : '',
+          data.collapsed ? 'collapsed' : '',
+          groupFrame ? 'group-frame' : '',
+          isAgent ? 'agent-window' : '',
+          isAgent && data.collapsed ? 'agent-drag-handle' : '',
+          isText ? 'text-node' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        style={
+          {
+            '--node-accent': theme?.accent ?? data.color,
+            '--provider-tint': theme?.titleBarTint ?? 'transparent',
+            ...(isText ? { '--text-rotation': `${data.rotationDeg ?? 0}deg` } : {}),
+          } as React.CSSProperties
+        }
+        role={groupFrame ? 'group' : undefined}
+        aria-roledescription={groupFrame ? 'group' : 'canvas node'}
+        aria-label={`${definition.label}: ${data.title}`}
+        data-node-kind={data.kind}
+        data-provider={isAgent ? (theme?.id ?? 'generic') : undefined}
+      >
+        <NodeResizer
+          nodeId={id}
+          isVisible={
+            definition.behaviors.resizable &&
+            selected &&
+            canChangePresentation &&
+            !data.collapsed &&
+            !automaticallySized
+          }
+          minWidth={minimum.width}
+          minHeight={minimum.height}
+          handleClassName="canvas-node-resize-handle"
+          lineClassName="canvas-node-resize-line"
+          color={data.color}
+          onResizeStart={() => {
+            if (selected && canChangePresentation && !data.collapsed && !automaticallySized) {
+              interactions.onResizeStart?.(id);
+            }
+          }}
+        />
+        <header>
+          {isText ? (
+            <>
+              <TextSizeControls
+                id={id}
+                fontSize={data.fontSize ?? 'm'}
+                disabled={!canChangePresentation}
+              />
+              {data.locked && <Lock size={12} aria-label="Locked" />}
+              <CanvasNodeDetailsPopover id={id} data={data} readOnly={!canChangePresentation} />
+            </>
+          ) : (
+            <>
+              <span
+                className="node-kind-icon"
+                role="img"
+                aria-label={definition.label}
+                title={definition.label}
+              >
+                <Icon size={15} aria-hidden="true" />
+              </span>
+              {/* Agent nodes keep their own inline rename (in AgentSessionNode's title bar), so the
+                  generic header only shows their collapsed title as static text. Every other kind gets
+                  the double-click-to-rename header title — the node name is the header's primary text,
+                  with the kind conveyed by the icon beside it. */}
+              {isAgent ? (
+                data.collapsed && (
+                  <strong className="collapsed-node-title" title={data.title}>
+                    {data.title}
+                  </strong>
+                )
+              ) : (
+                <CanvasNodeHeaderTitle
+                  id={id}
+                  title={data.title}
+                  readOnly={!canChangePresentation}
+                />
+              )}
+              {data.collapsed && data.status !== 'idle' && (
+                <span className={`node-status-label ${data.status}`}>{data.status}</span>
+              )}
+              <span
+                className={`run-status ${data.status}`}
+                role="status"
+                aria-label={`Status: ${data.status}`}
+              />
+              {data.locked && <Lock size={12} aria-label="Locked" />}
+              {/* Agent nodes surface their settings/comments/history through their own window, so the
+                  generic details popover is only mounted for the other node kinds. */}
+              {!isAgent && (
+                <CanvasNodeDetailsPopover id={id} data={data} readOnly={!canChangePresentation} />
+              )}
+              <WorkspaceTooltip
+                content={
+                  interactions.readOnly
+                    ? 'Your collaboration role cannot change this node.'
+                    : data.locked
+                      ? 'Unlock this node before changing how it looks.'
+                      : data.collapsed
+                        ? 'Expand node'
+                        : 'Collapse node'
+                }
+              >
+                <button
+                  className="node-collapse-button nodrag"
+                  type="button"
+                  aria-label={`${data.collapsed ? 'Expand' : 'Collapse'} ${data.title}`}
+                  aria-expanded={!data.collapsed}
+                  disabled={!canChangePresentation}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    interactions.setCollapsed(id, !data.collapsed);
+                  }}
+                >
+                  <ChevronDown className="collapse-glyph" size={13} aria-hidden="true" />
+                </button>
+              </WorkspaceTooltip>
+            </>
+          )}
+        </header>
+        {Face !== null && <Face id={id} data={data} />}
+        {isText && selected && canChangePresentation && <TextRotateHandle id={id} />}
+        {Face === null && definition.behaviors.collapsible && !data.collapsed && (
+          <div className="node-body">
+            <p>{data.description || definition.description}</p>
+            {data.status !== 'idle' && (
+              <span className={`node-status-label ${data.status}`}>
+                <Play size={10} aria-hidden="true" />
+                {data.status}
+              </span>
+            )}
+            {data.kind === 'agent' && data.permissionProfile !== undefined && (
+              <span className="node-permission-chip">
+                {permissionProfileLabel(data.permissionProfile)}
+              </span>
+            )}
+            {data.kind === 'agent' &&
+              (data.branch !== undefined || data.worktreeRecordedActive === true) && (
+                <span className="node-worktree-badges" aria-label="Agent Git workspace">
+                  {data.branch !== undefined && <span>Branch · {data.branch}</span>}
+                  {data.worktreeRecordedActive === true && <span>Worktree assigned</span>}
+                </span>
+              )}
+            {data.kind === 'extension' && data.extensionAvailability !== 'active' && (
+              <span className="extension-node-state">
+                {data.extensionAvailability === 'quarantined' ? 'Quarantined' : 'Unavailable'}
+              </span>
+            )}
+          </div>
+        )}
+      </article>
+    </>
   );
 }
 

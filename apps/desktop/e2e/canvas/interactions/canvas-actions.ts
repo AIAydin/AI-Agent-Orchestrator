@@ -22,16 +22,16 @@ export async function clickExposedCorner(
   });
 }
 
-export async function addSeparatedTask(page: Page, sourceNode: Locator): Promise<void> {
+export async function addSeparatedNote(page: Page, sourceNode: Locator): Promise<void> {
   const canvas = page.locator('.canvas-region');
   const canvasBox = await canvas.boundingBox();
   const sourceBox = await sourceNode.boundingBox();
   if (canvasBox === null || sourceBox === null) {
-    throw new Error('The canvas and source node must be visible before adding a separated task.');
+    throw new Error('The canvas and source node must be visible before adding a separated note.');
   }
   await page
     .locator('.template-section')
-    .getByRole('button', { name: /^Task/ })
+    .getByRole('button', { name: /^Note/ })
     .dragTo(canvas, {
       targetPosition: {
         x: Math.max(120, Math.min(canvasBox.width - 280, sourceBox.x - canvasBox.x + 360)),

@@ -41,19 +41,6 @@ export interface FileTargetEntry {
 }
 
 /**
- * Canvas file nodes that reference a project image, so the note-image face can
- * reuse an image already placed on the canvas (mirrors the inspector's list).
- */
-export interface CanvasImageNodeEntry {
-  readonly id: string;
-  readonly title: string;
-  readonly projectId: string;
-  readonly relativePath: string;
-  readonly missing: boolean;
-  readonly lastKnownHash?: string;
-}
-
-/**
  * Workspace services exposed to components rendered inside canvas nodes.
  * React Flow nodes can't receive props directly from Workspace, so
  * in-canvas components read this context instead.
@@ -65,6 +52,11 @@ export interface AgentSessionContextValue {
   readonly graphReadOnly: boolean;
   openSettings(): void;
   reportError(message: string): void;
+  /**
+   * Persists the live canvas now. Agent launch/controls validate against the
+   * SAVED canvas in the main process, so faces flush before starting a session
+   * to keep "Agent controls require an exact persisted Agent node." away.
+   */
   flushCanvas(): Promise<boolean>;
   updateNodeData(nodeId: string, data: Partial<WorkshopNodeData>): void;
   fitGroupFrame(nodeId: string): void;
@@ -76,7 +68,6 @@ export interface AgentSessionContextValue {
   /** Attaches a whiteboard's visual specification to an Agent as explicit Context. */
   attachWhiteboardContext(sourceNodeId: string, targetNodeId: string): string;
   readonly nodeRoster: readonly CanvasNodeRosterEntry[];
-  readonly canvasImageNodes: readonly CanvasImageNodeEntry[];
   readonly checkProducers: readonly CheckProducerEntry[];
   readonly fileTargets: readonly FileTargetEntry[];
   openGitPrReadiness(runId: string): void;

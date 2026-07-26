@@ -6,6 +6,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 
 import {
   closeElectronAfterTest,
+  closeProjectFromSwitcher,
   launchDesktop,
   renameCanvasNode,
   runCanvasNodeContextAction,
@@ -64,7 +65,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
     await expect(
       page.getByRole('article', { name: 'Product brief: Recoverable brief' }),
     ).toHaveCount(0);
-    await closeProject(page);
+    await closeProjectFromSwitcher(page);
 
     await approveNativeConfirmations(app);
     await test.step('snapshot restoration is disclosed, natively approved, and durable', async () => {
@@ -83,7 +84,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
       await expect(
         page.getByRole('article', { name: 'Product brief: Recoverable brief' }),
       ).toBeVisible();
-      await closeProject(page);
+      await closeProjectFromSwitcher(page);
     });
 
     await test.step('portable data exports and replace-imports through native file selection', async () => {
@@ -100,7 +101,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
         page.getByRole('article', { name: 'Product brief: Recoverable brief' }),
         'Delete',
       );
-      await closeProject(page);
+      await closeProjectFromSwitcher(page);
 
       await chooseImportPath(app, exportPath);
       settings = await openDataSettings(page);
@@ -139,13 +140,6 @@ async function openDataSettings(page: Page) {
   await settings.getByRole('button', { name: 'Data & privacy' }).click();
   await expect(settings.getByRole('heading', { name: 'Canvas recovery' })).toBeVisible();
   return settings;
-}
-
-async function closeProject(page: Page): Promise<void> {
-  await page.locator('.project-switcher').click();
-  await expect(
-    page.getByRole('heading', { name: /Build software in a visual workshop/i }),
-  ).toBeVisible();
 }
 
 async function openOnlyRecentProject(page: Page): Promise<void> {

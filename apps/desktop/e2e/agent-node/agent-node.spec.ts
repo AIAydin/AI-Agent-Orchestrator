@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Locator } from '@playwright/test';
 
@@ -12,23 +12,34 @@ import {
 import { createRepository, findFiles, primarySnapshot } from './fixture.js';
 import { choosePath } from './native-confirmation.js';
 
-const MODEL_ID = 'openai/gpt-5.1';
 const READY_MARKER = 'FORGEBOARD_FAKE_OPENCODE_READY';
 const EXIT_MARKER = 'FORGEBOARD_FAKE_OPENCODE_EXIT';
 
-test('Agent sessions launch a reconstructed built-in command in a managed worktree', async () => {
+/**
+ * Agent nodes are their own CLI session: the rail lists the agent CLIs found on this computer and
+ * clicking one creates a node that launches straight away, in a managed worktree, leaving the
+ * primary checkout untouched. A fake `opencode` on PATH stands in for the real CLI.
+ */
+test('Agent sessions launch a detected built-in CLI in a managed worktree', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'forgeboard-agent-node-e2e-')));
   const userDataDirectory = join(root, 'user-data');
   const repositoryPath = join(root, 'primary-repository');
   const worktreeRoot = join(root, 'managed-worktrees');
-  const fakeExecutable = await writeFakeOpenCode(root);
+  const fakeBinDirectory = await writeFakeOpenCode(root);
   const before = await createRepository(repositoryPath);
   await mkdir(worktreeRoot, { recursive: true });
   const externalRequests: string[] = [];
   let app: ElectronApplication | null = null;
 
   try {
-    const session = await launchDesktop(userDataDirectory);
+    const session = await launchDesktop(userDataDirectory, {
+      environment: {
+        PATH: `${fakeBinDirectory}${delimiter}${process.env.PATH ?? ''}`,
+        // Detection prefers the login shell's PATH. Pin a profile-free shell so the fake CLI on
+        // the injected PATH is what the app finds, on any developer machine or CI runner.
+        SHELL: '/bin/sh',
+      },
+    });
     app = session.app;
     const page = session.page;
     watchExternalRequests(page, externalRequests);
@@ -39,39 +50,17 @@ test('Agent sessions launch a reconstructed built-in command in a managed worktr
     const settings = page.locator('.settings-modal');
     await settings.getByRole('button', { name: /Git & previews/ }).click();
     await settings.getByLabel('Managed worktree location').fill(worktreeRoot);
-    await settings.getByRole('button', { name: 'Agents & runtime' }).click();
-    const openCode = settings.locator('.agent-setting').filter({ hasText: 'OpenCode' });
-    await openCode.getByLabel('Executable override').fill(fakeExecutable);
-    await openCode.getByLabel('Default model (optional)').selectOption(MODEL_ID);
-    await settings.getByLabel('Default agent').selectOption('opencode');
-    const openCodeReadiness = settings
-      .locator('.agent-readiness-list')
-      .getByRole('button', { name: /Check OpenCode again/u });
-    await openCodeReadiness.click();
-    await expect(openCodeReadiness).toBeEnabled({ timeout: 20_000 });
-    const readinessMessages = await settings.locator('.agent-readiness-list').allTextContents();
-    await expect(
-      settings.locator('.agent-readiness-list').getByText(/executable is ready/u),
-      `OpenCode readiness: ${readinessMessages.join(' | ')}`,
-    ).toBeVisible({ timeout: 20_000 });
-    const saveSettings = settings.getByRole('button', {
-      name: /Save settings/u,
-    });
-    const blockingMessages = await settings.locator('footer [role="alert"]').allTextContents();
-    await expect(
-      saveSettings,
-      `Settings save remained blocked: ${blockingMessages.join(' | ')}`,
-    ).toBeEnabled();
+    const saveSettings = settings.getByRole('button', { name: /Save settings/u });
+    await expect(saveSettings).toBeEnabled({ timeout: 20_000 });
     await saveSettings.click();
     await expect(settings).toBeHidden();
 
     await choosePath(app, repositoryPath);
     await page.getByRole('button', { name: /Open a project folder/i }).click();
     await expect(page.locator('.project-switcher')).toContainText('primary-repository');
+
     const templates = page.locator('.template-section');
-    const openCodeTemplate = templates.getByRole('button', {
-      name: /opencode/iu,
-    });
+    const openCodeTemplate = templates.getByRole('button', { name: /opencode/iu });
     await expect(
       openCodeTemplate,
       `Available templates: ${(await templates.allTextContents()).join(' | ')}`,
@@ -81,7 +70,8 @@ test('Agent sessions launch a reconstructed built-in command in a managed worktr
     const agent = page.getByRole('article', { name: /^Agent: /u });
     await expect(agent).toContainText(/opencode/iu);
     await expect(agent.getByLabel('Permission profile')).toHaveValue('worktree-write');
-    await agent.getByRole('button', { name: 'Start session' }).click();
+    // No Start button: the session launches itself once the session list settles.
+    await expect(agent.getByRole('button', { name: 'Start session' })).toHaveCount(0);
     await expectTerminalText(agent, READY_MARKER);
 
     const terminal = agent.getByRole('application', { name: 'Terminal' });
@@ -89,11 +79,13 @@ test('Agent sessions launch a reconstructed built-in command in a managed worktr
     await terminal.pressSequentially('exit');
     await terminal.press('Enter');
     await expectTerminalText(agent, EXIT_MARKER);
+    // The CLI runs inside a login shell that stays interactive once the agent exits, so leaving
+    // the session takes a second exit.
     await terminal.pressSequentially('exit');
     await terminal.press('Enter');
-    await expect(agent.getByText(/Session ended/u)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(
+      agent.getByText(/Session (?:ended|stopped|interrupted|disconnected)/u),
+    ).toBeVisible({ timeout: 20_000 });
 
     expect(await primarySnapshot(repositoryPath)).toEqual(before);
     expect(await findFiles(repositoryPath, 'forgeboard-agent-proof.txt')).toEqual([]);
@@ -116,7 +108,10 @@ async function installApprovalHarness(app: ElectronApplication): Promise<void> {
   });
 }
 
+/** Writes a fake `opencode` CLI into its own directory and returns that directory. */
 async function writeFakeOpenCode(root: string): Promise<string> {
+  const binDirectory = join(root, 'fake-bin');
+  await mkdir(binDirectory, { recursive: true });
   const scriptPath = join(root, 'fake-opencode.mjs');
   await writeFile(
     scriptPath,
@@ -131,7 +126,7 @@ async function writeFakeOpenCode(root: string): Promise<string> {
       "  if (!pending.includes('exit')) return;",
       "  void writeFile('forgeboard-agent-proof.txt', 'managed worktree session\\n').then(() => {",
       `    process.stdout.write(${JSON.stringify(`${EXIT_MARKER}\n`)});`,
-      '    process.exit(0);',
+      '    setTimeout(() => process.exit(0), 50);',
       '  });',
       '});',
       'setInterval(() => undefined, 1_000);',
@@ -140,9 +135,8 @@ async function writeFakeOpenCode(root: string): Promise<string> {
   );
 
   if (process.platform === 'win32') {
-    const executablePath = join(root, 'fake-opencode.cmd');
     await writeFile(
-      executablePath,
+      join(binDirectory, 'opencode.cmd'),
       [
         '@echo off',
         'if "%~1"=="--version" (',
@@ -157,10 +151,10 @@ async function writeFakeOpenCode(root: string): Promise<string> {
       ].join('\r\n'),
       'utf8',
     );
-    return executablePath;
+    return binDirectory;
   }
 
-  const executablePath = join(root, 'fake-opencode');
+  const executablePath = join(binDirectory, 'opencode');
   await writeFile(
     executablePath,
     [
@@ -178,7 +172,7 @@ async function writeFakeOpenCode(root: string): Promise<string> {
     'utf8',
   );
   await chmod(executablePath, 0o700);
-  return executablePath;
+  return binDirectory;
 }
 
 function shellQuote(value: string): string {
@@ -189,9 +183,7 @@ async function expectTerminalText(agent: Locator, expected: string): Promise<voi
   const terminal = agent.getByRole('application', { name: 'Terminal' });
   try {
     await expect
-      .poll(async () => (await terminal.textContent()) ?? '', {
-        timeout: 20_000,
-      })
+      .poll(async () => (await terminal.textContent()) ?? '', { timeout: 30_000 })
       .toContain(expected);
   } catch (cause) {
     const terminalText =

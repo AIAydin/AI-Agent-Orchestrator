@@ -3,7 +3,11 @@ import { access, chmod, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
-import type { ResolvedTerminalLaunch } from './launch-resolution.js';
+import {
+  BLOCKED_ENVIRONMENT_NAMES,
+  BLOCKED_ENVIRONMENT_PREFIXES,
+  type ResolvedTerminalLaunch,
+} from './launch-resolution.js';
 
 const require = createRequire(import.meta.url);
 
@@ -85,6 +89,30 @@ export function baseTerminalEnvironment(): Record<string, string> {
   for (const name of BASE_ENVIRONMENT_NAMES) {
     const value = process.env[name];
     if (value === undefined || value.includes('\0')) continue;
+    values[name] = value;
+  }
+  return values;
+}
+
+/**
+ * The user's full environment for agent sessions — everything the Forgeboard process inherited,
+ * so the launched CLI behaves exactly like in the user's own terminal (auth, config, session
+ * resume, MCP servers). Only the hard-blocked injection vectors (`DYLD_*`, `LD_*`,
+ * `NODE_OPTIONS`, …) and NUL-containing values are excluded; those are app/loader concerns a
+ * normal terminal would not carry either. Never used for reviewed Terminal-node launches, which
+ * keep the explicit allowlist.
+ */
+export function passthroughTerminalEnvironment(): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (value === undefined || value.includes('\0')) continue;
+    const canonical = name.toUpperCase();
+    if (
+      BLOCKED_ENVIRONMENT_NAMES.has(canonical) ||
+      BLOCKED_ENVIRONMENT_PREFIXES.some((prefix) => canonical.startsWith(prefix))
+    ) {
+      continue;
+    }
     values[name] = value;
   }
   return values;
@@ -176,9 +204,11 @@ export const createTerminalPty: TerminalPtyFactory = async (launch, beforeSpawn)
   const invocation = interactiveShellInvocation(launch.executable, launch.arguments);
   const terminal = pty.spawn(invocation.file, [...invocation.args], {
     cwd: launch.cwd,
-    // Base infrastructure first, then the reviewed allowlist, then the main-side-only peer-hub
+    // Agent sessions inherit the full user environment first (see `environmentPassthrough`);
+    // then base infrastructure, then the reviewed allowlist, then the main-side-only peer-hub
     // env last so it always wins — it is never renderer-supplied (see `ResolvedTerminalLaunch`).
     env: {
+      ...(launch.environmentPassthrough === true ? passthroughTerminalEnvironment() : {}),
       ...baseTerminalEnvironment(),
       ...launch.environment,
       ...launch.peerEnvironment,

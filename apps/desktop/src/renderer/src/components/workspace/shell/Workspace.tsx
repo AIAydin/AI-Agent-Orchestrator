@@ -20,19 +20,20 @@ import {
 } from '@xyflow/react';
 import { PanelBottomOpen } from 'lucide-react';
 
-import type { CanvasDocument, RunAdapterId } from '../../../../../shared/application/contracts.js';
+import type {
+  CanvasDocument,
+  Project,
+  RunAdapterId,
+} from '../../../../../shared/application/contracts.js';
 import { emptyCanvasHistory } from '../../../../../shared/canvas/history/contracts.js';
 import { DEFAULT_CANVAS_NODE_DIMENSIONS } from '../../../../../shared/canvas/node-dimensions.js';
 import type { CollaborationMetadataSnapshot } from '../../../../../shared/collaboration/index.js';
 import { FileDocumentSchema } from '../../../../../shared/files/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
-import {
-  commandPaletteShortcutLabel,
-  opensCommandPalette,
-} from '../../../lib/keyboard/keyboard-preset.js';
+import { opensCommandPalette } from '../../../lib/keyboard/keyboard-preset.js';
 import {
   NODE_DEFINITIONS,
-  NODE_KINDS,
+  TEMPLATE_NODE_KINDS,
   type NodeKind,
   type WorkshopNode,
   type WorkshopNodeData,
@@ -46,8 +47,8 @@ import {
   extensionTemplateKey,
 } from '../../extensions/extension-nodes.js';
 import { GitReviewDialog } from '../../git-review/GitReviewDialog.js';
+import { ProjectDialog } from '../../onboarding/ProjectDialog.js';
 import { permissionProfileUnavailableReason } from '../../permissions/permission-profile-ui.js';
-import { CheckApprovalDialog } from '../CheckApprovalDialog.js';
 import { RunApprovalDialog } from '../runs/RunApprovalDialog.js';
 import { WorkspaceActivityDrawer } from '../activity/WorkspaceActivityDrawer.js';
 import { WorkspaceCanvas } from '../canvas/WorkspaceCanvas.js';
@@ -67,6 +68,10 @@ import {
   type CanvasKeyboardMoveSummary,
 } from '../canvas/interactions/keyboard-navigation.js';
 import { projectGroupDisplay } from '../canvas/interactions/groups/group-display.js';
+import {
+  canvasPlacementObstacles,
+  freeCanvasPosition,
+} from '../canvas/interactions/placement/auto-placement.js';
 import {
   fitAutomaticGroupFrames,
   frameIdsClaimingMembers,
@@ -95,7 +100,6 @@ import {
   workshopNodeForPersistence,
 } from '../model/node-persistence.js';
 import type {
-  CheckCommand,
   EdgeKind,
   ExtensionTemplate,
   WorkshopEdge,
@@ -116,7 +120,6 @@ import { durableHistoryState, hydrateHistorySnapshot } from '../canvas/history/s
 import { normalizeCanvasViewport } from '../canvas/view-state/viewport.js';
 import { useCollaborationCanvas } from '../collaboration/useCollaborationCanvas.js';
 import { mergeCollaborationCanvasSnapshot } from '../collaboration/merge-canvas.js';
-import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
 import { initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
@@ -124,6 +127,7 @@ import { useDiffReviewNodeController } from '../diff-review/useDiffReviewNodeCon
 import { useDiffReviewSession } from '../diff-review/useDiffReviewSession.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import { linkProjectFileToAgent, removeProjectFileFromAgent } from '../context-dnd/linking.js';
+import { openProjectFileNode } from '../model/open-file-node.js';
 import {
   runnableWorkflowNodeCount,
   workflowExecutionMatchesCurrentCanvas,
@@ -146,6 +150,9 @@ import { isTextEntryTarget, workflowDecisionIsCurrent } from './runtime/workspac
 
 const LOCKED_CONNECTION_ACTIVITY = 'Unlock locked nodes before changing their connections.';
 
+/** Where a node lands when it is added without an explicit drop position. */
+const DEFAULT_NODE_ANCHOR = { x: 220, y: 150 } as const;
+
 export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
   function Workspace(props, ref) {
     return (
@@ -164,6 +171,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     extensionDiscovery,
     onClose,
     onProjectUpdated,
+    onSwitchProject,
+    onCreateProject,
     onOpenSettings,
     onError,
   },
@@ -180,6 +189,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [workflowDecision, setWorkflowDecision] = useState<WorkflowDecisionTarget | null>(null);
   const [initializingGit, setInitializingGit] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [instance, setInstance] = useState<ReactFlowInstance<WorkshopNode, WorkshopEdge> | null>(
     null,
@@ -445,6 +455,22 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     if (await flushCanvas()) onClose();
   }, [flushCanvas, onClose]);
 
+  const switchProject = useCallback(
+    async (target: Project) => {
+      if (target.id === project.id) return;
+      if (await flushCanvas()) await onSwitchProject(target);
+    },
+    [flushCanvas, onSwitchProject, project.id],
+  );
+
+  const createProject = useCallback(
+    async (input: { parentPath: string; name: string; initializeGit: boolean }) => {
+      setNewProjectOpen(false);
+      if (await flushCanvas()) await onCreateProject(input);
+    },
+    [flushCanvas, onCreateProject],
+  );
+
   const initializeGit = useCallback(async () => {
     setInitializingGit(true);
     try {
@@ -625,7 +651,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       const definition = NODE_DEFINITIONS[kind];
       const id = crypto.randomUUID();
       const currentNodes = nodesRef.current;
-      const offset = currentNodes.length * 24;
+      const dimensions = initialWorkshopNodeDimensions(kind);
       const titlesInUse = new Set(currentNodes.map((node) => node.data.title));
       pendingNodeSelection.current = id;
       setNodes((items) => [
@@ -634,8 +660,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           id,
           type: 'workshop',
           selected: true,
-          position: position ?? { x: 220 + offset, y: 150 + offset },
-          ...initialWorkshopNodeDimensions(kind),
+          position:
+            position ??
+            freeCanvasPosition(
+              DEFAULT_NODE_ANCHOR,
+              dimensions,
+              canvasPlacementObstacles(currentNodes),
+            ),
+          ...dimensions,
           data: {
             kind,
             title: assignNodeName(titlesInUse),
@@ -687,8 +719,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       const { extension, definition } = template;
       const binding = createExtensionNodeBinding(extension, definition);
       const id = crypto.randomUUID();
-      const offset = nodes.length * 24;
-      const titlesInUse = new Set(nodesRef.current.map((node) => node.data.title));
+      const currentNodes = nodesRef.current;
+      const dimensions = initialWorkshopNodeDimensions('extension');
+      const titlesInUse = new Set(currentNodes.map((node) => node.data.title));
       pendingNodeSelection.current = id;
       setNodes((items) => [
         ...items.map((node) => ({ ...node, selected: false })),
@@ -696,8 +729,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           id,
           type: 'workshop',
           selected: true,
-          position: position ?? { x: 220 + offset, y: 150 + offset },
-          ...initialWorkshopNodeDimensions('extension'),
+          position:
+            position ??
+            freeCanvasPosition(
+              DEFAULT_NODE_ANCHOR,
+              dimensions,
+              canvasPlacementObstacles(currentNodes),
+            ),
+          ...dimensions,
           data: {
             kind: 'extension',
             title: assignNodeName(titlesInUse),
@@ -723,7 +762,54 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         [`Added ${definition.displayName} extension node.`, ...items].slice(0, 30),
       );
     },
-    [collaborationCanvas.graphReadOnly, nodes.length, record, reportCollaborationReadOnly],
+    [collaborationCanvas.graphReadOnly, record, reportCollaborationReadOnly],
+  );
+
+  const openProjectFileOnCanvas = useCallback(
+    (entry: { readonly relativePath: string }) => {
+      if (collaborationCanvas.graphReadOnly) {
+        reportCollaborationReadOnly();
+        return;
+      }
+      const result = openProjectFileNode({
+        projectId: project.id,
+        relativePath: entry.relativePath,
+        nodes: nodesRef.current,
+        newNodeId: crypto.randomUUID(),
+      });
+      if (result.kind === 'existing') {
+        const node = nodesRef.current.find((candidate) => candidate.id === result.nodeId);
+        setSelectedNodeId(result.nodeId);
+        setSelectedEdgeId(null);
+        setNodes((items) =>
+          items.map((item) => ({ ...item, selected: item.id === result.nodeId })),
+        );
+        if (node !== undefined) {
+          void instance?.setCenter(node.position.x, node.position.y, {
+            zoom: 1.15,
+            duration: settings.reducedMotion ? 0 : 220,
+          });
+        }
+        return;
+      }
+      record();
+      pendingNodeSelection.current = result.nodeId;
+      nodesRef.current = result.nodes;
+      setNodes(result.nodes);
+      setSelectedNodeId(result.nodeId);
+      window.setTimeout(() => {
+        if (pendingNodeSelection.current === result.nodeId) pendingNodeSelection.current = null;
+      }, 250);
+      setEvents((items) => [`Opened ${entry.relativePath} as a file node.`, ...items].slice(0, 30));
+    },
+    [
+      collaborationCanvas.graphReadOnly,
+      instance,
+      project.id,
+      record,
+      reportCollaborationReadOnly,
+      settings.reducedMotion,
+    ],
   );
 
   const attachProjectFileContext = useCallback(
@@ -777,6 +863,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       recordSnapshot(currentNodes, currentEdges);
       nodesRef.current = result.nodes;
       setNodes(result.nodes);
+      // Persist right after the state commit so main-process agent controls see
+      // the attachment (they validate against the SAVED canvas, not live state).
+      window.setTimeout(() => void flushCanvas(), 0);
       setEvents((items) =>
         [
           `${result.createdFileNode ? 'Created a file node and added' : 'Added'} the project file to the agent.`,
@@ -784,7 +873,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         ].slice(0, 30),
       );
     },
-    [project.id, recordSnapshot, reportCollaborationReadOnly],
+    [flushCanvas, project.id, recordSnapshot, reportCollaborationReadOnly],
   );
 
   const removeProjectFileContext = useCallback(
@@ -841,11 +930,18 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     workflowRevisionFingerprint,
     onError,
   });
+  // The legacy custom CLI stays out of every agent select; built-in and extension agents only.
   const runnableAgents = agents.filter(
     (agent): agent is typeof agent & { id: RunAdapterId } =>
-      agent.installed && isRunAdapterId(agent.id),
+      agent.installed && isRunAdapterId(agent.id) && agent.id !== 'custom',
   );
   const fallbackAdapter = isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'codex';
+  const addDefaultAgentNode = useCallback(() => {
+    const preferred = runnableAgents.some((agent) => agent.id === fallbackAdapter)
+      ? fallbackAdapter
+      : (runnableAgents[0]?.id ?? fallbackAdapter);
+    addAgentNode(preferred);
+  }, [addAgentNode, fallbackAdapter, runnableAgents]);
   const selectedAdapter = selectedNode ? (selectedNode.data.adapterId ?? fallbackAdapter) : 'codex';
   const selectedAgent = runnableAgents.find((agent) => agent.id === selectedAdapter);
   const selectedModel = effectiveNodeModel(
@@ -951,15 +1047,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     setEvents,
     onError,
   });
-  const checks = useProjectChecks({
-    projectId: project.id,
-    setEvents,
-    onError,
-  });
-  const workflowNodeTitles = useMemo(
-    () => new Map(nodes.map((node) => [node.id, node.data.title] as const)),
-    [nodes],
-  );
   const workflowEvidenceExecution = workflowExecutionMatchesCurrentCanvas(
     workflows.currentExecution,
     persistedUpdatedAt,
@@ -967,15 +1054,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   )
     ? workflows.currentExecution
     : null;
-  const workflowInteractiveNodeIds = useMemo(
-    () =>
-      new Set(
-        nodes
-          .filter((node) => node.data.kind === 'agent' || node.data.kind === 'task')
-          .map((node) => node.id),
-      ),
-    [nodes],
-  );
   const workflowNodeStatuses = useMemo(
     () =>
       new Map(
@@ -1117,16 +1195,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     }
   }, [workflowDecision, workflows.currentExecution, workflows.mutationsAuthorized]);
 
-  const workflowDecisionCount =
-    (workflows.currentExecution?.approvals.length ?? 0) +
-    (workflows.currentExecution?.humanDecisions.length ?? 0) +
-    (workflows.currentExecution?.revisionEscapes.length ?? 0);
-  useEffect(() => {
-    if (workflowDecisionCount > 0) setActivityOpen(true);
-  }, [workflowDecisionCount]);
-
   const searchTerm = search.toLowerCase();
-  const filteredTemplates = NODE_KINDS.filter((kind) =>
+  const filteredTemplates = TEMPLATE_NODE_KINDS.filter((kind) =>
     nodeRegistry.resolve({ kind }).label.toLowerCase().includes(searchTerm),
   );
   const filteredExtensionTemplates = extensionTemplates.filter(({ extension, definition }) =>
@@ -1155,39 +1225,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         ]
       : [];
   });
-  const checkCommands: CheckCommand[] = [
-    {
-      id: 'lint',
-      label: 'Lint',
-      command: settings.lintCommand,
-      detectedScript: project.health.scripts.lint,
-    },
-    {
-      id: 'typecheck',
-      label: 'Typecheck',
-      command: settings.typecheckCommand,
-      detectedScript: project.health.scripts.typecheck,
-    },
-    {
-      id: 'test',
-      label: 'Tests',
-      command: settings.testCommand,
-      detectedScript: project.health.scripts.test,
-    },
-    {
-      id: 'build',
-      label: 'Build',
-      command: settings.buildCommand,
-      detectedScript: project.health.scripts.build,
-    },
-    ...(settings.customChecks ?? []).map((check) => ({
-      id: check.id,
-      label: check.label,
-      command: check.command,
-      detectedScript: undefined,
-    })),
-  ];
-
   const { arrangeGroupFrame, deleteNode, fitGroupFrame, setNodeLocked } = useWorkspaceNodeMutations(
     {
       projectId: project.id,
@@ -1275,6 +1312,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     workflowStartBusy,
     addNode,
     addAgentNode,
+    addDefaultAgentNode,
     addExtensionNode,
     fitCanvas: () =>
       void instance?.fitView({
@@ -1340,10 +1378,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         workflowStatus={
           workflows.activeExecution?.status ?? workflows.currentExecution?.status ?? null
         }
-        commandPaletteShortcut={commandPaletteShortcutLabel(settings.keyboardPreset)}
         collaborationEnabled={settings.collaborationEnabled}
         sharingStatus={collaborationCanvas.connectionStatus}
         projectSidebarOpen={!sidebarLayout.rail.collapsed}
+        onSwitchProject={(target) => void switchProject(target)}
+        onNewProject={() => setNewProjectOpen(true)}
         onCloseProject={() => void closeProject()}
         onToggleProjectSidebar={sidebarLayout.rail.toggleCollapsed}
         onUndo={undo}
@@ -1355,7 +1394,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           })
         }
         onOpenGitReview={openProjectGitReview}
-        onOpenCommands={() => setPaletteOpen(true)}
         onOpenSettings={onOpenSettings}
       />
 
@@ -1390,6 +1428,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onAddExtensionNode={addExtensionNode}
           onInitializeGit={() => void initializeGit()}
           onAttachAgentContext={attachProjectFileContext}
+          onOpenProjectFile={openProjectFileOnCanvas}
           onSelectNode={(node) => {
             setSelectedNodeId(node.id);
             setSelectedEdgeId(null);
@@ -1553,6 +1592,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
                 onUpdateEdgeType={updateEdgeType}
                 onUpdateEdgeData={updateEdgeData}
                 onAddNode={addNode}
+                onAddAgent={addDefaultAgentNode}
                 onAddExtensionNode={addExtensionNode}
                 collaborationAwareness={collaborationCanvas.awareness}
                 onCollaborationCursorMove={collaborationCanvas.updateCursor}
@@ -1569,26 +1609,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         <WorkspaceActivityDrawer
           events={events}
           changeReports={changeReports}
-          checkCommands={checkCommands}
-          latestChecks={checks.latestByCheckId}
-          busyCheckId={checks.busyCheckId}
-          workflowExecutions={workflows.executions}
-          currentWorkflow={workflows.currentExecution}
-          workflowNodeTitles={workflowNodeTitles}
-          workflowInteractiveNodeIds={workflowInteractiveNodeIds}
-          workflowInteractionEvents={workflows.interactionEvents}
-          workflowLoading={workflows.loading}
-          workflowBusyAction={workflows.busyAction}
-          workflowMutationsAuthorized={workflows.mutationsAuthorized}
-          onPrepareCheck={(checkId) => void checks.prepare(checkId)}
-          onCancelCheck={(executionId) => void checks.cancel(executionId)}
-          onSelectWorkflow={workflows.selectExecution}
-          onRefreshWorkflows={() => void workflows.refresh()}
-          onCancelWorkflow={(executionId) => void workflows.cancel(executionId)}
-          onReviewWorkflowDecision={setWorkflowDecision}
-          onSendWorkflowInput={workflows.sendInput}
-          onInterruptWorkflowNode={workflows.interrupt}
-          onOpenSettings={onOpenSettings}
           onOpenGitReview={(runId) =>
             gitReview.openTarget(
               runId === undefined
@@ -1607,6 +1627,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       )}
       {paletteOpen && (
         <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />
+      )}
+      {newProjectOpen && (
+        <ProjectDialog
+          mode="create"
+          onClose={() => setNewProjectOpen(false)}
+          onCreate={(input) => void createProject(input)}
+          onClone={() => undefined}
+        />
       )}
       <VoiceCommandControl
         settings={settings}
@@ -1677,14 +1705,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           busy={runs.approvingRun}
           onCancel={() => void runs.cancelPreparedRun()}
           onApprove={() => void runs.approvePreparedRun()}
-        />
-      )}
-      {checks.plan && (
-        <CheckApprovalDialog
-          plan={checks.plan}
-          busy={checks.approving}
-          onCancel={checks.dismissPlan}
-          onContinue={() => void checks.confirm()}
         />
       )}
     </main>

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { useState } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -9,13 +9,6 @@ import {
   type AgentDetection,
   type AppSettings,
 } from '../../../../../shared/application/contracts.js';
-import type {
-  AgentReadinessResult,
-  CheckAgentReadiness,
-} from '../../../../../shared/readiness/contracts.js';
-import type { ProviderConnectionId } from '../../../../../shared/provider-connections/index.js';
-import { useSettingsAgentReadiness } from '../readiness/useSettingsAgentReadiness.js';
-import { CUSTOM_MODEL_CHOICE } from '../fields/AgentDefaultModelField.js';
 import { AgentsSettings } from './AgentsSettings.js';
 
 const baseSettings = AppSettingsSchema.parse({
@@ -35,47 +28,37 @@ const baseSettings = AppSettingsSchema.parse({
 });
 
 const agents: AgentDetection[] = [
-  {
-    id: 'codex',
-    label: 'OpenAI Codex CLI',
-    installed: false,
-    executable: null,
-    version: null,
-    providerDisclosure: 'Uses the local CLI account.',
-  },
+  detection('codex', 'OpenAI Codex CLI', true, '1.0.0'),
+  detection('claude', 'Claude Code', true, '2.1.0'),
+  detection('gemini', 'Gemini CLI', false, null),
+  detection('opencode', 'OpenCode', false, null),
+  detection('gh', 'GitHub CLI', true, '2.76.1'),
+  detection('docker', 'Docker', true, '27.5.1'),
 ];
 
-const pickExecutable = vi.fn(() =>
-  Promise.resolve({
-    ok: true as const,
-    value: '/chosen/bin/codex' as string | null,
-  }),
-);
-
 beforeEach(() => {
-  pickExecutable.mockReset();
-  pickExecutable.mockResolvedValue({ ok: true, value: '/chosen/bin/codex' });
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
-      projects: { pickExecutable },
-      agents: {
+      git: {
         connections: {
-          get: vi.fn(({ providerId }: { providerId: ProviderConnectionId }) =>
+          status: vi.fn(() =>
             Promise.resolve({
               ok: true,
               value: {
-                schemaVersion: 1,
-                providerId,
-                state: 'disconnected',
-                checkedAt: null,
-                reason: 'Not signed in.',
+                source: 'automatic',
+                state: 'unavailable',
+                identity: null,
+                verifiedAt: null,
+                checkedAt: '2026-07-17T12:00:00.000Z',
               },
             }),
           ),
-          prepare: vi.fn(),
-          confirm: vi.fn(),
-          cancel: vi.fn(),
+          refresh: vi.fn(),
+          chooseGitHubCli: vi.fn(),
+          useAutomaticGitHubCli: vi.fn(),
+          confirmGitHubCli: vi.fn(),
+          cancelPlan: vi.fn(),
         },
       },
     },
@@ -84,154 +67,73 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe('AgentsSettings readiness', () => {
-  it('browses and validates the current override without saving settings', async () => {
-    const ready: AgentReadinessResult = {
-      schemaVersion: 1,
-      agentId: 'codex',
-      state: 'ready',
-      ready: true,
-      source: 'override',
-      executable: '/canonical/bin/codex',
-      version: '2.4.0',
-      checkedAt: '2026-07-15T18:00:00.000Z',
-      reason: null,
-      warnings: [],
-    };
-    const checkAgentReadiness = vi.fn(() => Promise.resolve(ready));
-    render(<Harness checkAgentReadiness={checkAgentReadiness} />);
+describe('AgentsSettings', () => {
+  it('shows plain detection status for the built-in agent CLIs without configuration blocks', async () => {
+    render(<Harness />);
 
-    expect(await screen.findByText(/Connect Codex CLI above before saving it/)).toBeTruthy();
-    expect(screen.getByText('Selected executable needs attention')).toBeTruthy();
-    const override = screen.getByLabelText<HTMLInputElement>('Executable override');
-    const field = override.closest('.agent-override-field');
-    if (field === null) throw new Error('Expected the Codex executable override field.');
-    fireEvent.click(within(field as HTMLElement).getByRole('button', { name: 'Browse' }));
-    await waitFor(() => expect(override.value).toBe('/chosen/bin/codex'));
+    const grid = await screen.findByRole('region', { name: 'Detected agent CLIs' });
+    expect(within(grid).getByText('OpenAI Codex CLI')).toBeTruthy();
+    expect(within(grid).getByText('Claude Code')).toBeTruthy();
+    expect(within(grid).getByText('Gemini CLI')).toBeTruthy();
+    expect(within(grid).getByText('OpenCode')).toBeTruthy();
+    expect(within(grid).getAllByText('Found')).toHaveLength(2);
+    expect(within(grid).getAllByText('Not found')).toHaveLength(2);
 
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Check OpenAI Codex CLI again',
-      }),
-    );
-    await screen.findByText('Selected executable is ready');
-
-    expect(checkAgentReadiness).toHaveBeenCalledWith({
-      agentId: 'codex',
-      executableOverride: '/chosen/bin/codex',
-    });
-    expect(screen.getByText('2.4.0')).toBeTruthy();
-
-    fireEvent.change(override, { target: { value: '/other/bin/codex' } });
-    expect(screen.getByText('Selected executable needs attention')).toBeTruthy();
-    fireEvent.change(override, { target: { value: '/chosen/bin/codex' } });
-    expect(screen.getByText('Selected executable needs attention')).toBeTruthy();
-    expect(screen.queryByText('Selected executable is ready')).toBeNull();
+    expect(screen.queryByLabelText('Executable override')).toBeNull();
+    expect(screen.queryByLabelText('Default model (optional)')).toBeNull();
+    expect(screen.queryByText(/Connect with OpenAI/u)).toBeNull();
+    expect(screen.queryByLabelText('Default terminal executable')).toBeNull();
+    expect(screen.queryByText(/custom tool/iu)).toBeNull();
   });
 
-  it('keeps a failed probe visibly non-ready', async () => {
-    const checkAgentReadiness = vi.fn(() =>
-      Promise.resolve({
-        schemaVersion: 1 as const,
-        agentId: 'codex' as const,
-        state: 'probe-failed' as const,
-        ready: false,
-        source: 'automatic' as const,
-        executable: '/usr/local/bin/codex',
-        version: null,
-        checkedAt: '2026-07-15T18:00:00.000Z',
-        reason: 'The version output did not match the selected agent adapter.',
-        warnings: [],
-      }),
-    );
-    render(<Harness checkAgentReadiness={checkAgentReadiness} />);
+  it('keeps the GitHub CLI and Docker entries', async () => {
+    render(<Harness />);
 
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Check OpenAI Codex CLI again',
-      }),
-    );
+    expect(await screen.findByRole('heading', { name: 'GitHub CLI' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Find GitHub CLI automatically' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Extra protection with Docker' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /Enable Docker profiles/u })).toBeTruthy();
+  });
 
-    await screen.findByText('The version output did not match the selected agent adapter.');
-    expect(screen.getByText('Selected executable needs attention')).toBeTruthy();
-    expect(screen.queryByText('Selected executable is ready')).toBeNull();
+  it('offers only the four built-in CLIs as the default agent', () => {
+    render(<Harness />);
+
+    const select = screen.getByLabelText<HTMLSelectElement>('Default agent');
+    const values = [...select.options].map((option) => option.value);
+    expect(values).toEqual(['codex', 'claude', 'gemini', 'opencode']);
+  });
+
+  it('keeps a legacy custom default selectable until it is changed', () => {
+    render(<Harness initialSettings={{ ...baseSettings, defaultAgent: 'custom' }} />);
+
+    const select = screen.getByLabelText<HTMLSelectElement>('Default agent');
+    expect(select.value).toBe('custom');
+    expect(within(select).getByRole('option', { name: 'Custom (saved earlier)' })).toBeTruthy();
   });
 });
 
-describe('AgentsSettings default model selection', () => {
-  const readyCodex: AgentReadinessResult = {
-    schemaVersion: 1,
-    agentId: 'codex',
-    state: 'ready',
-    ready: true,
-    source: 'automatic',
-    executable: '/canonical/bin/codex',
-    version: '2.4.0',
-    checkedAt: '2026-07-15T18:00:00.000Z',
-    reason: null,
-    warnings: [],
+function detection(
+  id: AgentDetection['id'],
+  label: string,
+  installed: boolean,
+  version: string | null,
+): AgentDetection {
+  return {
+    id,
+    label,
+    installed,
+    executable: installed ? `/usr/local/bin/${id}` : null,
+    version,
+    providerDisclosure: 'Uses the local CLI account.',
   };
-  const checkAgentReadiness: CheckAgentReadiness = () => Promise.resolve(readyCodex);
-
-  it('offers known Codex models in a select without the free-text input', () => {
-    render(<Harness checkAgentReadiness={checkAgentReadiness} />);
-
-    const select = screen.getByLabelText<HTMLSelectElement>('Default model (optional)');
-    expect(select.tagName).toBe('SELECT');
-    expect(screen.queryByLabelText('Custom model id')).toBeNull();
-
-    fireEvent.change(select, { target: { value: 'gpt-5.1-codex' } });
-    expect(select.value).toBe('gpt-5.1-codex');
-    expect(screen.queryByLabelText('Custom model id')).toBeNull();
-
-    fireEvent.change(select, { target: { value: '' } });
-    expect(select.value).toBe('');
-  });
-
-  it('reveals the free-text input only for the Custom choice', () => {
-    render(<Harness checkAgentReadiness={checkAgentReadiness} />);
-
-    const select = screen.getByLabelText<HTMLSelectElement>('Default model (optional)');
-    fireEvent.change(select, { target: { value: CUSTOM_MODEL_CHOICE } });
-    const input = screen.getByLabelText<HTMLInputElement>('Custom model id');
-    fireEvent.change(input, { target: { value: 'my-org/fine-tuned-codex' } });
-    expect(input.value).toBe('my-org/fine-tuned-codex');
-    expect(select.value).toBe(CUSTOM_MODEL_CHOICE);
-
-    fireEvent.change(select, { target: { value: 'gpt-5' } });
-    expect(select.value).toBe('gpt-5');
-    expect(screen.queryByLabelText('Custom model id')).toBeNull();
-  });
-
-  it('shows a previously saved custom model through the revealed input', () => {
-    render(
-      <Harness
-        checkAgentReadiness={checkAgentReadiness}
-        initialSettings={{
-          ...baseSettings,
-          agentDefaultModels: { codex: 'my-org/fine-tuned-codex' },
-        }}
-      />,
-    );
-
-    expect(screen.getByLabelText<HTMLSelectElement>('Default model (optional)').value).toBe(
-      CUSTOM_MODEL_CHOICE,
-    );
-    expect(screen.getByLabelText<HTMLInputElement>('Custom model id').value).toBe(
-      'my-org/fine-tuned-codex',
-    );
-  });
-});
+}
 
 function Harness({
-  checkAgentReadiness,
   initialSettings = baseSettings,
 }: {
-  readonly checkAgentReadiness: CheckAgentReadiness;
   readonly initialSettings?: AppSettings;
-}) {
+} = {}) {
   const [draft, setDraft] = useState<AppSettings>(initialSettings);
-  const readiness = useSettingsAgentReadiness(draft, initialSettings, agents, checkAgentReadiness);
   return (
     <AgentsSettings
       agents={agents}
@@ -239,7 +141,6 @@ function Harness({
       setDraft={setDraft}
       busy={false}
       perform={async (operation) => await operation()}
-      readiness={readiness}
       dockerReadiness={null}
       onDockerReadinessChange={() => undefined}
       onError={(message) => {

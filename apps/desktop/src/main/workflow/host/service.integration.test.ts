@@ -791,7 +791,7 @@ describe('durable workflow host', () => {
           disclosure: { fingerprint: delegatePlan().fingerprint },
         },
       ]);
-      expect(waiting?.delegateApprovals[0]?.reason).toContain('Choose Refresh in Workflows');
+      expect(waiting?.delegateApprovals[0]?.reason).toContain('Run this node again');
       expect(store.listWorkflowNodeBindings(initial.execution.id)).toMatchObject([
         {
           binding: {

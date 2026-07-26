@@ -209,6 +209,17 @@ export function installPreviewWebviewSecurity(
     contents.on('will-redirect', (event, url) => {
       if (!allowedGuestNavigation(url, allowed, configuredOrigin())) event.preventDefault();
     });
+    // Guest creation can precede the embedder's will-attach-webview (where the
+    // partition first becomes resolvable), so registration retries on every
+    // committed navigation until the partition resolves.
+    let guestRegistered = false;
+    const registerGuest = (): void => {
+      if (guestRegistered) return;
+      const partition = options.partitionForGuestSession(guestSession);
+      if (partition === null) return;
+      guestRegistered = true;
+      options.onGuestCreated?.(partition, contents);
+    };
     contents.on('did-navigate', (_event, url) => {
       try {
         allowed = validatedSurfaceUrl(url, {
@@ -217,14 +228,14 @@ export function installPreviewWebviewSecurity(
       } catch {
         allowed = null;
       }
+      registerGuest();
     });
     contents.on('will-attach-webview', (event) => event.preventDefault());
     if (authenticationEnabled()) {
       guestSession.setUserAgent(browserCompatibleUserAgent(guestSession.getUserAgent()));
     }
     hardenGuestSession(guestSession, hardenedSessions, configuredOrigin);
-    const partition = options.partitionForGuestSession(guestSession);
-    if (partition !== null) options.onGuestCreated?.(partition, contents);
+    registerGuest();
   });
 }
 

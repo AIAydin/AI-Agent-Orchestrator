@@ -19,7 +19,7 @@ const MAX_PATH_ENTRIES = 4_096;
 const MAX_ENVIRONMENT_VALUE_BYTES = 64 * 1_024;
 const MAX_ENVIRONMENT_BYTES = 512 * 1_024;
 const MAX_REVIEWABLE_ARGUMENT_BYTES = 64 * 1_024;
-const BLOCKED_ENVIRONMENT_NAMES = new Set([
+export const BLOCKED_ENVIRONMENT_NAMES = new Set([
   'BASH_ENV',
   'ENV',
   'ELECTRON_RUN_AS_NODE',
@@ -32,7 +32,7 @@ const BLOCKED_ENVIRONMENT_NAMES = new Set([
   'PYTHONPATH',
   'RUBYOPT',
 ]);
-const BLOCKED_ENVIRONMENT_PREFIXES = ['DYLD_', 'LD_'];
+export const BLOCKED_ENVIRONMENT_PREFIXES = ['DYLD_', 'LD_'];
 
 export const TERMINAL_PERMISSION_INDICATOR: TerminalPermissionIndicator = {
   label: 'Local terminal with full access',
@@ -73,6 +73,13 @@ export interface ResolvedTerminalLaunch {
    * renderer-reviewed allowlist, and never resolved by `resolveTerminalLaunch` itself.
    */
   readonly peerEnvironment?: Readonly<Record<string, string>>;
+  /**
+   * Agent sessions run the user's real CLI with the user's real environment (auth, config,
+   * session resume, MCP servers). When main reconstructs an automatic agent launch it sets this
+   * flag so the PTY inherits the full user environment instead of only the reviewed allowlist.
+   * Hard-blocked names (`DYLD_*`, `NODE_OPTIONS`, …) stay excluded either way.
+   */
+  readonly environmentPassthrough?: boolean;
   readonly columns: number;
   readonly rows: number;
   readonly rootIdentity: DirectoryIdentity;
@@ -196,8 +203,12 @@ async function canonicalDirectory(
 }
 
 /** Resolves a direct PTY executable with the same platform rules used by reviewed launches. */
-export async function resolveTerminalExecutable(command: string, cwd: string): Promise<string> {
-  for (const candidate of executableCandidates(command, cwd)) {
+export async function resolveTerminalExecutable(
+  command: string,
+  cwd: string,
+  pathValue?: string,
+): Promise<string> {
+  for (const candidate of executableCandidates(command, cwd, pathValue)) {
     try {
       const canonical = await realpath(candidate);
       const details = await stat(canonical);
@@ -211,12 +222,12 @@ export async function resolveTerminalExecutable(command: string, cwd: string): P
   throw new Error('The configured terminal program was not found or cannot be run.');
 }
 
-function executableCandidates(command: string, cwd: string): string[] {
+function executableCandidates(command: string, cwd: string, pathOverride?: string): string[] {
   if (isAbsolute(command)) return [command];
   if (command.includes('/') || command.includes('\\') || command.includes(sep)) {
     return [resolve(cwd, command)];
   }
-  const pathValue = process.env.PATH ?? process.env.Path ?? process.env.path ?? '';
+  const pathValue = pathOverride ?? process.env.PATH ?? process.env.Path ?? process.env.path ?? '';
   const extensions =
     process.platform === 'win32' && extname(command) === ''
       ? (process.env.PATHEXT ?? '.COM;.EXE')

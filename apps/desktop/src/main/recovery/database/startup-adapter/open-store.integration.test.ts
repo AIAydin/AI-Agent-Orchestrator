@@ -401,6 +401,5 @@ function defaultSettings(root: string): AppSettings {
     updateChannel: 'stable',
     automaticUpdateDownloads: false,
     voiceCommandsEnabled: false,
-    voiceAutoRunSafeActions: false,
   };
 }

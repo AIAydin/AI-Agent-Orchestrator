@@ -6,6 +6,7 @@ import { expect, test, type ElectronApplication } from '@playwright/test';
 
 import {
   closeElectronAfterTest,
+  closeProjectFromSwitcher,
   launchDesktop,
   renameCanvasNode,
   watchExternalRequests,
@@ -42,10 +43,7 @@ test('a malformed replace-import fails before confirmation and preserves local w
     await expect(
       page.getByRole('article', { name: 'Product brief: Must survive malformed import' }),
     ).toBeVisible();
-    await page.locator('.project-switcher').click();
-    await expect(
-      page.getByRole('heading', { name: /Build software in a visual workshop/i }),
-    ).toBeVisible();
+    await closeProjectFromSwitcher(page);
 
     await installImportDialogHarness(electronApp, malformedImportPath);
     await page.getByRole('button', { name: 'Settings' }).click();

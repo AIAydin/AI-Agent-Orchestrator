@@ -1,7 +1,5 @@
 import {
-  ChevronDown,
   CircleDot,
-  Command,
   GitCompareArrows,
   Maximize2,
   PanelLeftClose,
@@ -12,6 +10,7 @@ import {
 } from 'lucide-react';
 
 import type { AgentDetection, Project } from '../../../../../shared/application/contracts.js';
+import { ProjectSwitcher } from './project-switcher/ProjectSwitcher.js';
 import {
   WorkspaceStatusIndicators,
   type WorkspaceSharingStatus,
@@ -27,17 +26,17 @@ interface WorkspaceCommandBarProps {
   canUndo: boolean;
   canRedo: boolean;
   workflowStatus: string | null;
-  commandPaletteShortcut: string;
   collaborationEnabled: boolean;
   sharingStatus: WorkspaceSharingStatus;
   projectSidebarOpen: boolean;
+  onSwitchProject: (project: Project) => void;
+  onNewProject: () => void;
   onCloseProject: () => void;
   onToggleProjectSidebar: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onFitCanvas: () => void;
   onOpenGitReview: () => void;
-  onOpenCommands: () => void;
   onOpenSettings: () => void;
 }
 
@@ -50,30 +49,29 @@ export function WorkspaceCommandBar({
   canUndo,
   canRedo,
   workflowStatus,
-  commandPaletteShortcut,
   collaborationEnabled,
   sharingStatus,
   projectSidebarOpen,
+  onSwitchProject,
+  onNewProject,
   onCloseProject,
   onToggleProjectSidebar,
   onUndo,
   onRedo,
   onFitCanvas,
   onOpenGitReview,
-  onOpenCommands,
   onOpenSettings,
 }: WorkspaceCommandBarProps) {
   return (
     <header className="command-bar">
       <div className="window-drag-space" />
-      <button className="project-switcher" type="button" onClick={onCloseProject}>
-        <span className="brand-mark tiny">F</span>
-        <span>
-          <strong>{project.name}</strong>
-          <small>{canvasName ?? 'Loading canvas…'}</small>
-        </span>
-        <ChevronDown size={14} />
-      </button>
+      <ProjectSwitcher
+        project={project}
+        canvasName={canvasName}
+        onSwitchProject={onSwitchProject}
+        onNewProject={onNewProject}
+        onCloseProject={onCloseProject}
+      />
       <WorkspaceTooltip
         content={projectSidebarOpen ? 'Hide the project sidebar' : 'Show the project sidebar'}
       >
@@ -141,8 +139,8 @@ export function WorkspaceCommandBar({
         collaborationEnabled={collaborationEnabled}
         sharingStatus={sharingStatus}
       />
-      <span className={`autosave-state ${saveState}`}>
-        <CircleDot size={12} />
+      <span className={`autosave-state ${saveState}`} role="status" aria-label="Save status">
+        <CircleDot size={12} aria-hidden="true" />
         {saveState === 'saved'
           ? 'Saved locally'
           : saveState === 'saving'
@@ -154,9 +152,6 @@ export function WorkspaceCommandBar({
           <GitCompareArrows size={14} /> Changes
         </button>
       </WorkspaceTooltip>
-      <button className="command-trigger" type="button" onClick={onOpenCommands}>
-        <Command size={14} /> Commands <kbd>{commandPaletteShortcut}</kbd>
-      </button>
       <WorkspaceTooltip content="Open Forgeboard settings">
         <button
           className="icon-button"

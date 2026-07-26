@@ -11,7 +11,6 @@ import {
   FolderOpen,
   FolderSearch,
   GitBranch,
-  Github,
   Plus,
   Settings,
   ShieldCheck,
@@ -26,6 +25,8 @@ import type {
   ProjectRecoveryAssessment,
 } from '../../../../shared/application/contracts.js';
 import { trapModalFocus } from '../../lib/modal-focus.js';
+import { BrandMark } from '../shell/BrandMark.js';
+import { GithubLogo } from '../workspace/node-registry/brand-logos.js';
 import { ProjectDialog, type ProjectDialogMode } from './ProjectDialog.js';
 import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
@@ -129,7 +130,7 @@ export function Welcome(props: WelcomeProps) {
     <main className="welcome-shell">
       <header className="welcome-header">
         <span className="brand">
-          <span className="brand-mark">F</span>
+          <BrandMark />
           <span>Forgeboard</span>
           <span className="local-pill">
             <ShieldCheck size={13} /> Local
@@ -188,7 +189,7 @@ export function Welcome(props: WelcomeProps) {
             disabled={props.busy}
           >
             <span className="start-icon">
-              <Github size={22} />
+              <GithubLogo size={22} />
             </span>
             <span>
               <strong>Clone a repository</strong>

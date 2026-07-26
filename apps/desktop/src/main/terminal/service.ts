@@ -26,6 +26,7 @@ import {
   type TerminalSessionListInput,
   type TerminalSessionTargetInput,
   type TerminalSessionView,
+  type TerminalWorkspaceView,
 } from '../../shared/terminal/index.js';
 import { formatPeerDelivery, transcriptTailText } from '../agent-peers/text.js';
 import type { StoredTerminalSession } from '../storage/terminal/contracts.js';
@@ -149,6 +150,8 @@ interface PendingLaunch {
   readonly resolved: ResolvedTerminalLaunch;
   readonly input: TerminalPrepareLaunchInput;
   readonly workspace?: PreparedTerminalWorkspace;
+  /** Session-view workspace for automatic project-directory Agent launches (no worktree). */
+  readonly projectWorkspaceView?: Extract<TerminalWorkspaceView, { kind: 'project' }>;
   readonly authorization: 'native-or-saved-approval' | 'managed-agent-automatic';
   /** Opaque hub provision id from the renderer; never a resolved URL/token (see IPC schema). */
   readonly peerProvisionId?: string;
@@ -741,7 +744,11 @@ export class TerminalService {
       earliestSequence: 1,
       nextSequence: 1,
       outputTruncated: false,
-      ...(pending.workspace === undefined ? {} : { workspace: pending.workspace.view }),
+      ...(pending.workspace !== undefined
+        ? { workspace: pending.workspace.view }
+        : pending.projectWorkspaceView !== undefined
+          ? { workspace: pending.projectWorkspaceView }
+          : {}),
       updatedAt: createdAt,
     });
     await this.#transcripts.create(sessionId);
@@ -1246,6 +1253,9 @@ export class TerminalService {
   }
 
   async #prepareManagedWorkspace(pending: PendingLaunch): Promise<PendingLaunch> {
+    if (pending.input.workspace?.kind === 'project') {
+      return await this.#prepareAgentProjectLaunch(pending);
+    }
     if (pending.input.workspace?.kind !== 'managed-agent-worktree') return pending;
     const manager = this.#workspaceManager;
     if (manager === undefined) {
@@ -1256,6 +1266,7 @@ export class TerminalService {
       project,
       nodeId: pending.plan.nodeId,
       adapterId: pending.input.workspace.adapterId,
+      runtime: pending.input.workspace.runtime ?? 'host',
     });
     try {
       const automatic = await manager.resolveAutomaticAgentLaunch(workspace);
@@ -1268,7 +1279,7 @@ export class TerminalService {
         );
         return { ...pending, resolved, workspace };
       }
-      const peerArguments = this.#automaticPeerArguments(pending, workspace);
+      const peerArguments = this.#automaticPeerArguments(pending, workspace.ownership.agentId);
       const input = TerminalPrepareLaunchInputSchema.parse({
         ...pending.input,
         executable: automatic.executable,
@@ -1294,7 +1305,8 @@ export class TerminalService {
         authorization: 'managed-agent-automatic',
         input,
         plan,
-        resolved,
+        // Agent sessions run with the user's full environment (WS-E: not sandboxed).
+        resolved: { ...resolved, environmentPassthrough: true },
         workspace,
       };
     } catch (error) {
@@ -1310,11 +1322,53 @@ export class TerminalService {
     }
   }
 
-  #automaticPeerArguments(
-    pending: PendingLaunch,
-    workspace: PreparedTerminalWorkspace,
-  ): readonly string[] {
+  /**
+   * "Write in current directory": reconstructs and authorizes a built-in Agent session that runs
+   * right in the project checkout — no worktree, no native dialog. Anything main cannot
+   * reconstruct stays on the explicit native-review path.
+   */
+  async #prepareAgentProjectLaunch(pending: PendingLaunch): Promise<PendingLaunch> {
+    const manager = this.#workspaceManager;
+    if (manager?.resolveAutomaticProjectLaunch === undefined) return pending;
+    const project = this.#project(pending.plan.projectId);
+    const automatic = await manager.resolveAutomaticProjectLaunch({
+      project,
+      nodeId: pending.plan.nodeId,
+    });
+    if (automatic === null) return pending;
+    const peerArguments = this.#automaticPeerArguments(pending, automatic.adapterId);
+    const input = TerminalPrepareLaunchInputSchema.parse({
+      ...pending.input,
+      executable: automatic.executable,
+      arguments: [...automatic.arguments, ...peerArguments],
+      cwdRelative: automatic.cwdRelative,
+      environmentVariableNames: [...automatic.environmentVariableNames],
+    });
+    const resolved = await resolveTerminalLaunch(project, input, this.getSettings());
+    const plan = TerminalLaunchPlanViewSchema.parse({
+      ...pending.plan,
+      executable: resolved.configuredExecutable,
+      arguments: [...resolved.arguments],
+      cwdRelative: resolved.cwdRelative,
+      environmentVariableNames: [...resolved.environmentVariableNames],
+    });
+    return {
+      ...pending,
+      authorization: 'managed-agent-automatic',
+      input,
+      plan,
+      // Agent sessions run with the user's full environment (WS-E: not sandboxed).
+      resolved: { ...resolved, environmentPassthrough: true },
+      projectWorkspaceView: { kind: 'project', directory: resolved.rootPath },
+    };
+  }
+
+  #automaticPeerArguments(pending: PendingLaunch, adapterId: string): readonly string[] {
     if (pending.peerProvisionId === undefined) return [];
+    // Peer material (hub URL, config paths) is host-scoped and would dangle inside a container.
+    if ((pending.workspace?.runtime ?? 'host') === 'docker') {
+      throw new Error('Peer tools are not available in Docker isolated sessions yet.');
+    }
     const material = this.#peerProvider?.launchMaterialForProvision(pending.peerProvisionId);
     if (material === null || material === undefined) {
       throw new Error('Peer session expired. Start again.');
@@ -1322,7 +1376,7 @@ export class TerminalService {
     if (
       material.projectId !== pending.plan.projectId ||
       material.nodeId !== pending.plan.nodeId ||
-      material.adapterId !== workspace.ownership.agentId
+      material.adapterId !== adapterId
     ) {
       this.#safeAudit('launch', 'failed', {
         projectId: pending.plan.projectId,

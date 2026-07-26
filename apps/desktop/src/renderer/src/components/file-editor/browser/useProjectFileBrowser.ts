@@ -30,6 +30,8 @@ export interface ProjectFileBrowserIndex {
   readonly bounded: boolean;
   readonly error: string | null;
   readonly refresh: () => void;
+  /** Lists one directory on demand — used for ignored folders the scan skips. */
+  readonly loadDirectory: (directory: string) => Promise<void>;
 }
 
 export function useProjectFileBrowser(
@@ -38,6 +40,7 @@ export function useProjectFileBrowser(
 ): ProjectFileBrowserIndex {
   const [status, setStatus] = useState<ProjectFileBrowserIndex['status']>('loading');
   const [results, setResults] = useState<readonly FileTreeResult[]>([]);
+  const [demandResults, setDemandResults] = useState<readonly FileTreeResult[]>([]);
   const [bounded, setBounded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshSequence, setRefreshSequence] = useState(0);
@@ -46,6 +49,7 @@ export function useProjectFileBrowser(
     let active = true;
     setStatus('loading');
     setResults([]);
+    setDemandResults([]);
     setBounded(false);
     setError(null);
 
@@ -122,9 +126,26 @@ export function useProjectFileBrowser(
     };
   }, [operations, projectId, refreshSequence]);
 
-  const entries = useMemo(() => indexTreeEntries(results), [results]);
+  const loadDirectory = useCallback(
+    async (directory: string): Promise<void> => {
+      const candidate = FileTreeResultSchema.parse(await operations.tree({ projectId, directory }));
+      if (candidate.projectId !== projectId || candidate.directory !== directory) {
+        throw new Error('The file tree returned data for a different project location.');
+      }
+      setDemandResults((current) => [
+        ...current.filter((result) => result.directory !== directory),
+        candidate,
+      ]);
+    },
+    [operations, projectId],
+  );
+
+  const entries = useMemo(
+    () => indexTreeEntries([...results, ...demandResults]),
+    [demandResults, results],
+  );
   const refresh = useCallback(() => setRefreshSequence((value) => value + 1), []);
-  return { status, results, entries, bounded, error, refresh };
+  return { status, results, entries, bounded, error, refresh, loadDirectory };
 }
 
 export function fileBrowserError(cause: unknown, fallback: string): string {

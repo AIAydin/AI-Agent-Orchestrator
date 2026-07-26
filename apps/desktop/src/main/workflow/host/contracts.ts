@@ -130,6 +130,12 @@ export interface WorkflowNodeExecutionHandle {
 export interface WorkflowNodeExecutor {
   readonly id: string;
   readonly supports: (node: CanvasNode) => boolean;
+  /**
+   * True when the Run control on the node is itself the launch decision, so the host launches the
+   * prepared plan instead of raising a separate human approval. The prepared plan, its fingerprint
+   * and the persisted node are still checked before anything spawns.
+   */
+  readonly launchesWithoutApproval?: boolean;
   readonly prepare: (context: WorkflowExecutorContext) => Promise<WorkflowExecutorPreparation>;
   readonly launch: (
     context: WorkflowExecutorContext,

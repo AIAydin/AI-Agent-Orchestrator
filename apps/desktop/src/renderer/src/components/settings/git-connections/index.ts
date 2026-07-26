@@ -1,1 +1,1 @@
-export { GitConnectionsSettings } from './GitConnectionsSettings.js';
+export { GitHubCliConnection } from './GitHubCliConnection.js';

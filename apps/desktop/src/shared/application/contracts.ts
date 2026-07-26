@@ -274,7 +274,6 @@ export const AppSettingsSchema = z
     updateChannel: z.enum(['stable', 'prerelease', 'disabled']).default('prerelease'),
     automaticUpdateDownloads: z.boolean().default(false),
     voiceCommandsEnabled: z.boolean().default(false),
-    voiceAutoRunSafeActions: z.boolean().default(false),
   })
   .superRefine((settings, context) => {
     if (settings.previewPortEnd <= settings.previewPortStart) {
@@ -1086,6 +1085,7 @@ export const IPC_CHANNELS = Object.freeze({
   settingsCheckFolderReadiness: 'settings:check-folder-readiness',
   agentsDetect: 'agents:detect',
   agentsCheckReadiness: 'agents:check-readiness',
+  agentSessionCreatePr: 'agent-session:create-pr',
   commandsCheckReadiness: 'commands:check-readiness',
   approvalsList: 'approvals:list',
   approvalsRevoke: 'approvals:revoke',
@@ -1114,6 +1114,7 @@ export const IPC_CHANNELS = Object.freeze({
   storageCheckIntegrity: 'storage:check-integrity',
   dockerCheck: 'docker:check',
   dockerPull: 'docker:pull',
+  dockerListLocal: 'docker:list-local',
   runsList: 'runs:list',
   runsGet: 'runs:get',
   runsPrepare: 'runs:prepare',

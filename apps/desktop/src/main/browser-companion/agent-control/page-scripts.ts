@@ -38,6 +38,67 @@ export const INTERACTIVE_ELEMENTS_EXPRESSION = String.raw`(() => {
   }).slice(0, 100);
 })()`;
 
+/** Page-side element classifier shared by the CDP companion and the webview guest bridge. */
+export const ELEMENT_DESCRIPTOR_SOURCE = String.raw`(element) => {
+    const clean = (value, limit = 200) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, limit);
+    const tag = element.tagName.toLowerCase();
+    const inputType = tag === 'input' ? clean(element.type).toLowerCase() : '';
+    const role = clean(element.getAttribute('role')).toLowerCase();
+    const label = clean(
+      element.getAttribute('aria-label') ||
+      element.labels?.[0]?.innerText ||
+      element.getAttribute('placeholder') ||
+      element.getAttribute('title') ||
+      element.innerText ||
+      element.getAttribute('alt') ||
+      tag
+    );
+    const editable = tag === 'textarea' ||
+      (tag === 'input' && !['button', 'checkbox', 'file', 'hidden', 'radio', 'reset', 'submit'].includes(inputType)) ||
+      element.isContentEditable === true || role === 'textbox';
+    const searchable = clean([
+      inputType,
+      element.getAttribute('autocomplete'),
+      element.getAttribute('name'),
+      element.getAttribute('id'),
+      label
+    ].join(' '), 500).toLowerCase();
+    const authenticationPage = /(^|\/)(login|log-in|signin|sign-in|oauth|authorize|authentication)(\/|$)/i.test(location.pathname) ||
+      location.hostname.toLowerCase() === 'accounts.google.com';
+    const paymentPage = /(^|\/)(checkout|payment|billing)(\/|$)/i.test(location.pathname);
+    const sensitive = ['password', 'file', 'hidden'].includes(inputType) ||
+      /(password|passcode|one.?time|otp|verification|credit|card number|cvv|cvc|routing|social security|ssn|api.?key|access.?token|private.?key|seed phrase|recovery code)/i.test(searchable);
+    const identifyingField = editable && /(email|e-mail|username|user name|account id)/i.test(searchable);
+    const userOnly = sensitive || identifyingField || authenticationPage || paymentPage ||
+      /(sign[ -]?in|log[ -]?in|oauth|authoriz|two.?factor|2fa|checkout|purchase|\bbuy\b|\bpay\b|upload|download|choose file|select file|attach(?:ment| file)|camera|microphone|location permission|notification|clipboard|screen (?:share|capture)|bluetooth|usb|serial)/i.test(label);
+    const consequential = userOnly || inputType === 'submit' ||
+      /(delete|remove|send|submit|confirm|publish|share|invite|approve|transfer|place order)/i.test(label);
+    let destination = null;
+    if (tag === 'a' && element.href) {
+      try {
+        const parsed = new URL(element.href, location.href);
+        destination = (parsed.origin + parsed.pathname).slice(0, 2048);
+      } catch {}
+    }
+    const kind = editable ? 'text-input' :
+      (tag === 'a' || role === 'link') ? 'link' :
+      (inputType === 'checkbox' || inputType === 'radio') ? 'toggle' :
+      (tag === 'button' || role === 'button' || inputType === 'button' || inputType === 'submit') ? 'button' :
+      'control';
+    return {
+      connected: element.isConnected === true,
+      kind,
+      name: label,
+      disabled: element.disabled === true || element.getAttribute('aria-disabled') === 'true',
+      editable,
+      sensitive,
+      consequential,
+      userOnly,
+      opensNewWindow: tag === 'a' && element.target === '_blank',
+      destination
+    };
+  }`;
+
 export const DESCRIBE_ELEMENTS_FUNCTION = descriptorFunction(true);
 export const DESCRIBE_ELEMENT_FUNCTION = descriptorFunction(false);
 
@@ -155,68 +216,9 @@ export function sameElementDescriptor(
 }
 
 function descriptorFunction(collection: boolean): string {
-  const describe = String.raw`(element) => {
-    const clean = (value, limit = 200) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, limit);
-    const tag = element.tagName.toLowerCase();
-    const inputType = tag === 'input' ? clean(element.type).toLowerCase() : '';
-    const role = clean(element.getAttribute('role')).toLowerCase();
-    const label = clean(
-      element.getAttribute('aria-label') ||
-      element.labels?.[0]?.innerText ||
-      element.getAttribute('placeholder') ||
-      element.getAttribute('title') ||
-      element.innerText ||
-      element.getAttribute('alt') ||
-      tag
-    );
-    const editable = tag === 'textarea' ||
-      (tag === 'input' && !['button', 'checkbox', 'file', 'hidden', 'radio', 'reset', 'submit'].includes(inputType)) ||
-      element.isContentEditable === true || role === 'textbox';
-    const searchable = clean([
-      inputType,
-      element.getAttribute('autocomplete'),
-      element.getAttribute('name'),
-      element.getAttribute('id'),
-      label
-    ].join(' '), 500).toLowerCase();
-    const authenticationPage = /(^|\/)(login|log-in|signin|sign-in|oauth|authorize|authentication)(\/|$)/i.test(location.pathname) ||
-      location.hostname.toLowerCase() === 'accounts.google.com';
-    const paymentPage = /(^|\/)(checkout|payment|billing)(\/|$)/i.test(location.pathname);
-    const sensitive = ['password', 'file', 'hidden'].includes(inputType) ||
-      /(password|passcode|one.?time|otp|verification|credit|card number|cvv|cvc|routing|social security|ssn|api.?key|access.?token|private.?key|seed phrase|recovery code)/i.test(searchable);
-    const identifyingField = editable && /(email|e-mail|username|user name|account id)/i.test(searchable);
-    const userOnly = sensitive || identifyingField || authenticationPage || paymentPage ||
-      /(sign[ -]?in|log[ -]?in|oauth|authoriz|two.?factor|2fa|checkout|purchase|\bbuy\b|\bpay\b|upload|download|choose file|select file|attach(?:ment| file)|camera|microphone|location permission|notification|clipboard|screen (?:share|capture)|bluetooth|usb|serial)/i.test(label);
-    const consequential = userOnly || inputType === 'submit' ||
-      /(delete|remove|send|submit|confirm|publish|share|invite|approve|transfer|place order)/i.test(label);
-    let destination = null;
-    if (tag === 'a' && element.href) {
-      try {
-        const parsed = new URL(element.href, location.href);
-        destination = (parsed.origin + parsed.pathname).slice(0, 2048);
-      } catch {}
-    }
-    const kind = editable ? 'text-input' :
-      (tag === 'a' || role === 'link') ? 'link' :
-      (inputType === 'checkbox' || inputType === 'radio') ? 'toggle' :
-      (tag === 'button' || role === 'button' || inputType === 'button' || inputType === 'submit') ? 'button' :
-      'control';
-    return {
-      connected: element.isConnected === true,
-      kind,
-      name: label,
-      disabled: element.disabled === true || element.getAttribute('aria-disabled') === 'true',
-      editable,
-      sensitive,
-      consequential,
-      userOnly,
-      opensNewWindow: tag === 'a' && element.target === '_blank',
-      destination
-    };
-  }`;
   return collection
-    ? `function () { const describe = ${describe}; return this.map(describe); }`
-    : `function () { const describe = ${describe}; return describe(this); }`;
+    ? `function () { const describe = ${ELEMENT_DESCRIPTOR_SOURCE}; return this.map(describe); }`
+    : `function () { const describe = ${ELEMENT_DESCRIPTOR_SOURCE}; return describe(this); }`;
 }
 
 function finiteNumber(value: unknown): value is number {

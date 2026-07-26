@@ -88,6 +88,16 @@ const dockerPull = vi.fn(() =>
     value: { outcome: 'pulled' as const, readiness: readyDocker },
   }),
 );
+const dockerListLocal = vi.fn(() =>
+  Promise.resolve({
+    ok: true as const,
+    value: {
+      daemonAvailable: true,
+      images: [{ reference: readyDocker.image }],
+      containers: [],
+    },
+  }),
+);
 const pickExecutable = vi.fn(() =>
   Promise.resolve({ ok: true as const, value: null as string | null }),
 );
@@ -140,6 +150,15 @@ beforeEach(() => {
     ok: true,
     value: { outcome: 'pulled', readiness: readyDocker },
   });
+  dockerListLocal.mockReset();
+  dockerListLocal.mockResolvedValue({
+    ok: true,
+    value: {
+      daemonAvailable: true,
+      images: [{ reference: readyDocker.image }],
+      containers: [],
+    },
+  });
   pickExecutable.mockReset();
   pickExecutable.mockResolvedValue({ ok: true, value: null });
   commandCheck.mockReset();
@@ -162,7 +181,7 @@ beforeEach(() => {
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
-      docker: { check: dockerCheck, pull: dockerPull },
+      docker: { check: dockerCheck, pull: dockerPull, listLocal: dockerListLocal },
       projects: {
         pickExecutable,
         pickParent: vi.fn(() => Promise.resolve({ ok: true, value: null })),
@@ -346,6 +365,7 @@ describe('SetupWizard', () => {
     fireEvent.click(agentContinue);
 
     fireEvent.click(screen.getByRole('radio', { name: /Docker isolated/ }));
+    await screen.findByRole('option', { name: readyDocker.image });
     fireEvent.change(screen.getByLabelText('Container image'), {
       target: { value: readyDocker.image },
     });
@@ -531,6 +551,7 @@ describe('SetupWizard', () => {
     await waitFor(() => expect(agentContinue.disabled).toBe(false));
     fireEvent.click(agentContinue);
     fireEvent.click(screen.getByRole('radio', { name: /Docker isolated/ }));
+    await screen.findByRole('option', { name: readyDocker.image });
     fireEvent.change(screen.getByLabelText('Container image'), {
       target: { value: readyDocker.image },
     });
@@ -544,11 +565,18 @@ describe('SetupWizard', () => {
     await screen.findByText('Image is not stored locally');
     expect(continueButton.hasAttribute('disabled')).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: /Pull image/ }));
+    dockerPull.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        outcome: 'pulled',
+        readiness: { ...readyDocker, image: 'node:22-bookworm' },
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Get default image/ }));
     await screen.findByText('Docker profile ready');
     expect(dockerPull).toHaveBeenCalledWith({
       dockerExecutable: 'docker',
-      image: readyDocker.image,
+      image: 'node:22-bookworm',
       containerExecutable: readyDocker.containerExecutable,
     });
     expect(continueButton.hasAttribute('disabled')).toBe(false);
@@ -609,7 +637,7 @@ describe('SetupWizard', () => {
     expect(screen.getByText(/Do not enter passwords, tokens, or other secrets here/u)).toBeTruthy();
   });
 
-  it('configures a truthful host Custom profile in the Safety step without file editing', async () => {
+  it('offers Write in current directory instead of a Custom profile in the Safety step', async () => {
     const onComplete = vi.fn<(settings: AppSettings) => Promise<void>>(() => Promise.resolve());
     render(
       <SetupWizard
@@ -625,23 +653,17 @@ describe('SetupWizard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
     await continueFromAgentStep();
-    fireEvent.click(screen.getByRole('radio', { name: /Custom/u }));
+    expect(screen.queryByRole('radio', { name: /Custom/u })).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: /Write in current directory/u }));
 
-    expect(screen.getByText('Limits are stated, not enforced')).toBeTruthy();
-    expect(screen.getByText(/folder lists tell the agent your intent/u)).toBeTruthy();
-    expect(screen.getByRole('checkbox', { name: /Ask the agent to allow tests/u })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
-    expect(screen.getByText('Custom', { selector: 'dd' })).toBeTruthy();
+    expect(screen.getByText('Write in current directory', { selector: 'dd' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Open Forgeboard/ }));
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
     expect(onComplete.mock.calls[0]?.[0]).toMatchObject({
-      defaultPermissionProfile: 'custom',
-      customPermissionProfile: {
-        runtime: 'host',
-        filesystem: 'assigned-worktree-read-only',
-      },
+      defaultPermissionProfile: 'project-write',
     });
   });
 });

@@ -5,7 +5,7 @@ import { DiagramNodeFace } from '../../content/diagram/DiagramNodeFace.js';
 import { DiffNodeFace } from '../../content/diff/DiffNodeFace.js';
 import { FileNodeFace } from '../../content/file/FileNodeFace.js';
 import { VideoNodeFace } from '../../content/video/VideoNodeFace.js';
-import { NoteImageNodeFace } from '../../content/note-image/NoteImageNodeFace.js';
+import { NoteNodeFace } from '../../content/note/NoteNodeFace.js';
 import { TextNodeFace } from '../../content/text/TextNodeFace.js';
 import { WhiteboardNodeFace } from '../../content/whiteboard/WhiteboardNodeFace.js';
 import { ExtensionNodeFace } from '../../content/ExtensionNodeFace.js';
@@ -52,7 +52,7 @@ const FACES: Readonly<Partial<Record<string, NodeFaceComponent>>> = {
   video: VideoNodeFace,
   'git-pr': GitPrNodeFace,
   'group-frame': GroupFrameNodeFace,
-  'note-image': NoteImageNodeFace,
+  'note-image': NoteNodeFace,
   'review-gate': ReviewGateNodeFace,
   task: TaskNodeFace,
   terminal: TerminalNodeFace,

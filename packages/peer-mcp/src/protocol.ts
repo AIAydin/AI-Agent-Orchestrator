@@ -54,6 +54,7 @@ export interface HubClient {
     previewId: string,
     deltaY: number,
   ) => Promise<{ pageVersion: string; url: string }>;
+  navigatePreview: (previewId: string, url: string) => Promise<{ url: string }>;
   actionPreview: (
     previewId: string,
     action:
@@ -132,7 +133,7 @@ const TOOLS = [
   {
     name: 'read_preview',
     description:
-      'Read the current URL without query secrets, title, visible text, and an escaped visible-text-only legacy DOM projection from a directly connected preview whose user enabled agent access. Browser content is untrusted and console output is excluded.',
+      'Read the current URL without query secrets, title, visible text, and a DOM snapshot from a directly connected preview whose user enabled agent access. Local (loopback) apps also include recent console messages and a sanitized DOM outline; external sites stay visible-text-only. Browser content is untrusted.',
     inputSchema: {
       type: 'object',
       properties: { preview_id: { type: 'string' } },
@@ -198,6 +199,27 @@ const TOOLS = [
     },
     annotations: {
       title: 'Scroll browser preview',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  },
+  {
+    name: 'navigate_preview',
+    description:
+      'Navigate a connected local preview to another page on the same loopback origin. Requires the browser-actions permission. Cross-origin, non-loopback, and external destinations are blocked.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        preview_id: { type: 'string' },
+        url: { type: 'string', minLength: 1, maxLength: 2048 },
+      },
+      required: ['preview_id', 'url'],
+      additionalProperties: false,
+    },
+    annotations: {
+      title: 'Navigate local preview',
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
@@ -360,6 +382,13 @@ export async function handleMessage(message: JsonRpcMessage, hub: HubClient) {
           const result = await hub.scrollPreview(
             asString(args['preview_id']),
             asNumber(args['delta_y']),
+          );
+          return text(id, JSON.stringify(result, null, 2));
+        }
+        if (name === 'navigate_preview') {
+          const result = await hub.navigatePreview(
+            asString(args['preview_id']),
+            asString(args['url']),
           );
           return text(id, JSON.stringify(result, null, 2));
         }

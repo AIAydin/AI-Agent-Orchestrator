@@ -1,6 +1,16 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -20,6 +30,7 @@ import {
   type StoredRunWorktreeState,
 } from '../../storage-schemas.js';
 import { ManagedTerminalWorkspaceService } from './service.js';
+import { claudeHistoryDirectoryName } from './session-history-link.js';
 
 const execFileAsync = promisify(execFile);
 const PROJECT_ID = '10000000-0000-4000-8000-000000000001';
@@ -110,6 +121,147 @@ describe('ManagedTerminalWorkspaceService', () => {
     expect(fixture.store.getRun(second.view.runId)?.worktreeState).toBe('cleaned');
     await expect(realpath(second.rootPath)).rejects.toThrow();
   });
+
+  it('gates Docker-isolated sessions on the persisted profile and Docker settings', async () => {
+    const fixture = await createFixture({ 'agent-two': 'docker-isolated' });
+    const service = new ManagedTerminalWorkspaceService(fixture.store, () => fixture.settings, {
+      repositories: fixture.repositories,
+      worktrees: new WorktreeService(fixture.repositories),
+      now: () => new Date(NOW),
+    });
+
+    await expect(
+      service.provision({
+        project: fixture.project,
+        nodeId: 'agent-one',
+        adapterId: 'claude',
+        runtime: 'docker',
+      }),
+    ).rejects.toThrow(/Docker isolated/u);
+    await expect(
+      service.provision({
+        project: fixture.project,
+        nodeId: 'agent-two',
+        adapterId: 'claude',
+        runtime: 'host',
+      }),
+    ).rejects.toThrow(/Write in a worktree/u);
+    await expect(
+      service.provision({
+        project: fixture.project,
+        nodeId: 'agent-two',
+        adapterId: 'claude',
+        runtime: 'docker',
+      }),
+    ).rejects.toThrow(/Turn on Docker/u);
+  });
+
+  it('launches a Docker-isolated session as docker run with the worktree bind-mounted', async () => {
+    if (process.platform === 'win32') return;
+    const fixture = await createFixture({ 'agent-two': 'docker-isolated' });
+    const dockerExecutable = await fakeDockerBinary();
+    Object.assign(fixture.settings, {
+      dockerEnabled: true,
+      dockerExecutable,
+      dockerImage: 'acme/agents:1',
+      dockerCpuLimit: 2,
+      dockerMemoryMb: 4096,
+      dockerMountHostCredentials: false,
+    });
+    const service = new ManagedTerminalWorkspaceService(fixture.store, () => fixture.settings, {
+      repositories: fixture.repositories,
+      worktrees: new WorktreeService(fixture.repositories),
+      now: () => new Date(NOW),
+    });
+
+    const workspace = await service.provision({
+      project: fixture.project,
+      nodeId: 'agent-two',
+      adapterId: 'claude',
+      runtime: 'docker',
+    });
+    expect(workspace.runtime).toBe('docker');
+    expect(fixture.store.getRun(workspace.view.runId)?.permissionProfile).toBe('docker-isolated');
+
+    const launch = await service.resolveAutomaticAgentLaunch(workspace);
+    expect(launch).not.toBeNull();
+    expect(launch?.executable).toBe(await realpath(dockerExecutable));
+    expect(launch?.arguments[0]).toBe('run');
+    expect(launch?.arguments).toContain(`type=bind,source=${workspace.rootPath},target=/workspace`);
+    expect(launch?.arguments.slice(-4)).toEqual([
+      'acme/agents:1',
+      'claude',
+      '--model',
+      'claude-test-model',
+    ]);
+    await service.discard(workspace);
+  });
+
+  it("lets a worktree session read and write the project's Claude history", async () => {
+    const fixture = await createFixture();
+    const home = path.join(fixture.repository, '..', 'home');
+    const projectHistory = path.join(
+      home,
+      '.claude',
+      'projects',
+      claudeHistoryDirectoryName(fixture.repository),
+    );
+    await mkdir(projectHistory, { recursive: true });
+    await writeFile(path.join(projectHistory, 'existing-session.jsonl'), '{"type":"summary"}\n');
+    const service = new ManagedTerminalWorkspaceService(fixture.store, () => fixture.settings, {
+      repositories: fixture.repositories,
+      worktrees: new WorktreeService(fixture.repositories),
+      createId: () => RUN_IDS[0],
+      now: () => new Date(NOW),
+      homeDirectory: () => home,
+    });
+
+    const workspace = await service.provision({
+      project: fixture.project,
+      nodeId: 'agent-one',
+      adapterId: 'claude',
+    });
+
+    // What the CLI running in the worktree will look at, derived from its cwd exactly as claude does.
+    const worktreeHistory = path.join(
+      home,
+      '.claude',
+      'projects',
+      claudeHistoryDirectoryName(workspace.rootPath),
+    );
+    expect((await lstat(worktreeHistory)).isSymbolicLink()).toBe(true);
+    expect(await realpath(worktreeHistory)).toBe(await realpath(projectHistory));
+    // Forward: the resume picker in the worktree sees the project's real sessions.
+    expect(await readdir(worktreeHistory)).toEqual(['existing-session.jsonl']);
+    // Reverse: a session started in the worktree stays resumable from the project checkout.
+    await writeFile(path.join(worktreeHistory, 'worktree-session.jsonl'), '{"type":"summary"}\n');
+    expect((await readdir(projectHistory)).sort()).toEqual([
+      'existing-session.jsonl',
+      'worktree-session.jsonl',
+    ]);
+  });
+
+  it('still provisions when the project has no Claude history to inherit', async () => {
+    const fixture = await createFixture();
+    const home = path.join(fixture.repository, '..', 'home');
+    const service = new ManagedTerminalWorkspaceService(fixture.store, () => fixture.settings, {
+      repositories: fixture.repositories,
+      worktrees: new WorktreeService(fixture.repositories),
+      createId: () => RUN_IDS[0],
+      now: () => new Date(NOW),
+      homeDirectory: () => home,
+    });
+
+    const workspace = await service.provision({
+      project: fixture.project,
+      nodeId: 'agent-one',
+      adapterId: 'claude',
+    });
+
+    expect(workspace.rootPath).not.toBe(fixture.repository);
+    // No history to inherit means nothing is invented under the owner's home either.
+    await expect(readdirIfPresent(path.join(home, '.claude', 'projects'))).resolves.toEqual([]);
+  });
 });
 
 interface Fixture {
@@ -120,7 +272,7 @@ interface Fixture {
   readonly store: MemoryWorkspaceStore;
 }
 
-async function createFixture(): Promise<Fixture> {
+async function createFixture(profiles: Readonly<Record<string, string>> = {}): Promise<Fixture> {
   const root = await realpath(
     await mkdtemp(path.join(os.tmpdir(), 'forgeboard-agent-workspaces-')),
   );
@@ -147,7 +299,7 @@ async function createFixture(): Promise<Fixture> {
     project,
     settings,
     repositories: new RepositoryService(),
-    store: new MemoryWorkspaceStore(project, canvas()),
+    store: new MemoryWorkspaceStore(project, canvas(profiles)),
   };
 }
 
@@ -220,7 +372,7 @@ function projectRecord(repository: string): Project {
   };
 }
 
-function canvas(): CanvasDocument {
+function canvas(profiles: Readonly<Record<string, string>> = {}): CanvasDocument {
   return {
     id: 'canvas-1',
     projectId: PROJECT_ID,
@@ -238,7 +390,7 @@ function canvas(): CanvasDocument {
         collapsed: false,
         color: '#445566',
         adapterId: 'claude',
-        permissionProfile: 'worktree-write',
+        permissionProfile: profiles[id] ?? 'worktree-write',
         prompt: '',
         contextAttachmentIds: [],
       },
@@ -247,6 +399,23 @@ function canvas(): CanvasDocument {
     viewport: { x: 0, y: 0, zoom: 1 },
     updatedAt: NOW,
   };
+}
+
+async function fakeDockerBinary(): Promise<string> {
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'forgeboard-docker-bin-')));
+  roots.push(root);
+  const executable = path.join(root, 'docker');
+  await writeFile(
+    executable,
+    `#!/bin/sh
+if [ "$1" = "version" ]; then printf '27.5.1'; exit 0; fi
+if [ "$1" = "image" ] && [ "$2" = "inspect" ]; then printf 'sha256:abc'; exit 0; fi
+exit 19
+`,
+    { mode: 0o700 },
+  );
+  await chmod(executable, 0o700);
+  return executable;
 }
 
 function session(
@@ -287,6 +456,15 @@ function session(
 async function git(cwd: string, args: readonly string[]): Promise<string> {
   const result = await execFileAsync('git', args, { cwd });
   return result.stdout.trim();
+}
+
+async function readdirIfPresent(directory: string): Promise<string[]> {
+  try {
+    return await readdir(directory);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return [];
+    throw error;
+  }
 }
 
 async function readFileIfPresent(file: string): Promise<string | null> {

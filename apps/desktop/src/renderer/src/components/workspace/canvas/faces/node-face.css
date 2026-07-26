@@ -376,34 +376,13 @@ svg.whiteboard-face-canvas {
   max-width: 100%;
   max-height: 100%;
 }
-.test-face-command {
-  display: block;
-  padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: var(--surface-raised);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.test-face-summary {
-  margin: 0;
-  color: var(--text-soft);
-}
 .test-face-warning {
   margin: 0;
   color: #c9964f;
 }
-.test-face-artifacts {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.test-face-artifacts code {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.test-node-face .node-face-body input {
+  font-size: var(--text-xs);
+  min-width: 0;
 }
 .node-face-list-header {
   display: flex;
@@ -471,14 +450,12 @@ svg.whiteboard-face-canvas {
   text-align: left;
 }
 /* Config popovers reuse .node-face-popover; these are the fieldset resets and
-   sub-blocks the ported review-gate and test config need. */
-.review-gate-face-config,
-.test-face-config {
+   sub-blocks the ported review-gate config needs. */
+.review-gate-face-config {
   border: 1px solid var(--line-strong);
   margin: 0;
 }
-.review-gate-face-config[disabled],
-.test-face-config[disabled] {
+.review-gate-face-config[disabled] {
   opacity: 0.6;
 }
 .review-gate-face-requirements {
@@ -486,15 +463,9 @@ svg.whiteboard-face-canvas {
   flex-direction: column;
   gap: 4px;
 }
-.review-gate-face-config .task-face-grid input,
-.test-face-config input,
-.test-face-config select,
-.test-face-config textarea {
+.review-gate-face-config .task-face-grid input {
   font-size: var(--text-xs);
   min-width: 0;
-}
-.test-face-config .node-face-row input {
-  flex: 1;
 }
 .review-gate-face-evidence {
   display: flex;
@@ -529,26 +500,6 @@ svg.whiteboard-face-canvas {
   margin: 0;
   color: var(--text-faint);
 }
-.test-face-history-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.test-face-history-list summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  cursor: pointer;
-  color: var(--text-soft);
-}
-.test-face-history-list time {
-  color: var(--text-faint);
-  white-space: nowrap;
-}
 .brief-face-versions {
   margin: 0;
   padding: 0;
@@ -562,33 +513,6 @@ svg.whiteboard-face-canvas {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-}
-.note-image-face-grid {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap: 8px;
-}
-.note-image-face-grid li {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.note-image-face-grid img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-.note-image-face-grid code {
-  font-size: var(--text-2xs);
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .file-node-face .node-face-body {
   padding: 0;
@@ -673,11 +597,6 @@ svg.whiteboard-face-canvas {
 .canvas-node[data-node-kind='group-frame']:not(.collapsed) > header {
   flex: 0 0 auto;
 }
-.brief-face-attachment {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-}
 .group-frame-face-toggle {
   flex-direction: row;
   align-items: center;
@@ -685,91 +604,6 @@ svg.whiteboard-face-canvas {
 }
 .group-frame-face-hint {
   color: var(--text-faint);
-}
-.brief-face-attachment span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.brief-face-attachment small {
-  color: var(--text-faint);
-}
-.brief-face-variable-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-.brief-face-variable-row input,
-.brief-face-variable-row textarea {
-  font-size: var(--text-xs);
-  min-width: 0;
-  flex: 1;
-}
-.note-image-face-reuse {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.note-image-face-reuse label {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-}
-.note-image-face-reuse label span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.note-image-face-reuse small {
-  color: var(--text-faint);
-  white-space: nowrap;
-}
-.note-image-face-editors {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.note-image-face-editors li {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.note-image-face-editors code {
-  font-size: var(--text-2xs);
-  color: var(--text-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.note-image-face-missing {
-  color: #c9964f;
-}
-.note-image-face-actions {
-  display: flex;
-  gap: 6px;
-}
-.note-image-face-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-  cursor: pointer;
-}
-.note-image-face-actions button:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 .whiteboard-face-element,
 .whiteboard-face-context {

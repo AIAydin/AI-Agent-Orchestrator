@@ -14,6 +14,7 @@ import type {
 import { findPeerByName, resolvePeers, type PeerDescriptor } from './peer-graph.js';
 import {
   parseActionRequest,
+  parseNavigateRequest,
   parseScrollRequest,
   type PreviewActionAuthorizer,
 } from './preview-control/contracts.js';
@@ -65,6 +66,7 @@ export interface AgentPeersPreviewBridge {
     nodeId: string,
     deltaY: number,
   ): Promise<{ pageVersion: string; url: string }>;
+  navigate(projectId: string, nodeId: string, url: string): Promise<{ url: string }>;
   describeAction(
     projectId: string,
     nodeId: string,
@@ -240,17 +242,20 @@ export class AgentPeersService {
       this.#provisionsById.delete(provisionId);
       this.#provisionsByToken.delete(record.token);
     }
-    const cleanups = this.#cleanupsByProvision.get(provisionId) ?? [];
-    this.#cleanupsByProvision.delete(provisionId);
-    for (const cleanup of cleanups) {
-      cleanup().catch(() => {
-        // Best-effort: a cleanup failure must not block session teardown.
-      });
-    }
+    this.#runProvisionCleanups(provisionId);
   }
 
   /** Task 9 registers provider-config cleanup here, keyed by provision (not session). */
   registerCleanup(provisionId: string, cleanup: () => Promise<void>): void {
+    if (!this.#provisionsById.has(provisionId)) {
+      // The provision expired or was released between writing its material and registering this
+      // cleanup. Nothing will ever release it again, so undo the write now rather than park an
+      // artifact that only app shutdown could remove -- and that a killed app never would.
+      cleanup().catch(() => {
+        // Best-effort: a cleanup failure must not surface in the launch path.
+      });
+      return;
+    }
     const cleanups = this.#cleanupsByProvision.get(provisionId) ?? [];
     cleanups.push(cleanup);
     this.#cleanupsByProvision.set(provisionId, cleanups);
@@ -358,13 +363,37 @@ export class AgentPeersService {
     this.#pendingPreviewActions.clear();
   }
 
+  /**
+   * Reclaims provisions that were never bound to a session -- the spawn failed, the launch review
+   * was declined, or the renderer simply never came back.
+   *
+   * Their cleanup runs here too. Without that, the only remaining trigger would be app shutdown:
+   * `releaseSession` is keyed by session id and a provision that never bound has none, so an
+   * abandoned provision's on-disk artifacts (see `registerCleanup` -- for gemini/opencode those
+   * live in the user's project repo) would sit there for the rest of the run and outlive it
+   * entirely if the app is killed rather than quit.
+   */
   #pruneExpiredProvisions(): void {
     const now = this.#now();
     for (const record of this.#provisionsById.values()) {
       if (record.sessionId === null && now - record.createdAt > PROVISION_EXPIRY_MS) {
         this.#provisionsById.delete(record.provisionId);
         this.#provisionsByToken.delete(record.token);
+        this.#runProvisionCleanups(record.provisionId);
       }
+    }
+  }
+
+  /** Runs and de-registers one provision's cleanups. De-registering first is what keeps a later
+   * teardown (`dispose`, `pauseForShutdown`) from running them a second time. Fire-and-forget:
+   * a cleanup failure must never block the caller. */
+  #runProvisionCleanups(provisionId: string): void {
+    const cleanups = this.#cleanupsByProvision.get(provisionId) ?? [];
+    this.#cleanupsByProvision.delete(provisionId);
+    for (const cleanup of cleanups) {
+      cleanup().catch(() => {
+        // Best-effort: a cleanup failure must not block session teardown.
+      });
     }
   }
 
@@ -416,6 +445,10 @@ export class AgentPeersService {
       }
       if (request.method === 'POST' && url.pathname === '/v1/preview/scroll') {
         await this.#handlePreviewScroll(provision, request, response);
+        return;
+      }
+      if (request.method === 'POST' && url.pathname === '/v1/preview/navigate') {
+        await this.#handlePreviewNavigate(provision, request, response);
         return;
       }
       if (request.method === 'POST' && url.pathname === '/v1/preview/action') {
@@ -868,6 +901,39 @@ export class AgentPeersService {
     }
   }
 
+  async #handlePreviewNavigate(
+    provision: ProvisionRecord,
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> {
+    const body = await this.#readJsonBody(request, response);
+    if (body === null) return;
+    const input = parseNavigateRequest(body);
+    if (input === null) {
+      this.#respondJson(response, 400, { error: 'invalid-preview-navigate' });
+      return;
+    }
+    const preview = this.#authorizedPreview(provision, input.previewId, true);
+    if (preview === null) {
+      this.#auditPreview(provision, input.previewId, 'denied', 'navigate');
+      this.#respondJson(response, 403, { error: 'preview-interaction-denied' });
+      return;
+    }
+    if (this.#previews === null) {
+      this.#respondJson(response, 404, { error: 'preview-not-live' });
+      return;
+    }
+    try {
+      const result = await this.#previews.navigate(provision.projectId, preview.node.id, input.url);
+      this.#auditPreview(provision, preview.node.id, 'allowed', 'navigate');
+      this.#respondJson(response, 200, result);
+    } catch (error) {
+      this.#respondJson(response, 409, {
+        error: safePreviewActionError(error),
+      });
+    }
+  }
+
   async #handlePreviewAction(
     provision: ProvisionRecord,
     request: IncomingMessage,
@@ -1101,4 +1167,6 @@ const SAFE_PREVIEW_ACTION_ERRORS = new Set([
   'preview-element-not-editable',
   'preview-element-not-visible',
   'preview-scroll-delta-required',
+  'preview-navigation-blocked',
+  'preview-navigation-failed',
 ]);

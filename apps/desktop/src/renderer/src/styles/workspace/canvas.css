@@ -23,7 +23,12 @@
   filter: none;
   opacity: 1;
 }
-.canvas-region .react-flow__viewport {
+/* Promote the viewport to its own compositor layer only while actively
+   panning or zooming (`canvas-navigating`, toggled by WorkspaceCanvas). A
+   permanent `will-change: transform` kept node content rasterized at stale
+   scales, which is what made every node look blurry after zooming. At rest
+   the layer demotes and Chromium re-rasterizes crisply at the final zoom. */
+.canvas-region.canvas-navigating .react-flow__viewport {
   will-change: transform;
 }
 .react-flow__pane {
@@ -446,21 +451,123 @@
   font-size: var(--text-2xs);
   font-weight: 700;
 }
+/* Connection affordances — one connector language for every node kind.
+   These are deliberately styled off `--connector` (a neutral foundation token)
+   and never off `--node-accent`: a Codex agent, a Claude agent, a file node and
+   a whiteboard must render identical handles.
+
+   The context string starts at a filled dot (source, right edge) and ends in an
+   open acceptor ring (target, left edge) that reads as a socket the string
+   plugs into. Both hang clear of the node with a short stem tethering them to
+   the border, and both are rendered as siblings of `.canvas-node` (see
+   CanvasNode.tsx) so the `overflow: hidden` that agent windows, previews,
+   terminals and document faces need can never clip them into slivers.
+
+   Subtle at rest, prominent on hover and while a connection is being dragged. */
 .node-handle {
-  width: 8px !important;
-  height: 8px !important;
-  border: 2px solid var(--surface-raised) !important;
-  background: var(--node-accent) !important;
+  z-index: 26;
+  border-radius: 999px !important;
+  opacity: 0.62;
+  transition:
+    opacity 0.14s ease,
+    box-shadow 0.14s ease,
+    background-color 0.14s ease,
+    scale 0.14s ease;
 }
+/* Context string start: a small solid dot. */
+.node-handle.source {
+  right: -10px !important;
+  width: 10px !important;
+  height: 10px !important;
+  border: 0 !important;
+  background: var(--connector) !important;
+}
+/* Context string end: an open acceptor ring with a visible socket mouth facing
+   the incoming wire. */
+.node-handle.target {
+  left: -10px !important;
+  width: 13px !important;
+  height: 13px !important;
+  border: 2.5px solid var(--connector) !important;
+  border-left-color: transparent !important;
+  /* Clip to the padding box so the canvas — not the socket fill — shows through
+     the open mouth. */
+  background: var(--connector-socket) padding-box !important;
+}
+/* Stem: tethers the port to the node border so the two sides read as the start
+   and the end of one string. */
+.node-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--connector);
+  transform: translateY(-50%);
+}
+.node-handle.source::after {
+  right: 100%;
+}
+.node-handle.target::after {
+  left: 100%;
+}
+/* A forgiving grab area around the small visual. */
+.node-handle::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 999px;
+}
+.react-flow__node:hover .node-handle,
+.node-handle.connectingfrom,
+.node-handle.connectingto,
+.node-handle.valid {
+  opacity: 1;
+}
+/* While a connection is in flight (React Flow mounts the connection line only
+   then) every acceptor on the canvas lights up, so the landing options are
+   obvious without hunting node by node. */
+.react-flow:has(.react-flow__connectionline) .node-handle.target {
+  opacity: 1;
+}
+.node-handle:hover,
+.node-handle.connectingfrom,
+.node-handle.connectingto,
+.node-handle.valid {
+  scale: 1.3;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--connector) 26%, transparent);
+}
+/* A valid landing target fills its socket, showing the string will seat. */
+.node-handle.target.connectingto,
+.node-handle.target.valid {
+  border-left-color: var(--connector) !important;
+  background: var(--connector) padding-box !important;
+}
+/* Resizing works from every edge and corner: keep the controls above node
+   faces (webviews, terminals) and give the hairline edge controls a real
+   grab area beyond their 1px visual. */
 .canvas-node-resize-line {
+  z-index: 24;
   border-color: var(--node-accent) !important;
 }
+.canvas-node-resize-line::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
 .canvas-node-resize-handle {
+  z-index: 25;
   width: 8px !important;
   height: 8px !important;
   border: 1px solid var(--surface-raised) !important;
   border-radius: 2px !important;
   background: var(--node-accent) !important;
+}
+.canvas-node-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
 }
 
 /* Node-header inline rename + details popover (settings / comments / history). Additive block:

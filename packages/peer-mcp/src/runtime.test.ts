@@ -11,6 +11,7 @@ const previewMethods = {
     Promise.resolve({ pageVersion: '', url: '', title: '', elements: [] }),
   ),
   scrollPreview: vi.fn(() => Promise.resolve({ pageVersion: '', url: '' })),
+  navigatePreview: vi.fn(() => Promise.resolve({ url: '' })),
   actionPreview: vi.fn(() =>
     Promise.resolve({ performed: true as const, pageVersion: '', url: '' }),
   ),
@@ -22,6 +23,7 @@ const previewMethods = {
   | 'screenshotPreview'
   | 'elementsPreview'
   | 'scrollPreview'
+  | 'navigatePreview'
   | 'actionPreview'
   | 'videos'
 >;

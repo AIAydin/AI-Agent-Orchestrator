@@ -16,6 +16,7 @@ import {
   PanelTop,
   Play,
   Smartphone,
+  StickyNote,
   TerminalSquare,
   TestTube2,
   Type,
@@ -48,6 +49,23 @@ export const NODE_KINDS = [
 
 export type BuiltInNodeKind = (typeof NODE_KINDS)[number];
 export type NodeKind = BuiltInNodeKind | 'extension';
+
+/**
+ * Kinds offered as templates in the rail and pickers. Every other kind in `NODE_KINDS` stays
+ * parseable so saved canvases keep rendering, but can no longer be created: agents come from
+ * the Agents list, and task/file/diff/review-gate/git-pr/diagram/group-frame are retired.
+ */
+export const TEMPLATE_NODE_KINDS = [
+  'brief',
+  'video',
+  'terminal',
+  'web-preview',
+  'mobile-preview',
+  'test',
+  'whiteboard',
+  'note-image',
+  'text',
+] as const satisfies readonly BuiltInNodeKind[];
 
 export interface SharedNodeBehaviors {
   readonly resizable: true;
@@ -136,7 +154,7 @@ const BUILT_INS: readonly Omit<NodeTypeDefinition, 'behaviors' | 'source' | 'key
   ),
   builtin('diagram', 'Diagram', 'Turn Mermaid text into a diagram', '#7888d8', Network),
   builtin('whiteboard', 'Whiteboard', 'Sketch and add notes freely', '#c482aa', PanelTop),
-  builtin('note-image', 'Note / image', 'A quick note or picture', '#c5a75f', Image),
+  builtin('note-image', 'Note', 'A quick note', '#c5a75f', StickyNote),
   builtin('text', 'Text', 'A floating text label', '#8f9bb3', Type),
   builtin('group-frame', 'Group', 'Collect related nodes in one area', '#82909b', Frame),
 ];

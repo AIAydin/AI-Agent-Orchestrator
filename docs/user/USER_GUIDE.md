@@ -69,9 +69,10 @@ duplicate, groups, comments, locking, collapse, and resize.
 - Use **Ctrl/Command+Z** and **Ctrl/Command+Shift+Z** for canvas undo and redo.
 - Watch the top bar for **Saving…**, **Saved locally**, or **Save failed** before closing.
 
-File nodes reference policy-approved project-relative files. Ignored, sensitive, linked, binary,
-oversized, missing, and outside-root content fails closed. Project files can be opened in the built-in
-editor; an explicit external handoff uses the operating system's registered application.
+File nodes reference project-relative files. Git-ignored files open and read like any other file —
+the tree marks them, and they are still never attached to an agent automatically. Sensitive, linked,
+binary, oversized, missing, and outside-root content fails closed. Project files can be opened in the
+built-in editor; an explicit external handoff uses the operating system's registered application.
 
 For whole-workspace handoff, open **Settings → Git & previews → External application** and choose an
 exact application executable. On macOS, the chooser also accepts a normal `.app` bundle, so you do
@@ -159,7 +160,7 @@ run.
    authentic conflict state in the affected workspace. For bounded text files, compare Git base,
    ours, and theirs, edit the merged result inline, and separately review applying and staging that
    exact content. Forgeboard offers exact reviewed Continue and Abort controls after every conflict
-   is staged; binary, oversized, ignored, and sensitive files stay outside the inline editor.
+   is staged; binary, oversized, and sensitive files stay outside the inline editor.
 6. After a fully merged, clean managed branch is reverified, use reviewed cleanup to remove its
    worktree and branch.
 

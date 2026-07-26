@@ -117,31 +117,12 @@
   background: var(--green-soft);
 }
 
-.file-editor-body,
-.file-editor-monaco-shell,
-.file-editor-monaco {
+/* Monaco's own layout lives in MonacoTextEditor.css, next to the component. */
+.file-editor-body {
   min-width: 0;
   min-height: 0;
   height: 100%;
-}
-
-.file-editor-body {
   position: relative;
-}
-
-.file-editor-monaco-shell {
-  position: relative;
-}
-
-.file-editor-monaco-error {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 10px;
-  color: var(--red);
-  background: var(--surface);
 }
 
 .file-editor-placeholder {
@@ -155,8 +136,7 @@
   text-align: center;
 }
 
-.file-editor-placeholder p,
-.file-editor-monaco-error p {
+.file-editor-placeholder p {
   margin: 0;
 }
 

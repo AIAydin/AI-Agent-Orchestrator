@@ -6,6 +6,7 @@ import { expect, test, type ElectronApplication } from '@playwright/test';
 
 import {
   closeElectronAfterTest,
+  closeProjectFromSwitcher,
   launchDesktop,
   renameCanvasNode,
   watchExternalRequests,
@@ -27,12 +28,9 @@ test('immediate app and project closes preserve the latest canvas revision', asy
     await expect(page.locator('.canvas-title')).toContainText('0 nodes · 0 connections');
 
     await test.step('a dirty node is flushed when Electron closes before autosave', async () => {
-      await page
-        .locator('.template-section')
-        .getByRole('button', { name: /^Note \/ image/ })
-        .click();
+      await page.locator('.template-section').getByRole('button', { name: /^Note/ }).click();
       await renameCanvasNode(
-        page.getByRole('article', { name: /^Note \/ image: /u }),
+        page.getByRole('article', { name: /^Note: /u }),
         'Immediate quit proof',
       );
 
@@ -51,34 +49,27 @@ test('immediate app and project closes preserve the latest canvas revision', asy
       await page.locator('.recent-list button').click();
 
       await expect(page.locator('.canvas-title')).toContainText('1 nodes · 0 connections');
-      await expect(
-        page.getByRole('article', { name: 'Note / image: Immediate quit proof' }),
-      ).toBeVisible();
+      await expect(page.getByRole('article', { name: 'Note: Immediate quit proof' })).toBeVisible();
     });
 
     await test.step('an immediate in-app project close also flushes before reopening', async () => {
       await page
         .locator('.template-section')
-        .getByRole('button', { name: /^Diagram/ })
+        .getByRole('button', { name: /^Product brief/ })
         .click();
       await renameCanvasNode(
-        page.getByRole('article', { name: /^Diagram: /u }),
+        page.getByRole('article', { name: /^Product brief: /u }),
         'Immediate project-close proof',
       );
-      await page.locator('.project-switcher').click();
+      await closeProjectFromSwitcher(page);
 
-      await expect(
-        page.getByRole('heading', { name: /Build software in a visual workshop/i }),
-      ).toBeVisible();
       await expect(page.locator('.recent-list button')).toHaveCount(1);
       await page.locator('.recent-list button').click();
 
       await expect(page.locator('.canvas-title')).toContainText('2 nodes · 0 connections');
+      await expect(page.getByRole('article', { name: 'Note: Immediate quit proof' })).toBeVisible();
       await expect(
-        page.getByRole('article', { name: 'Note / image: Immediate quit proof' }),
-      ).toBeVisible();
-      await expect(
-        page.getByRole('article', { name: 'Diagram: Immediate project-close proof' }),
+        page.getByRole('article', { name: 'Product brief: Immediate project-close proof' }),
       ).toBeVisible();
     });
 

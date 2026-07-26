@@ -96,10 +96,41 @@ describe('agentSessionLaunch', () => {
     expect(launch.profileNote).toBeNull();
   });
 
+  it('requests a Docker-runtime worktree for the Docker isolated profile', () => {
+    const launch = agentSessionLaunch(claude, 'claude-sonnet-5', 'docker-isolated');
+    expect(launch.configuration.workspace).toEqual({
+      kind: 'managed-agent-worktree',
+      adapterId: 'claude',
+      runtime: 'docker',
+    });
+    expect(launch.profileNote).toBeNull();
+  });
+
+  it('keeps host-scoped peer material out of Docker isolated launches', () => {
+    const launch = agentSessionLaunch(claude, undefined, 'docker-isolated', {
+      provisionId: '11111111-1111-4111-8111-111111111111',
+      extraArguments: ['--mcp-config', '/tmp/peer-mcp.json'],
+    });
+    expect(launch.configuration.arguments).toEqual([]);
+    expect('peerProvisionId' in launch.configuration).toBe(false);
+  });
+
   it('shows the project-root note for the custom profile instead of claiming enforcement', () => {
     const launch = agentSessionLaunch(claude, undefined, 'custom');
     expect(launch.configuration.arguments).toEqual([]);
     expect(launch.profileNote).toMatch(/project root/i);
+  });
+
+  it('runs Write in current directory right in the project — no worktree, no caveat note', () => {
+    const launch = agentSessionLaunch(claude, undefined, 'project-write');
+    expect(launch.configuration).toEqual({
+      executable: '/usr/local/bin/claude',
+      arguments: [],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+      workspace: { kind: 'project' },
+    });
+    expect(launch.profileNote).toBeNull();
   });
 
   it('appends peer extra arguments after the provider flags and sets peerProvisionId', () => {

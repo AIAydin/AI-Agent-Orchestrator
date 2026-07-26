@@ -229,6 +229,26 @@ describe('installPreviewWebviewSecurity', () => {
     expect(onGuestCreated).toHaveBeenCalledWith('persist:preview:p1:n1', contents);
   });
 
+  it('registers a guest whose partition resolves only after attach, exactly once', () => {
+    const guestSession = new FakeSession();
+    const onGuestCreated = vi.fn();
+    let attached = false;
+    const { attach } = createHarness({
+      partitionForGuestSession: (session) =>
+        attached && (session as unknown) === (guestSession as unknown) ? 'preview:p1:n1' : null,
+      onGuestCreated,
+    });
+    const contents = attach(guestSession);
+    expect(onGuestCreated).not.toHaveBeenCalled();
+    // The embedder's will-attach-webview guard records the partition after
+    // guest creation; the first committed navigation then registers the guest.
+    attached = true;
+    contents.emit('did-navigate', {}, ALLOWED);
+    contents.emit('did-navigate', {}, ALLOWED);
+    expect(onGuestCreated).toHaveBeenCalledTimes(1);
+    expect(onGuestCreated).toHaveBeenCalledWith('preview:p1:n1', contents);
+  });
+
   it('pins content navigation to the committed loopback origin', () => {
     const { attach } = createHarness();
     const contents = attach();

@@ -98,33 +98,24 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await page.getByRole('button', { name: 'Settings' }).click();
       const settings = page.locator('.settings-modal');
       await expect(settings.getByRole('heading', { name: 'Settings' })).toBeVisible();
-      await expect(
-        settings.getByText(
-          'Change how Forgeboard works here. Unavailable features are clearly labeled.',
-        ),
-      ).toBeVisible();
+      await expect(settings.getByText('Change how Forgeboard works here.')).toBeVisible();
 
       await settings.getByRole('button', { name: 'dark', exact: true }).click();
       await settings.getByRole('button', { name: 'compact', exact: true }).click();
       await settings.getByRole('checkbox', { name: /Reduce motion/ }).check();
 
-      await settings.getByRole('button', { name: 'Extensions', exact: true }).click();
-      await expect(settings.getByRole('heading', { name: 'Local extensions' })).toBeVisible();
-      await expect(settings.getByText('Data-only by design')).toBeVisible();
-      await expect(
-        settings.getByText('No extensions installed yet', { exact: true }),
-      ).toBeVisible();
-      await expect(settings.getByRole('button', { name: /Choose extension folder/ })).toBeVisible();
+      await expect(settings.getByRole('button', { name: 'Extensions', exact: true })).toHaveCount(
+        0,
+      );
+      await expect(settings.getByRole('button', { name: 'Checks', exact: true })).toHaveCount(0);
 
       await settings.getByRole('button', { name: /Agents & runtime/ }).click();
       await settings.getByLabel('Default agent').selectOption('codex');
+
+      await settings.getByRole('button', { name: 'Permissions', exact: true }).click();
       await settings.getByLabel('Default permission profile').selectOption('plan-read-only');
-      await settings
-        .getByLabel('Environment variable names allowed into processes')
-        .fill('PATH, HOME, LANG, CI');
 
       await settings.getByRole('button', { name: /Git & previews/ }).click();
-      await settings.getByLabel('Branch prefix').fill('team/agents/');
       await settings.getByLabel('Preview port start').fill('42000');
       await settings.getByLabel('Preview port end').fill('42099');
       await expect(settings.getByRole('heading', { name: /^Collaboration$/u })).toHaveCount(0);
@@ -188,13 +179,14 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       const canvasBox = await canvasRegion.boundingBox();
       const releasePlanBox = await releasePlan.boundingBox();
       if (!canvasBox || !releasePlanBox)
-        throw new Error('The canvas and release-plan node must be visible before adding a task.');
-      await templates.getByRole('button', { name: /^Task/ }).dragTo(canvasRegion, {
-        targetPosition: separatedDropPosition(canvasBox, releasePlanBox),
+        throw new Error('The canvas and release-plan node must be visible before adding a note.');
+      const minimapBox = await page.locator('.react-flow__minimap').boundingBox();
+      await templates.getByRole('button', { name: /^Note/ }).dragTo(canvasRegion, {
+        targetPosition: separatedDropPosition(canvasBox, releasePlanBox, minimapBox),
       });
-      const taskNode = page.getByRole('article', { name: /^Task: /u });
-      await expect(taskNode).toBeVisible();
-      taskTitle = (await taskNode.getAttribute('aria-label'))?.replace(/^Task: /u, '') ?? '';
+      const noteNode = page.getByRole('article', { name: /^Note: /u });
+      await expect(noteNode).toBeVisible();
+      taskTitle = (await noteNode.getAttribute('aria-label'))?.replace(/^Note: /u, '') ?? '';
       expect(taskTitle).not.toBe('');
       await expect(page.locator('.canvas-title')).toContainText('2 nodes · 0 connections');
     });
@@ -206,10 +198,8 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await runCanvasNodeContextAction(page, releasePlan, 'Unlock');
       await expect(releasePlan.locator('[aria-label="Locked"]')).toHaveCount(0);
 
-      const source = releasePlan.locator('.react-flow__handle-right');
-      const target = page
-        .getByRole('article', { name: /^Task: /u })
-        .locator('.react-flow__handle-left');
+      const source = connectionHandle(releasePlan, 'source');
+      const target = connectionHandle(page.getByRole('article', { name: /^Note: /u }), 'target');
       await connectHandles(page, source, target);
       await expect(page.locator('.canvas-title')).toContainText('2 nodes · 1 connections');
       await expect(
@@ -224,19 +214,23 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await page.keyboard.press(`${shortcutModifier}+K`);
       const palette = page.getByRole('dialog', { name: 'Command palette' });
       await expect(palette).toBeVisible();
-      await palette.getByPlaceholder('Search actions…').fill('Add an agent');
+      // Deliberately not "Add an agent": agent nodes now launch a real CLI session the moment
+      // they appear, so a first-run journey would depend on whichever agents this computer has.
+      await palette.getByPlaceholder('Search actions…').fill('Add a product brief');
       await page.keyboard.press('Enter');
       await expect(palette).toBeHidden();
-      const agentNode = page.getByRole('article', { name: /^Agent: /u });
-      await expect(agentNode).toBeVisible();
+      const paletteNode = page
+        .getByRole('article', { name: /^Product brief: /u })
+        .filter({ hasNotText: 'Release plan' });
+      await expect(paletteNode).toBeVisible();
 
-      await clickExposedNodeEdge(page, agentNode);
-      await runCanvasNodeContextAction(page, agentNode, 'Delete');
-      await expect(agentNode).toHaveCount(0);
+      await clickExposedNodeEdge(page, paletteNode);
+      await runCanvasNodeContextAction(page, paletteNode, 'Delete');
+      await expect(paletteNode).toHaveCount(0);
       await page.keyboard.press(`${shortcutModifier}+Z`);
-      await expect(agentNode).toBeVisible();
+      await expect(paletteNode).toBeVisible();
       await page.keyboard.press(`${shortcutModifier}+Shift+Z`);
-      await expect(agentNode).toHaveCount(0);
+      await expect(paletteNode).toHaveCount(0);
 
       await page.keyboard.press(`${shortcutModifier}+K`);
       await expect(palette).toBeVisible();
@@ -277,7 +271,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await expect(
         page.getByRole('article', { name: 'Product brief: Release plan' }),
       ).toBeVisible();
-      await expect(page.getByRole('article', { name: /^Task: /u })).toBeVisible();
+      await expect(page.getByRole('article', { name: /^Note: /u })).toBeVisible();
       await expect(
         page
           .getByRole('article', { name: 'Product brief: Release plan' })
@@ -335,16 +329,48 @@ test('a first-time user can configure and persist a local visual workshop', asyn
   }
 });
 
-async function connectHandles(page: Page, source: Locator, target: Locator): Promise<void> {
-  const sourcePoint = await exposedHandlePoint(source, 'source');
-  const targetPoint = await exposedHandlePoint(target, 'target');
+/**
+ * Connection handles render as siblings of `.canvas-node`, not children, so the node surface can
+ * clip its own chrome without slicing the handles. Reach them through the React Flow wrapper.
+ */
+function connectionHandle(node: Locator, side: 'source' | 'target'): Locator {
+  return node
+    .locator('xpath=ancestor::*[contains(@class, "react-flow__node")][1]')
+    .locator(`.node-handle.${side}`);
+}
 
-  await page.mouse.move(sourcePoint.x, sourcePoint.y);
-  await page.mouse.down();
-  await page.mouse.move(targetPoint.x, targetPoint.y, {
-    steps: 12,
+async function connectHandles(page: Page, source: Locator, target: Locator): Promise<void> {
+  // The floating minimap overlays the bottom-right of the canvas and, on smaller
+  // windows, covers a node's handles. It is not what this test proves, so take it
+  // out of the hit-testing path for the drag and restore it afterwards.
+  const restoreMinimap = await hideMinimap(page);
+  try {
+    const sourcePoint = await exposedHandlePoint(source, 'source');
+    const targetPoint = await exposedHandlePoint(target, 'target');
+
+    await page.mouse.move(sourcePoint.x, sourcePoint.y);
+    await page.mouse.down();
+    await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 12 });
+    await page.mouse.up();
+  } finally {
+    await restoreMinimap();
+  }
+}
+
+/** Hides the minimap overlay, returning a function that puts it back. */
+async function hideMinimap(page: Page): Promise<() => Promise<void>> {
+  const minimap = page.locator('.react-flow__minimap');
+  if ((await minimap.count()) === 0) return () => Promise.resolve();
+  await minimap.evaluate((element: HTMLElement) => {
+    element.dataset.e2ePreviousDisplay = element.style.display;
+    element.style.display = 'none';
   });
-  await page.mouse.up();
+  return async () => {
+    await minimap.evaluate((element: HTMLElement) => {
+      element.style.display = element.dataset.e2ePreviousDisplay ?? '';
+      delete element.dataset.e2ePreviousDisplay;
+    });
+  };
 }
 
 async function exposedHandlePoint(
@@ -373,19 +399,39 @@ async function exposedHandlePoint(
   return result.point ?? { x: 0, y: 0 };
 }
 
+/**
+ * Where to drop a second node so both it and its connection handles stay
+ * reachable. Small CI windows push the clamped position into the bottom-right,
+ * where the minimap floats over the canvas and swallows the handles — so the
+ * drop keeps clear of the minimap's real rectangle when one is on screen.
+ */
 function separatedDropPosition(
   canvas: { x: number; y: number; width: number; height: number },
   source: { x: number; y: number; width: number; height: number },
+  minimap: { x: number; y: number; width: number; height: number } | null,
 ): { x: number; y: number } {
+  const estimatedNodeWidth = 250;
   const estimatedNodeHeight = 120;
   const gap = 90;
+  // Handles hang outside the node box, so keep a margin beyond its edges.
+  const handleMargin = 24;
   const sourceTop = source.y - canvas.y;
   const above = sourceTop - estimatedNodeHeight - gap;
   const below = sourceTop + source.height + gap;
-  return {
-    x: Math.min(Math.max(source.x - canvas.x, 80), canvas.width - 250),
-    y: above >= 70 ? above : Math.min(below, canvas.height - estimatedNodeHeight - 40),
-  };
+  const x = Math.min(Math.max(source.x - canvas.x, 80), canvas.width - estimatedNodeWidth);
+  const y = above >= 70 ? above : Math.min(below, canvas.height - estimatedNodeHeight - 40);
+  if (minimap === null) return { x, y };
+
+  const minimapLeft = minimap.x - canvas.x;
+  const minimapTop = minimap.y - canvas.y;
+  const overlaps =
+    x + estimatedNodeWidth + handleMargin > minimapLeft &&
+    y + estimatedNodeHeight + handleMargin > minimapTop;
+  if (!overlaps) return { x, y };
+
+  const clearAbove = minimapTop - estimatedNodeHeight - handleMargin;
+  if (clearAbove >= 70) return { x, y: clearAbove };
+  return { x: Math.max(minimapLeft - estimatedNodeWidth - handleMargin, 80), y };
 }
 
 async function clickExposedNodeEdge(page: Page, node: Locator): Promise<void> {

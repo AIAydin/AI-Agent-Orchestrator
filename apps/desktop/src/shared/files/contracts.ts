@@ -186,7 +186,8 @@ export const FileDomainErrorCodeSchema = z.enum([
   'FILE_NOT_FOUND',
   'NOT_A_FILE',
   'NOT_A_DIRECTORY',
-  'IGNORED_FILE',
+  // No IGNORED_FILE: git-ignored files open and render like any other file. Sensitivity is
+  // the only content refusal.
   'SENSITIVE_FILE',
   'SYMLINK_BLOCKED',
   'FILE_TOO_LARGE',

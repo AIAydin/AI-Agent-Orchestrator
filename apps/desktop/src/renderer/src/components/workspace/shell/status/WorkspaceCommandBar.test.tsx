@@ -52,11 +52,24 @@ describe('WorkspaceCommandBar', () => {
     expect(screen.getByRole('button', { name: 'Show project sidebar' })).toBeTruthy();
   });
 
+  it('mirrors the live persistence state in the save indicator', () => {
+    const { rerender } = render(<WorkspaceCommandBar {...commandBarProps()} saveState="saving" />);
+    expect(screen.getByRole('status', { name: 'Save status' }).textContent).toBe('Saving…');
+
+    rerender(<WorkspaceCommandBar {...commandBarProps()} saveState="saved" />);
+    expect(screen.getByRole('status', { name: 'Save status' }).textContent).toBe('Saved locally');
+
+    rerender(<WorkspaceCommandBar {...commandBarProps()} saveState="error" />);
+    expect(screen.getByRole('status', { name: 'Save status' }).textContent).toBe('Save failed');
+  });
+
   it('omits workflow run actions while describing live workflow status', () => {
     render(<WorkspaceCommandBar {...commandBarProps()} workflowStatus="waiting-for-approval" />);
 
     expect(screen.queryByRole('button', { name: 'Run canvas' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Run selected' })).toBeNull();
+    // The palette stays keyboard-only — no Commands button in the top bar.
+    expect(screen.queryByRole('button', { name: /Commands/u })).toBeNull();
     const status = screen.getByRole('status', {
       name: /Workflow · waiting for approval/u,
     });
@@ -77,17 +90,17 @@ function commandBarProps() {
     canUndo: false,
     canRedo: false,
     workflowStatus: null,
-    commandPaletteShortcut: '⌘K',
     collaborationEnabled: false,
     sharingStatus: 'not-connected' as const,
     projectSidebarOpen: true,
+    onSwitchProject: callback,
+    onNewProject: callback,
     onCloseProject: callback,
     onToggleProjectSidebar: callback,
     onUndo: callback,
     onRedo: callback,
     onFitCanvas: callback,
     onOpenGitReview: callback,
-    onOpenCommands: callback,
     onOpenSettings: callback,
   };
 }

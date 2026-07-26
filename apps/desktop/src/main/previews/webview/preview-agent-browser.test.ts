@@ -6,6 +6,7 @@ import { PreviewAgentBrowser } from './preview-agent-browser.js';
 
 class FakeGuest extends EventEmitter {
   destroyed = false;
+  currentUrl = 'https://miro.com/app/board';
   executeJavaScript = vi.fn(() =>
     Promise.resolve({
       url: 'https://miro.com/app/board?token=secret#private',
@@ -15,8 +16,12 @@ class FakeGuest extends EventEmitter {
     }),
   );
   capturePage = vi.fn(() => Promise.resolve({ toPNG: () => Buffer.from('png bytes', 'utf8') }));
+  loadURL = vi.fn(() => Promise.resolve());
   isDestroyed(): boolean {
     return this.destroyed;
+  }
+  getURL(): string {
+    return this.currentUrl;
   }
   destroy(): void {
     this.destroyed = true;
@@ -57,6 +62,51 @@ describe('PreviewAgentBrowser', () => {
     guest.destroy();
     expect(browser.isLive('project-1', 'preview-1')).toBe(false);
     await expect(browser.inspect('project-1', 'preview-1')).rejects.toThrow('preview-not-live');
+  });
+
+  it('shares console output and a DOM outline for a loopback guest', async () => {
+    const browser = new PreviewAgentBrowser();
+    const guest = new FakeGuest();
+    guest.executeJavaScript.mockResolvedValue({
+      url: 'http://localhost:5173/dashboard',
+      title: 'Dashboard',
+      text: 'Revenue up',
+      dom: '<main><h1>Revenue up</h1></main>',
+    });
+    browser.registerGuest('preview:project-1:preview-1', guest as never);
+    guest.emit('console-message', { level: 'error', message: 'fetch failed' });
+
+    await expect(browser.inspect('project-1', 'preview-1')).resolves.toEqual({
+      url: 'http://localhost:5173/dashboard',
+      title: 'Dashboard',
+      text: 'Revenue up',
+      dom: '<main><h1>Revenue up</h1></main>',
+      console: ['[error] fetch failed'],
+    });
+  });
+
+  it('navigates a loopback guest within its origin and refuses sources without navigate', async () => {
+    const browser = new PreviewAgentBrowser();
+    const guest = new FakeGuest();
+    guest.currentUrl = 'http://localhost:5173/dashboard';
+    browser.registerGuest('preview:project-1:preview-1', guest as never);
+
+    await expect(
+      browser.navigate('project-1', 'preview-1', 'http://localhost:5173/settings'),
+    ).resolves.toEqual({ url: 'http://localhost:5173/settings' });
+    expect(guest.loadURL).toHaveBeenCalledWith('http://localhost:5173/settings');
+    await expect(
+      browser.navigate('project-1', 'preview-1', 'https://example.com/'),
+    ).rejects.toThrow('preview-navigation-blocked');
+
+    browser.registerSource('project-1', 'companion-1', {
+      isLive: () => true,
+      inspect: () => Promise.reject(new Error('unused')),
+      screenshot: () => Promise.reject(new Error('unused')),
+    });
+    await expect(
+      browser.navigate('project-1', 'companion-1', 'http://localhost:5173/'),
+    ).rejects.toThrow('preview-interaction-unavailable');
   });
 
   it('keeps the primary guest when a comparison-slot guest registers afterward', async () => {

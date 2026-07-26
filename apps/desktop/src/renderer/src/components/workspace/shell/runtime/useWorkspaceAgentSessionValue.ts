@@ -3,17 +3,12 @@ import { useMemo } from 'react';
 import type { WorkshopNode } from '../../canvas/CanvasNode.js';
 import {
   type AgentSessionContextValue,
-  type CanvasImageNodeEntry,
   type FileTargetEntry,
 } from '../../runs/agent-session/AgentSessionContext.js';
 import { useAgentSessionContextLists } from '../../runs/agent-session/context-lists.js';
 import { useKeyedStable } from '../../../../lib/use-keyed-stable.js';
 
-type DerivedAgentSessionFields =
-  | 'nodeRoster'
-  | 'canvasImageNodes'
-  | 'checkProducers'
-  | 'fileTargets';
+type DerivedAgentSessionFields = 'nodeRoster' | 'checkProducers' | 'fileTargets';
 
 type UseWorkspaceAgentSessionValueInput = {
   readonly nodes: WorkshopNode[];
@@ -60,34 +55,6 @@ export function useWorkspaceAgentSessionValue({
       )
       .join('\n'),
   );
-  const canvasImageNodesSource = useMemo<readonly CanvasImageNodeEntry[]>(
-    () =>
-      nodes
-        .filter((node) => node.data.kind === 'file' && node.data.file?.kind === 'image')
-        .map((node) => {
-          const reference = node.data.file;
-          return {
-            id: node.id,
-            title: node.data.title,
-            projectId: reference?.projectId ?? '',
-            relativePath: reference?.relativePath ?? '',
-            missing: reference?.missing ?? false,
-            ...(reference?.lastKnownHash === undefined
-              ? {}
-              : { lastKnownHash: reference.lastKnownHash }),
-          };
-        }),
-    [nodes],
-  );
-  const canvasImageNodes = useKeyedStable(
-    canvasImageNodesSource,
-    canvasImageNodesSource
-      .map(
-        (entry) =>
-          `${entry.id}\u0000${entry.title}\u0000${entry.projectId}\u0000${entry.relativePath}\u0000${String(entry.missing)}\u0000${entry.lastKnownHash ?? ''}`,
-      )
-      .join('\n'),
-  );
 
   return useMemo<AgentSessionContextValue>(
     () => ({
@@ -107,7 +74,6 @@ export function useWorkspaceAgentSessionValue({
       requestDeleteNode,
       attachWhiteboardContext,
       nodeRoster,
-      canvasImageNodes,
       checkProducers,
       fileTargets,
       openGitPrReadiness,
@@ -116,7 +82,6 @@ export function useWorkspaceAgentSessionValue({
     [
       arrangeGroupFrame,
       attachWhiteboardContext,
-      canvasImageNodes,
       checkProducers,
       fileTargets,
       fitGroupFrame,

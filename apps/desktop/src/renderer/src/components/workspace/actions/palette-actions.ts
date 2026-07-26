@@ -14,6 +14,7 @@ interface WorkspacePaletteActionInput {
   readonly workflowStartBusy: boolean;
   readonly addNode: (kind: NodeKind) => void;
   readonly addAgentNode: (adapterId: RunAdapterId) => void;
+  readonly addDefaultAgentNode: () => void;
   readonly addExtensionNode: (template: ExtensionTemplate) => void;
   readonly fitCanvas: () => void;
   readonly startWorkflow: (scope: WorkflowStartInput['scope']) => void;
@@ -24,7 +25,7 @@ interface WorkspacePaletteActionInput {
 
 export function createWorkspacePaletteActions(input: WorkspacePaletteActionInput): PaletteAction[] {
   return [
-    safeAction('add-agent', 'Add an agent', 'Canvas', () => input.addNode('agent'), [
+    safeAction('add-agent', 'Add an agent', 'Canvas', input.addDefaultAgentNode, [
       'create an agent',
       'new agent',
     ]),
@@ -42,10 +43,6 @@ export function createWorkspacePaletteActions(input: WorkspacePaletteActionInput
         ],
       ),
     ),
-    safeAction('add-task', 'Add a task', 'Canvas', () => input.addNode('task'), [
-      'create a task',
-      'new task',
-    ]),
     safeAction('add-brief', 'Add a product brief', 'Canvas', () => input.addNode('brief'), [
       'create a product brief',
       'new product brief',
@@ -67,9 +64,15 @@ export function createWorkspacePaletteActions(input: WorkspacePaletteActionInput
     },
     ...(input.canRunWorkflow && input.workflowMutationsAuthorized
       ? [
-          confirmAction('run-workflow', 'Run the saved canvas workflow', 'Workflow', () => {
-            if (!input.workflowStartBusy) input.startWorkflow({ kind: 'workflow' });
-          }),
+          safeAction(
+            'run-workflow',
+            'Run the saved canvas workflow',
+            'Workflow',
+            () => {
+              if (!input.workflowStartBusy) input.startWorkflow({ kind: 'workflow' });
+            },
+            ['run the workflow', 'start the workflow'],
+          ),
         ]
       : []),
     ...(input.selectedNodeTitle === null ||
@@ -77,7 +80,7 @@ export function createWorkspacePaletteActions(input: WorkspacePaletteActionInput
     !input.workflowMutationsAuthorized
       ? []
       : [
-          confirmAction(
+          safeAction(
             'run-selected-workflow-node',
             `Run ${input.selectedNodeTitle} and everything it needs`,
             'Workflow',

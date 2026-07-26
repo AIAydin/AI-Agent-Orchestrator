@@ -6,7 +6,7 @@ describe('providerTheme', () => {
     expect(providerTheme('claude')?.label).toBe('Claude Code');
     expect(providerTheme('claude')?.accent).toBe('#d97757');
     expect(providerTheme('codex')?.label).toBe('Codex');
-    expect(providerTheme('gemini')?.monogram).toBe('G');
+    expect(providerTheme('gemini')?.accent).toBe('#4e86f6');
     expect(providerTheme('opencode')?.label).toBe('opencode');
   });
 

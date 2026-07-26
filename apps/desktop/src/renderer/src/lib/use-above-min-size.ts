@@ -6,6 +6,11 @@ import { useEffect, useState, type RefObject } from 'react';
  * review payload) until the node is genuinely usable. When ResizeObserver is
  * unavailable (jsdom without a mock) it defaults to true, so eager mounting is
  * the safe fallback.
+ *
+ * Measures LAYOUT pixels (`offsetWidth`/`offsetHeight`), never
+ * `getBoundingClientRect()`: canvas nodes live under React Flow's zoom
+ * transform, so a rect would shrink with the zoom level and a zoomed-out
+ * canvas would refuse to render content that is plainly large enough.
  */
 export function useAboveMinSize(
   ref: RefObject<HTMLElement | null>,
@@ -21,8 +26,7 @@ export function useAboveMinSize(
       return;
     }
     const measure = (): void => {
-      const rect = element.getBoundingClientRect();
-      setAbove(rect.width >= min.width && rect.height >= min.height);
+      setAbove(element.offsetWidth >= min.width && element.offsetHeight >= min.height);
     };
     measure();
     const observer = new ResizeObserver(measure);

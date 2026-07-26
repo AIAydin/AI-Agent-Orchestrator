@@ -97,6 +97,9 @@ function createFakePreviewBridge() {
         url: 'https://miro.com/app/board',
       }),
     ),
+    navigate: vi.fn<AgentPeersPreviewBridge['navigate']>(() =>
+      Promise.resolve({ url: 'http://localhost:5173/settings' }),
+    ),
     describeAction: vi.fn<AgentPeersPreviewBridge['describeAction']>(
       (_projectId, _nodeId, action) =>
         Promise.resolve({
@@ -410,6 +413,67 @@ describe('AgentPeersService', () => {
       action,
       'page-version-1',
     );
+  });
+
+  it('navigates only interaction-enabled previews and surfaces safe navigation errors', async () => {
+    const agent = agentNode('agent-a', 'Agent A');
+    const readOnly = previewNode('preview-read-only', 'Read-only board', true);
+    const interactive = previewNode('preview-interactive', 'Interactive board', true, true);
+    setCanvas(
+      [agent, readOnly, interactive],
+      [
+        contextEdge('edge-read-only', agent.id, readOnly.id),
+        contextEdge('edge-interactive', agent.id, interactive.id),
+      ],
+    );
+    const provision = await service.provision(PROJECT_ID, agent.id);
+    const token =
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
+
+    const denied = await fetchJson(`${provision.url}/v1/preview/navigate`, token, {
+      method: 'POST',
+      body: JSON.stringify({ previewId: readOnly.id, url: 'http://localhost:5173/settings' }),
+    });
+    expect(denied.status).toBe(403);
+    expect(denied.body['error']).toBe('preview-interaction-denied');
+    expect(previewBridge.navigate).not.toHaveBeenCalled();
+
+    const navigated = await fetchJson(`${provision.url}/v1/preview/navigate`, token, {
+      method: 'POST',
+      body: JSON.stringify({ previewId: interactive.id, url: 'http://localhost:5173/settings' }),
+    });
+    expect(navigated.status).toBe(200);
+    expect(navigated.body).toEqual({ url: 'http://localhost:5173/settings' });
+    expect(previewBridge.navigate).toHaveBeenCalledWith(
+      PROJECT_ID,
+      interactive.id,
+      'http://localhost:5173/settings',
+    );
+    expect(store.auditEvents).toContainEqual(
+      expect.objectContaining({ action: 'navigate', outcome: 'allowed' }),
+    );
+
+    previewBridge.navigate.mockRejectedValueOnce(new Error('preview-navigation-blocked'));
+    const blocked = await fetchJson(`${provision.url}/v1/preview/navigate`, token, {
+      method: 'POST',
+      body: JSON.stringify({ previewId: interactive.id, url: 'http://localhost:9999/' }),
+    });
+    expect(blocked.status).toBe(409);
+    expect(blocked.body['error']).toBe('preview-navigation-blocked');
+
+    previewBridge.navigate.mockRejectedValueOnce(new Error('ECONNRESET private detail'));
+    const masked = await fetchJson(`${provision.url}/v1/preview/navigate`, token, {
+      method: 'POST',
+      body: JSON.stringify({ previewId: interactive.id, url: 'http://localhost:5173/other' }),
+    });
+    expect(masked.status).toBe(409);
+    expect(masked.body['error']).toBe('preview-action-unavailable');
+
+    const invalid = await fetchJson(`${provision.url}/v1/preview/navigate`, token, {
+      method: 'POST',
+      body: JSON.stringify({ previewId: interactive.id }),
+    });
+    expect(invalid.status).toBe(400);
   });
 
   it('does not execute declined actions or retain typed text in the audit log', async () => {
@@ -847,6 +911,69 @@ describe('AgentPeersService', () => {
     service.registerCleanup(provision.provisionId, () => Promise.reject(new Error('boom')));
 
     await expect(service.resetForPrivacy()).resolves.toBeUndefined();
+  });
+
+  // A provision that never binds to a session has no `releaseSession` trigger of its own: expiry
+  // is the only thing that ever reclaims it, so expiry has to be a cleanup route too. Otherwise
+  // the artifacts it wrote (for gemini/opencode, a key in a file inside the user's project repo)
+  // survive until app shutdown -- and outlive the app entirely if it is killed rather than quit.
+  it('runs the cleanup of a provision that expires without ever binding a session', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    const abandoned = await service.provision(PROJECT_ID, a.id);
+    const cleanup = vi.fn(() => Promise.resolve());
+    service.registerCleanup(abandoned.provisionId, cleanup);
+
+    clock += 5 * 60_000 + 1;
+    await service.provision(PROJECT_ID, a.id);
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    // The token is gone too, so nothing is left pointing at the reclaimed provision.
+    expect(service.environmentForProvision(abandoned.provisionId)).toBeNull();
+
+    await service.dispose();
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not run the cleanup of a bound session that has simply been running a long time', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    const provision = await service.provision(PROJECT_ID, a.id);
+    service.bindSession(provision.provisionId, 'session-a');
+    const cleanup = vi.fn(() => Promise.resolve());
+    service.registerCleanup(provision.provisionId, cleanup);
+
+    clock += 60 * 60_000;
+    await service.provision(PROJECT_ID, a.id);
+
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it('runs a cleanup registered for an already-reclaimed provision immediately', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    const abandoned = await service.provision(PROJECT_ID, a.id);
+    clock += 5 * 60_000 + 1;
+    await service.provision(PROJECT_ID, a.id);
+
+    const cleanup = vi.fn(() => Promise.resolve());
+    service.registerCleanup(abandoned.provisionId, cleanup);
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('a rejecting cleanup does not throw out of expiry reclamation', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    await service.provision(PROJECT_ID, a.id);
+    const abandoned = await service.provision(PROJECT_ID, a.id);
+    service.registerCleanup(abandoned.provisionId, () => Promise.reject(new Error('boom')));
+
+    clock += 5 * 60_000 + 1;
+    expect(() =>
+      service.registerCleanup('unknown-provision', () => Promise.reject(new Error('x'))),
+    ).not.toThrow();
+    await expect(service.provision(PROJECT_ID, a.id)).resolves.toBeDefined();
   });
 
   it('releaseSession followed by dispose does not double-run that provision cleanup', async () => {

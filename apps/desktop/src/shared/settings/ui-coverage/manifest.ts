@@ -5,15 +5,12 @@ export type SettingsUiTab =
   | 'Agents & runtime'
   | 'Permissions'
   | 'Git & previews'
-  | 'Checks'
   | 'Connectivity'
   | 'Voice commands'
   | 'Data & privacy';
 
 export type SettingsValidationClass =
   | 'schema'
-  | 'agent-readiness'
-  | 'command-readiness'
   | 'folder-readiness'
   | 'permission-policy'
   | 'docker-completeness';
@@ -49,6 +46,10 @@ export type SettingsFieldUiEntry =
       readonly target: Extract<SettingsUiTarget, { kind: 'button' | 'label' }>;
       readonly validation: 'schema' | 'docker-completeness';
       readonly reason: string;
+    }
+  | {
+      readonly kind: 'default-only';
+      readonly reason: string;
     };
 
 const label = (
@@ -63,25 +64,22 @@ const button = (name: string): Extract<SettingsUiTarget, { kind: 'button' }> => 
   kind: 'button',
   name,
 });
-const groupLabel = (
-  group: string,
-  name: string,
-): Extract<SettingsUiTarget, { kind: 'group-label' }> => ({
-  kind: 'group-label',
-  group,
-  name,
-});
 const ui = (
   tab: SettingsUiTab,
   target: SettingsUiTarget,
   validation: SettingsValidationClass = 'schema',
 ): SettingsFieldUiEntry => ({ kind: 'ui', tab, target, validation });
+const defaultOnly = (reason: string): SettingsFieldUiEntry => ({
+  kind: 'default-only',
+  reason,
+});
 
 /**
  * Exhaustive ordinary-UI placement for every persisted setting.
  *
  * Integrations and their credentials are intentionally outside this manifest: this maps only the
- * portable AppSettings document to visible controls, first-run state, or honest legacy cleanup.
+ * portable AppSettings document to visible controls, first-run state, honest legacy cleanup, or a
+ * schema default the simplified UI no longer edits.
  */
 export const SETTINGS_UI_MANIFEST = {
   onboardingCompleted: {
@@ -95,16 +93,22 @@ export const SETTINGS_UI_MANIFEST = {
   canvasGridSize: ui('Appearance', label('Canvas grid size')),
   canvasSnapToGrid: ui('Appearance', label('Snap items to grid')),
   keyboardPreset: ui('Appearance', label('Keyboard preset')),
-  defaultAgent: ui('Agents & runtime', label('Default agent'), 'agent-readiness'),
+  defaultAgent: ui('Agents & runtime', label('Default agent')),
   defaultPermissionProfile: ui(
     'Permissions',
     label('Default permission profile'),
     'permission-policy',
   ),
-  agentExecutableOverrides: ui('Agents & runtime', label('Executable override'), 'agent-readiness'),
-  agentDefaultModels: ui('Agents & runtime', label('Default model (optional)')),
-  customAgent: ui('Agents & runtime', label('Enable a custom tool'), 'agent-readiness'),
-  customPermissionProfile: ui('Permissions', label('Where the agent runs'), 'permission-policy'),
+  agentExecutableOverrides: defaultOnly(
+    'Agents are found automatically; per-agent executable overrides left the UI.',
+  ),
+  agentDefaultModels: defaultOnly(
+    'Model choice lives with each CLI; per-agent model settings left the UI.',
+  ),
+  customAgent: defaultOnly('The legacy custom-CLI configuration left the UI.'),
+  customPermissionProfile: defaultOnly(
+    'The Custom profile editor left the UI; saved profiles stay valid via the schema.',
+  ),
   worktreeRoot: ui('Git & previews', label('Managed worktree location'), 'folder-readiness'),
   worktreeCleanupPolicy: {
     kind: 'legacy-clear',
@@ -113,29 +117,23 @@ export const SETTINGS_UI_MANIFEST = {
     validation: 'schema',
     reason: 'Manual is the only supported policy; the UI only offers resetting a legacy value.',
   },
-  branchPrefix: ui('Git & previews', label('Branch prefix')),
-  gitIdentityName: ui('Git & previews', label('Git identity name')),
-  gitIdentityEmail: ui('Git & previews', label('Git identity email')),
-  gitRemote: ui('Git & previews', label('Default remote')),
-  terminalShell: ui('Agents & runtime', label('Default terminal executable'), 'command-readiness'),
-  envAllowlist: ui('Agents & runtime', label('Environment variable names allowed into processes')),
-  developmentCommand: ui(
-    'Git & previews',
-    groupLabel('Development server', 'Executable'),
-    'command-readiness',
+  branchPrefix: defaultOnly('Branch names use the schema default prefix.'),
+  gitIdentityName: defaultOnly('Commits use the repository Git identity.'),
+  gitIdentityEmail: defaultOnly('Commits use the repository Git identity.'),
+  gitRemote: defaultOnly('Pushes use the schema default remote (origin).'),
+  terminalShell: defaultOnly('Terminal nodes use the detected default shell.'),
+  envAllowlist: defaultOnly(
+    'Agent sessions run with the real environment; the allowlist editor left the UI.',
   ),
-  testCommand: ui('Checks', groupLabel('Tests command', 'Executable'), 'command-readiness'),
-  lintCommand: ui('Checks', groupLabel('Lint command', 'Executable'), 'command-readiness'),
-  typecheckCommand: ui(
-    'Checks',
-    groupLabel('Typecheck command', 'Executable'),
-    'command-readiness',
-  ),
-  buildCommand: ui('Checks', groupLabel('Build command', 'Executable'), 'command-readiness'),
-  customChecks: ui('Checks', button('Add custom check'), 'command-readiness'),
+  developmentCommand: defaultOnly('Preview nodes choose their own start command.'),
+  testCommand: defaultOnly('The checks feature and its settings were removed.'),
+  lintCommand: defaultOnly('The checks feature and its settings were removed.'),
+  typecheckCommand: defaultOnly('The checks feature and its settings were removed.'),
+  buildCommand: defaultOnly('The checks feature and its settings were removed.'),
+  customChecks: defaultOnly('The checks feature and its settings were removed.'),
   previewPortStart: ui('Git & previews', label('Preview port start')),
   previewPortEnd: ui('Git & previews', label('Preview port end')),
-  previewTrustedHosts: ui('Git & previews', label('Trusted preview hosts')),
+  previewTrustedHosts: defaultOnly('Previews accept local connections only.'),
   dockerEnabled: ui('Agents & runtime', label('Enable Docker profiles'), 'docker-completeness'),
   dockerExecutable: ui('Agents & runtime', label('Docker executable'), 'docker-completeness'),
   dockerImage: ui('Agents & runtime', label('Container image'), 'docker-completeness'),
@@ -163,7 +161,7 @@ export const SETTINGS_UI_MANIFEST = {
   backupIntervalHours: ui('Data & privacy', label('Back up automatically every (hours)')),
   backupOnQuit: ui('Data & privacy', label('Back up unsaved changes when quitting')),
   backupRetentionCount: ui('Data & privacy', label('Backups to keep')),
-  externalEditorExecutable: ui('Git & previews', label('External application')),
+  externalEditorExecutable: defaultOnly('Files open with the system default application.'),
   collaborationEnabled: ui('Connectivity', label('Enable collaboration')),
   collaborationUrl: ui('Connectivity', label('Collaboration server URL')),
   collaborationManagementUrl: ui('Connectivity', label('Collaboration management API URL')),
@@ -181,5 +179,4 @@ export const SETTINGS_UI_MANIFEST = {
     reason: 'Automatic downloads are unsupported; the UI permits only clearing the legacy value.',
   },
   voiceCommandsEnabled: ui('Voice commands', label('Enable voice commands')),
-  voiceAutoRunSafeActions: ui('Voice commands', label('Run safe actions automatically')),
 } as const satisfies Record<keyof AppSettings, SettingsFieldUiEntry>;

@@ -8,16 +8,7 @@ import {
   AppSettingsSchema,
   type AgentDetection,
   type AppSettings,
-  type Project,
 } from '../../../../../shared/application/contracts.js';
-import type {
-  CommandReadinessRequest,
-  CommandReadinessResult,
-} from '../../../../../shared/command-readiness/contracts.js';
-import type {
-  AgentReadinessRequest,
-  AgentReadinessResult,
-} from '../../../../../shared/readiness/contracts.js';
 import type {
   FolderReadinessRequest,
   FolderReadinessResult,
@@ -46,14 +37,6 @@ const agents: AgentDetection[] = [
     providerDisclosure: 'Uses the local CLI account.',
   },
 ];
-const geminiAgent: AgentDetection = {
-  id: 'gemini',
-  label: 'Gemini CLI',
-  installed: true,
-  executable: '/usr/local/bin/gemini',
-  version: '1.0.0',
-  providerDisclosure: 'Uses the local CLI account.',
-};
 
 const updateSettings = vi.fn((draft: AppSettings) =>
   Promise.resolve({ ok: true as const, value: draft }),
@@ -61,9 +44,6 @@ const updateSettings = vi.fn((draft: AppSettings) =>
 const resetSettings = vi.fn(() => Promise.resolve({ ok: true as const, value: resetDraft }));
 const importSettings = vi.fn(() => Promise.resolve({ ok: true as const, value: importedDraft }));
 const pickExecutable = vi.fn(() =>
-  Promise.resolve({ ok: true as const, value: null as string | null }),
-);
-const pickExternalApplication = vi.fn(() =>
   Promise.resolve({ ok: true as const, value: null as string | null }),
 );
 const pickReferences = vi.fn(() => Promise.resolve({ ok: true as const, value: [] as string[] }));
@@ -81,53 +61,12 @@ const getBackupHealth = vi.fn(() =>
     },
   }),
 );
-const commandCheck = vi.fn((input: CommandReadinessRequest) =>
-  Promise.resolve({ ok: true as const, value: readyCommand(input) }),
-);
-const agentCheck = vi.fn((input: AgentReadinessRequest) =>
-  Promise.resolve({ ok: true as const, value: readyAgent(input) }),
-);
 const folderCheck = vi.fn((input: FolderReadinessRequest) =>
   Promise.resolve({ ok: true as const, value: readyFolder(input) }),
 );
 const dockerCheck = vi.fn((input: DockerReadinessInput) =>
   Promise.resolve({ ok: true as const, value: readyDocker(input) }),
 );
-
-function readyCommand(input: CommandReadinessRequest): CommandReadinessResult {
-  return {
-    schemaVersion: 1,
-    request: input,
-    state: 'ready',
-    ready: true,
-    validationScope: input.projectId ? 'project' : 'executable',
-    resolvedExecutable: `/resolved/${input.command.executable}`,
-    projectName: input.projectId ? 'Active project' : null,
-    checkedAt: '2026-07-15T18:00:00.000Z',
-    reason: null,
-    warning: null,
-  };
-}
-
-function readyAgent(input: AgentReadinessRequest): AgentReadinessResult {
-  return {
-    schemaVersion: 1,
-    agentId: input.agentId,
-    state: 'ready',
-    ready: true,
-    source:
-      input.agentId === 'custom'
-        ? 'custom'
-        : input.executableOverride === undefined
-          ? 'automatic'
-          : 'override',
-    executable: '/canonical/agent',
-    version: '2.4.0',
-    checkedAt: '2026-07-15T18:00:00.000Z',
-    reason: null,
-    warnings: [],
-  };
-}
 
 function readyFolder(input: FolderReadinessRequest): FolderReadinessResult {
   return {
@@ -178,17 +117,9 @@ beforeEach(() => {
   importSettings.mockClear();
   pickExecutable.mockReset();
   pickExecutable.mockResolvedValue({ ok: true, value: null });
-  pickExternalApplication.mockReset();
-  pickExternalApplication.mockResolvedValue({ ok: true, value: null });
   pickReferences.mockReset();
   pickReferences.mockResolvedValue({ ok: true, value: [] });
   getBackupHealth.mockClear();
-  commandCheck.mockReset();
-  commandCheck.mockImplementation((input) =>
-    Promise.resolve({ ok: true, value: readyCommand(input) }),
-  );
-  agentCheck.mockReset();
-  agentCheck.mockImplementation((input) => Promise.resolve({ ok: true, value: readyAgent(input) }));
   folderCheck.mockReset();
   folderCheck.mockImplementation((input) =>
     Promise.resolve({ ok: true, value: readyFolder(input) }),
@@ -197,6 +128,9 @@ beforeEach(() => {
   dockerCheck.mockImplementation((input) =>
     Promise.resolve({ ok: true, value: readyDocker(input) }),
   );
+  delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.density;
+  delete document.documentElement.dataset.reducedMotion;
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -228,30 +162,15 @@ beforeEach(() => {
       },
       projects: {
         pickExecutable,
-        pickExternalApplication,
         pickReferences,
         pickParent: vi.fn(() => Promise.resolve({ ok: true, value: null })),
       },
-      commands: { checkReadiness: commandCheck },
-      agents: { checkReadiness: agentCheck },
       docker: {
         check: dockerCheck,
         pull: vi.fn(),
       },
       git: {
         connections: {
-          list: vi.fn(({ projectId }: { projectId: string }) =>
-            Promise.resolve({
-              ok: true,
-              value: {
-                projectId,
-                projectName: 'Detected project',
-                configurationRevision: 'a'.repeat(64),
-                remotes: [],
-                capturedAt: '2026-07-15T18:00:00.000Z',
-              },
-            }),
-          ),
           status: vi.fn(() =>
             Promise.resolve({
               ok: true,
@@ -264,6 +183,11 @@ beforeEach(() => {
               },
             }),
           ),
+          refresh: vi.fn(),
+          chooseGitHubCli: vi.fn(),
+          useAutomaticGitHubCli: vi.fn(),
+          confirmGitHubCli: vi.fn(),
+          cancelPlan: vi.fn(),
         },
       },
       privacy: {
@@ -353,19 +277,35 @@ describe('SettingsPanel draft transactions', () => {
     expect(agentsTab.getAttribute('aria-current')).toBe('page');
   });
 
+  it('previews appearance choices immediately and restores the saved look on close', () => {
+    const view = render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'dark' }));
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    fireEvent.click(screen.getByRole('button', { name: 'compact' }));
+    expect(document.documentElement.dataset.density).toBe('compact');
+    fireEvent.click(screen.getByRole('checkbox', { name: /Reduce motion/u }));
+    expect(document.documentElement.dataset.reducedMotion).toBe('true');
+
+    view.unmount();
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement.dataset.density).toBe('comfortable');
+    expect(document.documentElement.dataset.reducedMotion).toBe('false');
+  });
+
+  it('removes the Checks and Extensions sections from settings navigation', () => {
+    render(<SettingsPanel {...props()} />);
+
+    const navigation = screen.getByRole('navigation', { name: 'Settings sections' });
+    expect(within(navigation).queryByRole('button', { name: 'Checks' })).toBeNull();
+    expect(within(navigation).queryByRole('button', { name: 'Extensions' })).toBeNull();
+    expect(within(navigation).getAllByRole('button')).toHaveLength(8);
+  });
+
   it('renders the exhaustive persisted-settings manifest through real accessible controls', () => {
-    const codex: AgentDetection = {
-      id: 'codex',
-      label: 'OpenAI Codex CLI',
-      installed: true,
-      executable: '/tmp/codex',
-      version: '1.0.0',
-      providerDisclosure: 'Provider fixture.',
-    };
     render(
       <SettingsPanel
         {...props({
-          agents: [...agents, codex],
           settings: settings({
             automaticUpdateDownloads: true,
             backupsEnabled: true,
@@ -378,30 +318,92 @@ describe('SettingsPanel draft transactions', () => {
     );
 
     const entries = Object.entries(SETTINGS_UI_MANIFEST);
-    expect(entries).toHaveLength(60);
+    expect(entries).toHaveLength(59);
     expect(entries.filter(([, entry]) => entry.kind === 'first-run')).toHaveLength(1);
     for (const tab of [
       'Appearance',
       'Agents & runtime',
       'Permissions',
       'Git & previews',
-      'Checks',
       'Connectivity',
       'Voice commands',
       'Data & privacy',
     ] as const) {
       fireEvent.click(screen.getByRole('button', { name: tab }));
       for (const [key, entry] of entries) {
-        if (entry.kind === 'first-run' || entry.tab !== tab) continue;
+        if (entry.kind === 'first-run' || entry.kind === 'default-only' || entry.tab !== tab) {
+          continue;
+        }
         expect(
           findManifestTarget(entry.target),
           `Missing Settings control for ${key}`,
         ).toBeTruthy();
         expect(entry.validation).toMatch(
-          /^(schema|agent-readiness|command-readiness|folder-readiness|permission-policy|docker-completeness)$/u,
+          /^(schema|folder-readiness|permission-policy|docker-completeness)$/u,
         );
       }
     }
+  });
+
+  it('keeps agent setup to detection status plus the default agent choice', () => {
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
+    expect(screen.getByText('OpenAI Codex CLI')).toBeTruthy();
+    expect(screen.getByLabelText('Default agent')).toBeTruthy();
+    expect(screen.queryByLabelText('Executable override')).toBeNull();
+    expect(screen.queryByLabelText('Default model (optional)')).toBeNull();
+    expect(screen.queryByLabelText('Default terminal executable')).toBeNull();
+    expect(screen.queryByLabelText('Output format')).toBeNull();
+    expect(screen.queryByLabelText('Environment variable names allowed into processes')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'GitHub CLI' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /Enable Docker profiles/u })).toBeTruthy();
+  });
+
+  it('keeps Git & previews to the worktree location and preview ports', () => {
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
+    expect(screen.getByLabelText('Managed worktree location')).toBeTruthy();
+    expect(screen.getByLabelText('Preview port start')).toBeTruthy();
+    expect(screen.getByLabelText('Preview port end')).toBeTruthy();
+    expect(screen.queryByLabelText('Branch prefix')).toBeNull();
+    expect(screen.queryByLabelText('Git identity name')).toBeNull();
+    expect(screen.queryByLabelText('Default remote')).toBeNull();
+    expect(screen.queryByLabelText('External application')).toBeNull();
+    expect(screen.queryByLabelText('Trusted preview hosts')).toBeNull();
+    expect(screen.queryByText('Development server')).toBeNull();
+  });
+
+  it('keeps permissions to the profile choice and saved approvals', () => {
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Permissions' }));
+    const profile = screen.getByLabelText<HTMLSelectElement>('Default permission profile');
+    expect([...profile.options].map((option) => option.value)).toEqual([
+      'plan-read-only',
+      'worktree-write',
+      'project-write',
+      'docker-isolated',
+    ]);
+    expect(screen.getByRole('heading', { name: 'Saved approvals' })).toBeTruthy();
+    expect(screen.queryByLabelText('Where the agent runs')).toBeNull();
+    expect(screen.queryByLabelText('File access')).toBeNull();
+  });
+
+  it('shows the simplified collaboration page with invite-first controls', () => {
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connectivity' }));
+    expect(screen.getByLabelText('Collaboration display name')).toBeTruthy();
+    expect(screen.getByLabelText('Collaborator color')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Join room' })).toBeTruthy();
+    const createInvite = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Create invite link',
+    });
+    expect(createInvite.disabled).toBe(true);
+    expect(screen.getByText(/Add your hosted server address under Advanced first/u)).toBeTruthy();
+    expect(screen.getByText('Advanced')).toBeTruthy();
   });
 
   it('keeps searchable help and active shortcuts available inside the app', () => {
@@ -624,114 +626,6 @@ describe('SettingsPanel draft transactions', () => {
     expect(updateSettings).not.toHaveBeenCalled();
   });
 
-  it('requires current readiness evidence for a configured non-default agent', async () => {
-    render(
-      <SettingsPanel
-        {...props({
-          settings: settings({ defaultAgent: 'gemini' }),
-          agents: [...agents, geminiAgent],
-        })}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
-    const codexCard = screen.getByRole('article', { name: 'Codex CLI' });
-    fireEvent.click(within(codexCard).getByText('Advanced'));
-    const codexExecutable = within(codexCard).getByLabelText('Executable override');
-    fireEvent.change(codexExecutable, {
-      target: { value: '/chosen/bin/codex' },
-    });
-    const save = screen.getByRole<HTMLButtonElement>('button', {
-      name: 'Save settings',
-    });
-    expect(save.disabled).toBe(true);
-    expect(
-      (await screen.findAllByText(/Refresh readiness for the current program/u)).filter(
-        (element) => element.getAttribute('role') !== 'tooltip',
-      ),
-    ).toHaveLength(1);
-
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Check OpenAI Codex CLI again',
-      }),
-    );
-    await waitFor(() => expect(save.disabled).toBe(false));
-    expect(agentCheck).toHaveBeenCalledWith({
-      agentId: 'codex',
-      executableOverride: '/chosen/bin/codex',
-    });
-
-    fireEvent.change(codexExecutable, {
-      target: { value: '/other/bin/codex' },
-    });
-    expect(save.disabled).toBe(true);
-    expect(
-      screen
-        .getAllByText(/Refresh readiness for the current program/u)
-        .filter((element) => element.getAttribute('role') !== 'tooltip').length,
-    ).toBe(1);
-  });
-
-  it('requires an exact readiness refresh after selecting a different detected default', async () => {
-    render(
-      <SettingsPanel
-        {...props({
-          settings: settings({ defaultAgent: 'gemini' }),
-          agents: [...agents, geminiAgent],
-        })}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
-    fireEvent.change(screen.getByLabelText('Default agent'), {
-      target: { value: 'codex' },
-    });
-    const save = screen.getByRole<HTMLButtonElement>('button', {
-      name: 'Save settings',
-    });
-    expect(save.disabled).toBe(true);
-    expect(screen.getByText('Selected executable needs attention')).toBeTruthy();
-    expect(screen.queryByText('Selected executable is ready')).toBeNull();
-    expect(agentCheck).not.toHaveBeenCalled();
-
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Check OpenAI Codex CLI again',
-      }),
-    );
-
-    await screen.findByText('Selected executable is ready');
-    await waitFor(() => expect(save.disabled).toBe(false));
-    expect(agentCheck).toHaveBeenCalledWith({ agentId: 'codex' });
-  });
-
-  it('keeps environment values out of settings and blocks invalid environment names', async () => {
-    render(<SettingsPanel {...props()} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
-    const environment = screen.getByLabelText<HTMLInputElement>(
-      'Environment variable names allowed into processes',
-    );
-    fireEvent.change(environment, { target: { value: 'PATH, NOT-VALID' } });
-
-    const save = screen.getByRole<HTMLButtonElement>('button', {
-      name: 'Save settings',
-    });
-    expect(save.disabled).toBe(true);
-    expect(
-      screen
-        .getAllByRole('alert')
-        .some((alert) => /valid environment/u.test(alert.textContent ?? '')),
-    ).toBe(true);
-    expect(
-      screen.getByText(/Values are read from this computer each time a program starts/u),
-    ).toBeTruthy();
-
-    fireEvent.change(environment, { target: { value: 'PATH, CI' } });
-    await waitFor(() => expect(save.disabled).toBe(false));
-  });
-
   it('configures automatic local backup timing, shutdown protection, and retention in the UI', async () => {
     render(<SettingsPanel {...props()} />);
 
@@ -815,368 +709,6 @@ describe('SettingsPanel draft transactions', () => {
     expect(order).toEqual(['flush', 'delete']);
   });
 
-  it('saves the custom CLI output format selected in the UI', async () => {
-    render(<SettingsPanel {...props()} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
-    fireEvent.change(screen.getByLabelText('Output format'), {
-      target: { value: 'json-lines' },
-    });
-    await clickSaveSettings();
-
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
-    expect(updateSettings.mock.calls[0]?.[0].customAgent.output).toBe('json-lines');
-  });
-
-  it('selects and resets the external workspace application entirely in Settings', async () => {
-    pickExternalApplication.mockResolvedValue({
-      ok: true,
-      value: '/Applications/Visual Studio Code.app',
-    });
-    render(<SettingsPanel {...props()} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
-    const field = screen.getByLabelText<HTMLInputElement>('External application');
-    const controls = field.closest('.settings-form-field');
-    if (!(controls instanceof HTMLElement))
-      throw new Error('Missing external application settings field.');
-    fireEvent.click(within(controls).getByRole('button', { name: 'Browse' }));
-    await waitFor(() => expect(field.value).toBe('/Applications/Visual Studio Code.app'));
-    expect(pickExternalApplication).toHaveBeenCalledOnce();
-    expect(pickExecutable).not.toHaveBeenCalled();
-    await clickSaveSettings();
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
-    expect(updateSettings.mock.calls[0]?.[0].externalEditorExecutable).toBe(
-      '/Applications/Visual Studio Code.app',
-    );
-
-    fireEvent.click(within(controls).getByRole('button', { name: 'Use system default' }));
-    expect(field.value).toBe('');
-    await clickSaveSettings();
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(2));
-    expect(updateSettings.mock.calls[1]?.[0].externalEditorExecutable).toBe('');
-  });
-
-  it('builds and validates the Custom permission profile entirely in the permission centre', async () => {
-    pickReferences.mockResolvedValue({
-      ok: true,
-      value: ['/tmp/detected-project/src'],
-    });
-    pickExecutable.mockResolvedValue({
-      ok: true,
-      value: '/usr/local/bin/codex',
-    });
-    render(<SettingsPanel {...props({ activeProject: project() })} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Permissions' }));
-    expect(screen.getByRole('heading', { name: 'Permission centre' })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Default permission profile'), {
-      target: { value: 'custom' },
-    });
-    fireEvent.change(screen.getByLabelText('File access'), {
-      target: { value: 'explicit-paths' },
-    });
-
-    const readable = screen.getByRole('group', {
-      name: 'Folders the agent can read',
-    });
-    fireEvent.click(
-      within(readable).getByRole('button', {
-        name: 'Browse project folders',
-      }),
-    );
-    await waitFor(() => expect(within(readable).getByDisplayValue('src')).toBeTruthy());
-    const writable = screen.getByRole('group', {
-      name: 'Folders the agent can change',
-    });
-    fireEvent.click(within(writable).getByRole('button', { name: 'Add a folder' }));
-    fireEvent.change(within(writable).getByRole('textbox', { name: 'Writable folder 1' }), {
-      target: { value: 'src/generated' },
-    });
-
-    fireEvent.change(screen.getByLabelText('Which programs can start it'), {
-      target: { value: 'allowlist' },
-    });
-    const executableGroup = screen.getByRole('group', {
-      name: 'Programs allowed to start the agent',
-    });
-    expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', true);
-    expect(
-      screen.getAllByText(/Add at least one program by its full path/u).length,
-    ).toBeGreaterThan(0);
-    fireEvent.click(
-      within(executableGroup).getByRole('button', {
-        name: 'Browse for an allowed program',
-      }),
-    );
-    await waitFor(() =>
-      expect(within(executableGroup).getByDisplayValue('/usr/local/bin/codex')).toBeTruthy(),
-    );
-    fireEvent.click(screen.getByRole('checkbox', { name: /Ask the agent to allow tests/u }));
-    await clickSaveSettings();
-
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
-    expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
-      defaultPermissionProfile: 'custom',
-      customPermissionProfile: {
-        runtime: 'host',
-        filesystem: 'explicit-paths',
-        readPaths: ['src'],
-        writePaths: ['src/generated'],
-        executablePolicy: 'allowlist',
-        allowedExecutables: ['/usr/local/bin/codex'],
-        forgeboardManagedActions: {
-          developmentServers: 'deny',
-          tests: 'allow',
-        },
-        requireReviewBeforePrimary: true,
-      },
-    });
-  });
-
-  it('requires explicit content exposure when Custom switches to Docker', async () => {
-    render(
-      <SettingsPanel
-        {...props({
-          settings: settings({
-            dockerImage: 'example/agent:latest',
-            dockerContainerExecutable: '/usr/local/bin/agent',
-          }),
-        })}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Permissions' }));
-    const ignoredFiles = screen.getByLabelText<HTMLSelectElement>('Ignored files');
-    const sensitiveFiles = screen.getByLabelText<HTMLSelectElement>('Sensitive files');
-    expect(ignoredFiles.value).toBe('deny');
-    expect(sensitiveFiles.value).toBe('deny');
-
-    fireEvent.change(screen.getByLabelText('Where the agent runs'), {
-      target: { value: 'docker' },
-    });
-
-    expect(ignoredFiles.value).toBe('deny');
-    expect(sensitiveFiles.value).toBe('deny');
-    expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', true);
-    expect(
-      screen.getAllByText(/Docker always gives the agent the whole worktree/u).length,
-    ).toBeGreaterThan(0);
-
-    fireEvent.change(screen.getByLabelText('Which programs can start it'), {
-      target: { value: 'allowlist' },
-    });
-    expect(screen.getByRole('button', { name: 'Browse for an allowed program' })).toHaveProperty(
-      'disabled',
-      true,
-    );
-    fireEvent.change(screen.getByLabelText('Which programs can start it'), {
-      target: { value: 'selected-agent-only' },
-    });
-    fireEvent.change(ignoredFiles, { target: { value: 'allow' } });
-    fireEvent.change(sensitiveFiles, { target: { value: 'allow' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
-    const dockerEnabled = screen.getByRole<HTMLInputElement>('checkbox', {
-      name: /Enable Docker profiles/u,
-    });
-    expect(dockerEnabled.checked).toBe(true);
-    expect(dockerEnabled.disabled).toBe(true);
-    expect(screen.getByText(/Switch Custom to Host in the Permissions centre/u)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Check Docker' }));
-    await screen.findByText('Docker profile ready');
-    await clickSaveSettings();
-
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
-    expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
-      dockerEnabled: true,
-      customPermissionProfile: {
-        runtime: 'docker',
-        ignoredFileRead: 'allow',
-        sensitiveFileRead: 'allow',
-      },
-    });
-  });
-
-  it('keeps manual check configuration available without an open project', async () => {
-    pickExecutable.mockResolvedValue({
-      ok: true,
-      value: '/usr/local/bin/eslint',
-    });
-    render(<SettingsPanel {...props()} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
-    expect(screen.getByText('No project is open')).toBeTruthy();
-    expect(
-      screen.getByText(/Open a project and Forgeboard will find its check scripts/u),
-    ).toBeTruthy();
-
-    const lintEditor = screen.getByRole('group', { name: 'Lint command' });
-    fireEvent.click(
-      within(lintEditor).getByRole('button', {
-        name: 'Browse executable for Lint command',
-      }),
-    );
-    await waitFor(() =>
-      expect(within(lintEditor).getByLabelText<HTMLInputElement>('Executable').value).toBe(
-        '/usr/local/bin/eslint',
-      ),
-    );
-    fireEvent.change(within(lintEditor).getByLabelText(/Arguments/u), {
-      target: { value: '  .  \n\n--max-warnings=0 ' },
-    });
-    const save = screen.getByRole<HTMLButtonElement>('button', {
-      name: 'Save settings',
-    });
-    await waitFor(() => expect(save.disabled).toBe(false));
-    fireEvent.click(save);
-
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
-    expect(updateSettings.mock.calls[0]?.[0].lintCommand).toEqual({
-      executable: '/usr/local/bin/eslint',
-      arguments: ['  .  ', '--max-warnings=0 '],
-    });
-  });
-
-  it('validates changed commands before saving and gives dependency remediation in Settings', async () => {
-    commandCheck.mockImplementation((input) =>
-      Promise.resolve(
-        input.purpose === 'terminal'
-          ? { ok: true, value: readyCommand(input) }
-          : {
-              ok: true,
-              value: {
-                schemaVersion: 1,
-                request: input,
-                state: 'executable-missing',
-                ready: false,
-                validationScope: 'none',
-                resolvedExecutable: null,
-                projectName: null,
-                checkedAt: '2026-07-15T18:00:00.000Z',
-                reason:
-                  'The configured executable was not found. Use Browse or install the dependency and reopen Forgeboard.',
-                warning: null,
-              },
-            },
-      ),
-    );
-    render(<SettingsPanel {...props()} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
-    const lintEditor = screen.getByRole('group', { name: 'Lint command' });
-    fireEvent.change(within(lintEditor).getByLabelText('Executable'), {
-      target: { value: 'missing-linter' },
-    });
-
-    expect(
-      (await screen.findAllByText(/configured executable was not found/u)).filter(
-        (element) => element.getAttribute('role') !== 'tooltip',
-      ),
-    ).toHaveLength(2);
-    expect(
-      within(lintEditor).getByText(/install it and reopen Forgeboard, or use Browse/u),
-    ).toBeTruthy();
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save settings' }).disabled).toBe(
-      true,
-    );
-    fireEvent.submit(screen.getByRole('dialog', { name: 'Settings' }));
-    expect(screen.getByText(/Settings were not saved/u)).toBeTruthy();
-    expect(updateSettings).not.toHaveBeenCalled();
-  });
-
-  it('adopts detected project checks as separate package-manager process and argv', async () => {
-    render(<SettingsPanel {...props({ activeProject: project() })} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Use all 4 detected scripts' }));
-    const save = screen.getByRole<HTMLButtonElement>('button', {
-      name: 'Save settings',
-    });
-    await waitFor(() => expect(save.disabled).toBe(false));
-    fireEvent.click(save);
-
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
-    const saved = updateSettings.mock.calls[0]?.[0];
-    expect(saved?.lintCommand).toEqual({
-      executable: 'pnpm',
-      arguments: ['run', 'lint'],
-    });
-    expect(saved?.typecheckCommand).toEqual({
-      executable: 'pnpm',
-      arguments: ['run', 'typecheck'],
-    });
-    expect(saved?.testCommand).toEqual({
-      executable: 'pnpm',
-      arguments: ['run', 'test'],
-    });
-    expect(saved?.buildCommand).toEqual({
-      executable: 'pnpm',
-      arguments: ['run', 'build'],
-    });
-    expect(JSON.stringify(saved)).not.toContain('touch should-not-run');
-  });
-
-  it('adds, edits, browses, and removes a custom check in the draft transaction', async () => {
-    pickExecutable.mockResolvedValue({
-      ok: true,
-      value: '/opt/tools/license-check',
-    });
-    render(<SettingsPanel {...props()} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add custom check' }));
-    const customName = screen.getByLabelText('Custom check 1 name');
-    expect(document.activeElement).toBe(customName);
-    fireEvent.change(customName, {
-      target: { value: 'License scan' },
-    });
-
-    const commandEditor = screen.getByRole('group', {
-      name: 'License scan command',
-    });
-    fireEvent.click(
-      within(commandEditor).getByRole('button', {
-        name: 'Browse executable for License scan command',
-      }),
-    );
-    await waitFor(() =>
-      expect(within(commandEditor).getByLabelText<HTMLInputElement>('Executable').value).toBe(
-        '/opt/tools/license-check',
-      ),
-    );
-    fireEvent.change(within(commandEditor).getByLabelText(/Arguments/u), {
-      target: { value: 'scan\n--production' },
-    });
-    const save = screen.getByRole<HTMLButtonElement>('button', {
-      name: 'Save settings',
-    });
-    await waitFor(() => expect(save.disabled).toBe(false));
-    fireEvent.click(save);
-
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
-    const firstSaved = updateSettings.mock.calls[0]?.[0];
-    expect(firstSaved?.customChecks).toHaveLength(1);
-    expect(firstSaved?.customChecks?.[0]).toMatchObject({
-      label: 'License scan',
-      command: {
-        executable: '/opt/tools/license-check',
-        arguments: ['scan', '--production'],
-      },
-    });
-    expect(firstSaved?.customChecks?.[0]?.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Remove License scan' }));
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add custom check' }));
-    expect(screen.getByText('No custom checks configured.')).toBeTruthy();
-    await waitFor(() => expect(save.disabled).toBe(false));
-    fireEvent.click(save);
-
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(2));
-    expect(updateSettings.mock.calls[1]?.[0].customChecks).toEqual([]);
-  });
-
   it('persists the keyboard preset that drives the workspace shortcut behavior', async () => {
     render(<SettingsPanel {...props()} />);
 
@@ -1191,189 +723,6 @@ describe('SettingsPanel draft transactions', () => {
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0].keyboardPreset).toBe('vscode');
-  });
-
-  it('configures the validated terminal default in UI while exposing remote and collaboration controls', async () => {
-    pickExecutable.mockResolvedValue({
-      ok: true,
-      value: '/usr/local/bin/fish',
-    });
-    render(
-      <SettingsPanel
-        {...props({
-          settings: settings({
-            collaborationEnabled: true,
-            automaticUpdateDownloads: true,
-          }),
-        })}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
-    const terminalShell = screen.getByLabelText<HTMLInputElement>('Default terminal executable');
-    expect(terminalShell.disabled).toBe(false);
-    expect(terminalShell.value).toBe('/bin/sh');
-    const terminalSection = terminalShell.closest('.settings-section');
-    if (terminalSection === null) throw new Error('Expected the terminal Settings section.');
-    fireEvent.click(
-      within(terminalSection as HTMLElement).getByRole('button', {
-        name: 'Browse',
-      }),
-    );
-    await waitFor(() => expect(terminalShell.value).toBe('/usr/local/bin/fish'));
-    await waitFor(() =>
-      expect(commandCheck).toHaveBeenCalledWith(
-        expect.objectContaining({
-          purpose: 'terminal',
-          command: { executable: '/usr/local/bin/fish', arguments: [] },
-        }),
-      ),
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
-    expect(screen.getByText('Development preview')).toBeTruthy();
-    expect(screen.getByText('Development server')).toBeTruthy();
-    expect(screen.getByLabelText('Git identity name')).toBeTruthy();
-    expect(screen.getByLabelText('Git identity email')).toBeTruthy();
-    const remote = screen.getByLabelText<HTMLInputElement>('Default remote');
-    expect(remote.disabled).toBe(false);
-    expect(remote.value).toBe('origin');
-    fireEvent.change(remote, { target: { value: 'upstream' } });
-    expect(screen.getByText(/Forgeboard stores no token/u)).toBeTruthy();
-    expect(screen.queryByLabelText(/Cleanup policy/u)).toBeNull();
-    expect(screen.getByText(/asks before deleting a worktree or branch/u)).toBeTruthy();
-    expect(screen.queryByText('Tests')).toBeNull();
-    expect(screen.queryByText('Lint')).toBeNull();
-    expect(screen.queryByText('Typecheck')).toBeNull();
-    expect(screen.queryByText('Build')).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Collaboration' })).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Connectivity' }));
-    expect(screen.getByRole('heading', { name: 'Collaboration' })).toBeTruthy();
-    const collaborationEnabled = screen.getByRole<HTMLInputElement>('checkbox', {
-      name: /Enable collaboration/u,
-    });
-    expect(collaborationEnabled.disabled).toBe(false);
-    expect(collaborationEnabled.checked).toBe(true);
-    expect(screen.getByLabelText('Collaboration server URL')).toHaveProperty('disabled', false);
-    expect(screen.getByLabelText('Collaboration display name')).toHaveProperty('disabled', false);
-    expect(screen.getByLabelText('Collaboration room')).toHaveProperty('disabled', false);
-    expect(
-      screen.getByRole('checkbox', {
-        name: /Reconnect collaboration automatically/u,
-      }),
-    ).toHaveProperty('disabled', false);
-    expect(screen.getByLabelText('Session access token')).toHaveProperty('value', '');
-    fireEvent.change(screen.getByLabelText('Collaborator ID'), {
-      target: { value: 'team-editor' },
-    });
-    fireEvent.change(screen.getByLabelText('Collaborator color'), {
-      target: { value: '#123456' },
-    });
-    expect(screen.getByRole('button', { name: 'Connect with access token' })).toHaveProperty(
-      'disabled',
-      true,
-    );
-    expect(screen.getByLabelText('Update channel')).toHaveProperty('disabled', false);
-    expect(
-      screen.queryByRole('checkbox', {
-        name: /Download updates automatically/u,
-      }),
-    ).toBeNull();
-    expect(
-      screen.getByText(/imported legacy automatic-download preference is inactive/u),
-    ).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Check for updates' })).toHaveProperty(
-      'disabled',
-      false,
-    );
-    expect(screen.getByText(/Not connected/u)).toBeTruthy();
-
-    await clickSaveSettings();
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
-    expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
-      terminalShell: '/usr/local/bin/fish',
-      gitRemote: 'upstream',
-      collaborationEnabled: true,
-      collaborationSubject: 'team-editor',
-      collaborationColor: '#123456',
-      automaticUpdateDownloads: true,
-    });
-  });
-
-  it('blocks saving an invalid terminal default until current passive evidence is ready', async () => {
-    commandCheck.mockImplementation((input) =>
-      Promise.resolve(
-        input.purpose === 'terminal' && input.command.executable === 'missing-shell'
-          ? {
-              ok: true,
-              value: {
-                schemaVersion: 1,
-                request: input,
-                state: 'executable-missing',
-                ready: false,
-                validationScope: 'none',
-                resolvedExecutable: null,
-                projectName: null,
-                checkedAt: '2026-07-15T18:00:00.000Z',
-                reason: 'The configured terminal executable was not found.',
-                warning: null,
-              },
-            }
-          : { ok: true, value: readyCommand(input) },
-      ),
-    );
-    render(<SettingsPanel {...props()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
-    const terminalShell = screen.getByLabelText<HTMLInputElement>('Default terminal executable');
-    const save = screen.getByRole<HTMLButtonElement>('button', {
-      name: 'Save settings',
-    });
-    await waitFor(() => expect(save.disabled).toBe(false));
-
-    fireEvent.change(terminalShell, { target: { value: '' } });
-    expect(save.disabled).toBe(true);
-    expect(
-      screen
-        .getAllByText(/Default terminal executable: Choose a path/u)
-        .some((element) => element.getAttribute('role') === 'alert'),
-    ).toBe(true);
-
-    fireEvent.change(terminalShell, { target: { value: 'missing-shell' } });
-    expect(save.disabled).toBe(true);
-    expect(
-      (await screen.findAllByText(/terminal executable was not found/u)).filter(
-        (element) => element.getAttribute('role') !== 'tooltip',
-      ),
-    ).toHaveLength(2);
-    expect(save.disabled).toBe(true);
-    fireEvent.submit(screen.getByRole('dialog', { name: 'Settings' }));
-    expect(updateSettings).not.toHaveBeenCalled();
-
-    fireEvent.change(terminalShell, { target: { value: '/bin/zsh' } });
-    await waitFor(() => expect(save.disabled).toBe(false));
-  });
-
-  it('blocks an invalid default remote with in-context UI guidance', async () => {
-    render(<SettingsPanel {...props()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
-    const remote = screen.getByLabelText<HTMLInputElement>('Default remote');
-    const save = screen.getByRole<HTMLButtonElement>('button', {
-      name: 'Save settings',
-    });
-    await waitFor(() => expect(save.disabled).toBe(false));
-
-    fireEvent.change(remote, { target: { value: 'bad/remote' } });
-    expect(remote.getAttribute('aria-invalid')).toBe('true');
-    expect(
-      screen.getByText(/checks that it exists in the selected agent's worktree/u),
-    ).toBeTruthy();
-    expect(save.disabled).toBe(true);
-    expect(updateSettings).not.toHaveBeenCalled();
-
-    fireEvent.change(remote, { target: { value: 'upstream' } });
-    expect(remote.getAttribute('aria-invalid')).toBe('false');
-    await waitFor(() => expect(save.disabled).toBe(false));
   });
 
   it('lets an imported inactive cleanup policy be replaced only with supported manual cleanup', async () => {
@@ -1473,7 +822,6 @@ describe('SettingsPanel draft transactions', () => {
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0].theme).toBe('dark');
-    expect(agentCheck).not.toHaveBeenCalled();
   });
 });
 
@@ -1503,38 +851,11 @@ function props(
     activeProject: null,
     onClose: vi.fn(),
     onSaved: vi.fn(() => Promise.resolve()),
-    onExtensionsChanged: vi.fn(() => Promise.resolve()),
     onDeleteAll: vi.fn(() => Promise.resolve()),
     onFlushActiveCanvas: vi.fn(() => Promise.resolve(true)),
     onRecoveryApplied: vi.fn(() => Promise.resolve()),
     onError: vi.fn(),
     ...overrides,
-  };
-}
-
-function project(): Project {
-  return {
-    id: '00000000-0000-4000-8000-000000000001',
-    name: 'Detected project',
-    path: '/tmp/detected-project',
-    openedAt: '2026-07-14T16:00:00.000Z',
-    missing: false,
-    health: {
-      isGitRepository: true,
-      branch: 'main',
-      dirty: false,
-      remotes: [],
-      packageManager: 'pnpm',
-      frameworks: [],
-      scripts: {
-        lint: 'eslint . && touch should-not-run',
-        typecheck: 'tsc --noEmit',
-        test: 'vitest run',
-        build: 'vite build',
-      },
-      hasSubmodules: false,
-      sensitiveWarnings: [],
-    },
   };
 }
 

@@ -9,19 +9,16 @@ describe('ordinary integration UI coverage', () => {
   it('classifies every inventoried action without treating scoped authority as portable settings', () => {
     const entries = Object.values(INTEGRATION_UI_MANIFEST);
 
-    expect(entries).toHaveLength(18);
+    expect(entries).toHaveLength(12);
     expect(new Set(entries.map((entry) => entry.route))).toEqual(
       new Set([
         'Welcome',
         'Settings > Agents & runtime',
-        'Settings > Git & previews',
-        'Settings > Extensions',
         'Settings > Connectivity',
         'Settings > Data & privacy',
         'Settings > Permissions',
       ]),
     );
-    expect(entries.filter((entry) => entry.stateScope === 'portable-setting')).toHaveLength(1);
     expect(entries.filter((entry) => entry.stateScope === 'device-bound').length).toBeGreaterThan(
       0,
     );
@@ -52,18 +49,5 @@ describe('ordinary integration UI coverage', () => {
         `it('${entry.evidence.testTitle}'`,
       );
     }
-  });
-
-  it('binds agent readiness to the exact accessible action exercised by the Settings UI', () => {
-    const readinessButton = INTEGRATION_UI_MANIFEST.agentCliReadiness.controls.find(
-      (control) => control.role === 'button',
-    );
-    const evidence = readFileSync(
-      resolve(INTEGRATION_UI_MANIFEST.agentCliReadiness.evidence.test),
-      'utf8',
-    );
-
-    expect(readinessButton?.name).toBe('Check OpenAI Codex CLI again');
-    expect(evidence).toContain(`name: '${readinessButton?.name}'`);
   });
 });

@@ -2029,3 +2029,25 @@ unchecked when only a subset of their required behavior has proof.
   root and passed locally. Structure (1,479 files), controls (861 files), formatting, zero-warning
   lint, workspace typecheck, all 3,155 unit tests, all 333 integration tests, three docs tests,
   seven quality tests, and every production build passed.
+- 2026-07-24: running Agent and Terminal sessions no longer have Forgeboard-wide or per-window
+  count caps; ordinary launches are limited only by the computer's available resources. Transcript
+  creation likewise has no product-level file-count ceiling while retaining per-session and global
+  byte bounds. A 12-session same-window regression exceeds both retired limits, and OpenCode's
+  installed default TUI remains a zero-argument, main-managed worktree launch. All 3,102 unit tests
+  passed. Of 332 integration tests, 330 passed in the unrestricted full run; both load-sensitive cases
+  passed under unchanged default timeouts in isolation. Docs, quality, typecheck, lint, formatting,
+  structure, controls, and the complete production build passed.
+  Canvas navigation also gains an idle-bounded lightweight paint mode and terminal/preview containment;
+  final-state lint, typecheck, formatting, and 55 affected renderer tests passed.
+- 2026-07-24: startup recovery now compares the complete stable database identity across provenance
+  inspection, so inode reuse cannot hide a replaced primary. Packaged smoke now mirrors normal
+  startup by deferring optional Agent-context storage failures while the protected context path
+  remains fail-closed when an Agent actually requests it. The 19 focused unit tests and six
+  integration tests passed.
+- 2026-07-25: pressing Delete/Backspace on a whiteboard with a selected shape now deletes just that
+  shape (WS-I-4): the drawing surface takes focus on pointer down and stops the key from reaching
+  the workspace canvas's document-level delete listener, while an empty selection still lets the
+  key bubble so the node itself remains deletable. Select/move, inline text, and free-draw were
+  verified already live from the drawable-whiteboard work (WS-I-1..3). Six new canvas tests cover
+  select-tool moves, empty-canvas clicks, both delete keys with propagation assertions, and pointer
+  focus; the 752-test workspace unit suite, desktop typecheck, and lint on touched files passed.

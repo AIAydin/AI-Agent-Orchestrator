@@ -16,15 +16,19 @@ import {
   type IpcResult,
 } from '../../shared/application/contracts.js';
 import {
+  DockerLocalListInputSchema,
+  DockerLocalListSchema,
   DockerPullResultSchema,
   DockerReadinessInputSchema,
   DockerReadinessSchema,
+  type DockerLocalList,
   type DockerPullResult,
   type DockerReadiness,
   type DockerReadinessInput,
 } from '../../shared/docker/contracts.js';
 import {
   checkDockerReadiness,
+  listLocalDocker,
   resolveDockerExecutable,
   type BeforeDockerCommand,
 } from './docker-runtime.js';
@@ -62,6 +66,7 @@ export interface DockerOperations {
     permit: OutboundExecutionPermit,
     beforeCommand: BeforeDockerCommand,
   ): Promise<unknown>;
+  list(configured: string): Promise<DockerLocalList>;
 }
 
 const DEFAULT_OPERATIONS: DockerOperations = {
@@ -75,6 +80,7 @@ const DEFAULT_OPERATIONS: DockerOperations = {
     ),
   pull: async (input, permit, beforeCommand) =>
     await executeDockerImagePull(permit, input, beforeCommand),
+  list: async (configured) => await listLocalDocker(configured),
 };
 
 interface DockerActionPlan {
@@ -134,6 +140,12 @@ export class DockerIpcService {
       z.tuple([DockerReadinessInputSchema]),
       DockerPullResultSchema,
       async (event, input) => await this.#confirmAndPull(event, input),
+    );
+    this.#handle(
+      IPC_CHANNELS.dockerListLocal,
+      z.tuple([DockerLocalListInputSchema]),
+      DockerLocalListSchema,
+      async (event, input) => await this.#listLocal(event, input.dockerExecutable),
     );
   }
 
@@ -296,6 +308,25 @@ export class DockerIpcService {
     } finally {
       this.#pullInProgress = false;
     }
+  }
+
+  /**
+   * Read-only enumeration for the Settings image picker: it starts no container and reaches no
+   * network, so unlike check/pull it needs no native confirmation. Failures degrade to an empty,
+   * reasoned list instead of an error.
+   */
+  async #listLocal(
+    event: IpcMainInvokeEvent,
+    configuredExecutable: string,
+  ): Promise<DockerLocalList> {
+    this.#assertLiveMainFrame(event);
+    const list = DockerLocalListSchema.parse(await this.operations.list(configuredExecutable));
+    this.store.appendAudit('docker', 'list-local', list.daemonAvailable ? 'allowed' : 'failed', {
+      daemonAvailable: list.daemonAvailable,
+      imageCount: list.images.length,
+      containerCount: list.containers.length,
+    });
+    return list;
   }
 
   async #prepare(input: DockerReadinessInput, probeCount: number): Promise<DockerActionPlan> {

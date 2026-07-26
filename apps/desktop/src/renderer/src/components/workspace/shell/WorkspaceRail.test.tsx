@@ -56,6 +56,7 @@ describe('WorkspaceRail accessibility', () => {
       onInitializeGit: vi.fn(),
       onSelectNode: vi.fn(),
       onAttachAgentContext: vi.fn(),
+      onOpenProjectFile: vi.fn(),
     };
     const { rerender } = render(<WorkspaceRail {...props} tab="project" />);
 
@@ -68,11 +69,9 @@ describe('WorkspaceRail accessibility', () => {
     expect(
       screen.getByRole('textbox', { name: 'Search node templates' }).getAttribute('name'),
     ).toBe('workspace-rail-search');
-    expect(
-      screen.getByRole('img', {
-        name: 'Project has changes not yet recorded in Git',
-      }),
-    ).toBeTruthy();
+    // Branch state lives on agent nodes now — the rail shows no repository summary.
+    expect(screen.queryByText('main')).toBeNull();
+    expect(screen.queryByText(project.path)).toBeNull();
     expect(screen.queryByText('Private file protection on')).toBeNull();
 
     rerender(<WorkspaceRail {...props} tab="nodes" />);
@@ -114,6 +113,7 @@ describe('WorkspaceRail accessibility', () => {
         onInitializeGit={onInitializeGit}
         onSelectNode={vi.fn()}
         onAttachAgentContext={vi.fn()}
+        onOpenProjectFile={vi.fn()}
       />,
     );
 
@@ -144,6 +144,7 @@ describe('WorkspaceRail accessibility', () => {
         onInitializeGit={vi.fn()}
         onSelectNode={vi.fn()}
         onAttachAgentContext={vi.fn()}
+        onOpenProjectFile={vi.fn()}
       />,
     );
 

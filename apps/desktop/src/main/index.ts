@@ -2,11 +2,12 @@ import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol, session, shell } from 'electron';
 
 import { PACKAGED_SMOKE_MARKER } from '../shared/smoke/contracts.js';
 import { PROJECT_VIDEO_SCHEME } from '../shared/files/videos/contracts.js';
 import { attemptContextSnapshotStorageStartup } from './agent-execution/context/snapshot-store/startup.js';
+import { videoPlaybackResponse } from './file-domain/videos/playback-response.js';
 import { CloseCoordinator } from './lifecycle/close-coordinator.js';
 import { createDefaultSettings, registerIpcHandlers } from './ipc.js';
 import type { ApplicationServices } from './ipc.js';
@@ -30,6 +31,14 @@ let closeCoordinator: CloseCoordinator | null = null;
 let quitReady = false;
 let quitAttempt: Promise<boolean> | null = null;
 const approvedWindowCloses = new WeakSet<BrowserWindow>();
+/**
+ * Partitions that passed the will-attach-webview guard. Guest WebContents have
+ * no public API exposing their own partition name, so agent observation
+ * resolves it by session identity: `session.fromPartition(name)` returns the
+ * same Session instance for a given partition string for the life of the app.
+ */
+const attachedPreviewPartitions = new Set<string>();
+
 traceE2eStartup('main-entry');
 protocol.registerSchemesAsPrivileged([
   {
@@ -100,9 +109,11 @@ void app
       try {
         const fileUrl = await services?.files.videoFileUrlForRequest(request.url);
         if (fileUrl === null || fileUrl === undefined) return new Response(null, { status: 404 });
-        return await net.fetch(fileUrl, {
+        // The media element sends Range requests; answer them directly so
+        // MP4s with a trailing index load and seeking works.
+        return await videoPlaybackResponse(fileUrl, {
           method: request.method,
-          headers: request.headers,
+          rangeHeader: request.headers.get('range'),
         });
       } catch {
         return new Response(null, { status: 404 });
@@ -132,7 +143,12 @@ void app
       // compromised or invokes an obsolete preview-origin bridge.
       allowedOriginForGuestSession: () => null,
       authenticationEnabledForGuestSession: () => false,
-      partitionForGuestSession: () => null,
+      partitionForGuestSession: (guestSession) => {
+        for (const partition of attachedPreviewPartitions) {
+          if (session.fromPartition(partition) === guestSession) return partition;
+        }
+        return null;
+      },
       onGuestCreated: (partition, contents) =>
         previewAgentBrowser.registerGuest(partition, contents),
       audit: (action, outcome, metadata) => {
@@ -334,6 +350,8 @@ function createWindow(
       return;
     }
     hardenAttachingWebviewPreferences(webPreferences as unknown as Record<string, unknown>);
+    const partition = (params as unknown as Record<string, unknown>)['partition'];
+    if (typeof partition === 'string') attachedPreviewPartitions.add(partition);
   });
   if (showWhenReady) window.once('ready-to-show', () => window.show());
 

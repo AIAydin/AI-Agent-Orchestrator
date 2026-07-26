@@ -4,7 +4,7 @@ import type { WorkshopNode, WorkshopNodeData } from '../canvas/CanvasNode.js';
 import { matchParameterizedVoiceIntent } from './parameterized-intents.js';
 
 describe('parameterized voice intents', () => {
-  it('binds free-form prompt text to an exact live Agent title and requires confirmation', () => {
+  it('binds free-form prompt text to an exact live Agent title and runs without confirmation', () => {
     const promptAgent = vi.fn();
     const match = matchParameterizedVoiceIntent({
       transcript: 'Forgeboard, please tell Hermes to review the failing tests',
@@ -14,14 +14,14 @@ describe('parameterized voice intents', () => {
     });
 
     expect(match?.action).toMatchObject({
-      voiceSafety: 'confirm',
+      voiceSafety: 'safe',
       section: 'Voice · Agent',
     });
     match?.action.run();
     expect(promptAgent).toHaveBeenCalledWith('agent-1', 'review the failing tests');
   });
 
-  it('connects two exact live node titles and requires confirmation', () => {
+  it('connects two exact live node titles and runs without confirmation', () => {
     const connectNodes = vi.fn();
     const match = matchParameterizedVoiceIntent({
       transcript: 'connect Hermes to Walkthrough',
@@ -32,7 +32,7 @@ describe('parameterized voice intents', () => {
 
     expect(match?.action).toMatchObject({
       label: 'Connect Hermes to Walkthrough',
-      voiceSafety: 'confirm',
+      voiceSafety: 'safe',
     });
     match?.action.run();
     expect(connectNodes).toHaveBeenCalledWith('agent-1', 'video-1');

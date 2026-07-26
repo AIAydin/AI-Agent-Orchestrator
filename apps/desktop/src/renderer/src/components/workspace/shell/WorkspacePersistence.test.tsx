@@ -253,9 +253,6 @@ vi.mock('../../git-review/GitReviewDialog.js', () => ({
 vi.mock('../runs/RunApprovalDialog.js', () => ({
   RunApprovalDialog: () => null,
 }));
-vi.mock('../CheckApprovalDialog.js', () => ({
-  CheckApprovalDialog: () => null,
-}));
 vi.mock('../previews/useWorkspacePreviews.js', () => ({
   useWorkspacePreviews: () => ({ sessions: {}, updateSession: vi.fn() }),
 }));
@@ -271,18 +268,6 @@ vi.mock('../runs/useAgentRunController.js', () => ({
     prepareSelectedRun: vi.fn(),
     cancelPreparedRun: vi.fn(),
     approvePreparedRun: vi.fn(),
-  }),
-}));
-vi.mock('../useProjectChecks.js', () => ({
-  useProjectChecks: () => ({
-    latestByCheckId: new Map(),
-    busyCheckId: null,
-    prepare: vi.fn(),
-    cancel: vi.fn(),
-    plan: null,
-    approving: false,
-    dismissPlan: vi.fn(),
-    confirm: vi.fn(),
   }),
 }));
 vi.mock('../workflows/useWorkflowRuns.js', () => ({
@@ -383,6 +368,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={onClose}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -413,6 +400,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -452,6 +441,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -503,6 +494,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -636,6 +629,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -712,6 +707,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -756,6 +753,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -800,6 +799,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -844,6 +845,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -888,6 +891,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -950,6 +955,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -1018,6 +1025,8 @@ describe('Workspace persistence boundary', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -1055,6 +1064,8 @@ describe('Workspace extension node naming', () => {
         }}
         onClose={vi.fn()}
         onProjectUpdated={vi.fn()}
+        onSwitchProject={vi.fn()}
+        onCreateProject={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,
@@ -1070,7 +1081,7 @@ describe('Workspace extension node naming', () => {
     // Distinct, friendly names — never both carrying the raw template displayName.
     expect(new Set(titles).size).toBe(2);
     expect(titles).not.toContain('GitHub PR');
-    expect(titles).toEqual(['Hermes', 'Atlas']);
+    expect(titles).toEqual(['Atlas', 'Orion']);
   });
 });
 
@@ -1088,6 +1099,8 @@ function renderWorkspace(): void {
       }}
       onClose={vi.fn()}
       onProjectUpdated={vi.fn()}
+      onSwitchProject={vi.fn()}
+      onCreateProject={vi.fn()}
       onOpenSettings={vi.fn()}
       onError={vi.fn()}
     />,

@@ -371,10 +371,13 @@ function legacyDataFromCanonical(node: CanvasNode): Record<string, unknown> {
         extensionAvailability: node.data.availability,
       };
     case 'terminal':
-      return {
+    case 'test':
+      // `compact`: a node with no command must not carry an explicit `undefined` into the
+      // surface data, which is stored as JSON.
+      return compact({
         ...node.data,
         command: legacyCommandFromCanonical(node.data.command),
-      };
+      });
     case 'web-preview':
     case 'mobile-preview':
       return compact({

@@ -18,7 +18,9 @@ const openSettings = vi.fn();
 const reportError = vi.fn();
 
 const previewsGet = vi.fn(() => Promise.resolve({ ok: true, value: null }));
-const previewsStart = vi.fn(() => Promise.resolve({ ok: true, value: null }));
+const previewsStart = vi.fn<(input: unknown) => Promise<unknown>>(() =>
+  Promise.resolve({ ok: true, value: null }),
+);
 const previewsStop = vi.fn(() => Promise.resolve({ ok: true, value: null }));
 const previewsOnEvent = vi.fn<(listener: (event: unknown) => void) => () => void>(
   () => () => undefined,
@@ -73,6 +75,7 @@ beforeEach(() => {
   previewsStop.mockClear();
   previewsOnEvent.mockClear();
   previewsSetAllowedOrigin.mockClear();
+  previewsStart.mockImplementation(() => Promise.resolve({ ok: true, value: null }));
   previewsSetAllowedOrigin.mockImplementation(() => Promise.resolve({ ok: true, value: null }));
   for (const mock of [
     chromeStatus,
@@ -186,6 +189,8 @@ describe('PreviewNodeFace', () => {
     expect(updateNodeData).toHaveBeenCalledWith('n1', {
       previewPort: 5173,
       url: undefined,
+      agentBrowserAccess: false,
+      agentBrowserInteraction: false,
     });
   });
 
@@ -197,6 +202,8 @@ describe('PreviewNodeFace', () => {
     expect(updateNodeData).toHaveBeenCalledWith('n1', {
       previewPort: undefined,
       url: undefined,
+      agentBrowserAccess: false,
+      agentBrowserInteraction: false,
     });
   });
 
@@ -239,6 +246,138 @@ describe('PreviewNodeFace', () => {
         packageScript: 'dev',
       }),
     );
+  });
+
+  describe('start command', () => {
+    it('stays off the face and opens with the node config affordance', () => {
+      renderFace('web-preview', { previewPackageScript: '' });
+      expect(screen.queryByLabelText('Start command')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+      expect(screen.getByLabelText('Start command')).toBeTruthy();
+    });
+
+    it('persists the typed command to node data as an explicit argument list', () => {
+      renderFace('web-preview', { previewPackageScript: '' });
+      fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+      const command = screen.getByLabelText('Start command');
+      fireEvent.focus(command);
+      fireEvent.change(command, { target: { value: 'pnpm run dev --host' } });
+      expect(recordHistory).toHaveBeenCalled();
+      expect(updateNodeData).toHaveBeenCalledWith('n1', {
+        previewPackageScript: '',
+        previewCommand: { executable: 'pnpm', arguments: ['run', 'dev', '--host'] },
+      });
+    });
+
+    it('clears the stored command when the line is emptied', () => {
+      renderFace('web-preview', {
+        previewPackageScript: '',
+        previewCommand: { executable: 'pnpm', arguments: ['run', 'dev'] },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+      const command = screen.getByLabelText<HTMLInputElement>('Start command');
+      expect(command.value).toBe('pnpm run dev');
+      fireEvent.change(command, { target: { value: '' } });
+      expect(updateNodeData).toHaveBeenCalledWith('n1', {
+        previewPackageScript: '',
+        previewCommand: undefined,
+      });
+    });
+
+    it('persists the folder the command runs in', () => {
+      renderFace('web-preview', { previewPackageScript: '' });
+      fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+      fireEvent.change(screen.getByLabelText('Start folder'), {
+        target: { value: 'apps/web' },
+      });
+      expect(updateNodeData).toHaveBeenCalledWith('n1', {
+        previewCwdRelative: 'apps/web',
+      });
+    });
+
+    it('swaps between a detected script and a typed command', () => {
+      renderFace('web-preview');
+      fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+      const source = screen.getByLabelText<HTMLSelectElement>('Start with');
+      expect(source.value).toBe('dev');
+      expect(screen.queryByLabelText('Start command')).toBeNull();
+      fireEvent.change(source, { target: { value: '' } });
+      expect(updateNodeData).toHaveBeenCalledWith('n1', { previewPackageScript: '' });
+
+      cleanup();
+      renderFace('web-preview', { previewPackageScript: '' });
+      fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+      fireEvent.change(screen.getByLabelText('Start with'), { target: { value: 'dev' } });
+      expect(updateNodeData).toHaveBeenCalledWith('n1', {
+        previewPackageScript: 'dev',
+        previewCommand: undefined,
+      });
+    });
+
+    it('sends the node command through the confirmed launch path', () => {
+      renderFace('web-preview', {
+        previewPackageScript: '',
+        previewCommand: { executable: '/usr/bin/node', arguments: ['server.mjs'] },
+        previewCwdRelative: 'apps/web',
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Start dev server' }));
+      expect(previewsStart).toHaveBeenCalledTimes(1);
+      expect(previewsStart).toHaveBeenCalledWith({
+        projectId: 'p1',
+        nodeId: 'n1',
+        target: { kind: 'primary' },
+        command: { executable: '/usr/bin/node', args: ['server.mjs'] },
+        cwdRelative: 'apps/web',
+        readinessPath: '/',
+        urlPath: '/',
+      });
+    });
+
+    it('reports a port collision and leaves the node ready to try again', async () => {
+      previewsStart.mockImplementation(() =>
+        Promise.resolve({
+          ok: false,
+          error: {
+            code: 'OPERATION_FAILED',
+            message: 'Unable to reserve 1 loopback port(s) in 44000-44050.',
+          },
+        }),
+      );
+      renderFace('web-preview', {
+        previewPackageScript: '',
+        previewCommand: { executable: '/usr/bin/node', arguments: ['server.mjs'] },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Start dev server' }));
+
+      await waitFor(() =>
+        expect(reportError).toHaveBeenCalledWith(
+          'Unable to reserve 1 loopback port(s) in 44000-44050.',
+        ),
+      );
+      expect(previewsStart).toHaveBeenCalledTimes(1);
+      expect(updateNodeData).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Start dev server' })).toHaveProperty(
+        'disabled',
+        false,
+      );
+    });
+
+    it('offers no start command for a node pointed at a website', () => {
+      renderFace('web-preview', { url: 'https://app.staging.com/' });
+      fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+      expect(screen.queryByLabelText('Start with')).toBeNull();
+      expect(screen.queryByLabelText('Start command')).toBeNull();
+    });
+
+    it('flags a script that is no longer in the project', () => {
+      renderFace('web-preview', { previewPackageScript: 'serve' });
+      fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+      expect(screen.getByText(/that script is gone/i)).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Start dev server' })).toHaveProperty(
+        'disabled',
+        true,
+      );
+    });
   });
 
   it('selects a device preset from the config popover', () => {
@@ -300,6 +439,52 @@ describe('PreviewNodeFace', () => {
     ).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Allow agents to request browser actions'));
     expect(updateNodeData).toHaveBeenCalledWith('n1', {
+      agentBrowserInteraction: false,
+    });
+  });
+
+  it('offers agent observation for localhost previews, actions gated on it', () => {
+    renderFace('web-preview', { previewPort: 5173 });
+    fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+
+    const observe = screen.getByLabelText<HTMLInputElement>(
+      'Let connected agents observe this page',
+    );
+    expect(observe.disabled).toBe(false);
+    expect(
+      screen.getByLabelText<HTMLInputElement>('Allow agents to request browser actions').disabled,
+    ).toBe(true);
+    fireEvent.click(observe);
+    expect(updateNodeData).toHaveBeenCalledWith('n1', {
+      agentBrowserAccess: true,
+    });
+  });
+
+  it('explains what a local page shares and that actions include navigation', () => {
+    renderFace('web-preview', {
+      previewPort: 5173,
+      agentBrowserAccess: true,
+      agentBrowserInteraction: true,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+
+    expect(screen.getByText(/text, DOM outline, console, screenshots/i)).toBeTruthy();
+    expect(screen.getByText(/scrolling and same-app navigation are allowed/i)).toBeTruthy();
+  });
+
+  it('resets agent consent when the preview address changes', () => {
+    renderFace('web-preview', {
+      previewPort: 5173,
+      agentBrowserAccess: true,
+      agentBrowserInteraction: true,
+    });
+    const input = screen.getByLabelText('Preview address');
+    fireEvent.change(input, { target: { value: '4321' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(updateNodeData).toHaveBeenCalledWith('n1', {
+      previewPort: 4321,
+      url: undefined,
+      agentBrowserAccess: false,
       agentBrowserInteraction: false,
     });
   });
@@ -492,6 +677,8 @@ describe('PreviewNodeFace', () => {
       expect(updateNodeData).toHaveBeenCalledWith('n1', {
         previewPort: undefined,
         url: undefined,
+        agentBrowserAccess: false,
+        agentBrowserInteraction: false,
       });
     });
 

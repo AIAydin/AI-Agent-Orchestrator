@@ -102,6 +102,31 @@ describe('WhiteboardCanvas drawing', () => {
 describe('WhiteboardCanvas selection', () => {
   const rectangle = createWhiteboardElement('rectangle', { x: 0, y: 0, width: 100, height: 100 });
 
+  it('moves the shape under the pointer by the drag delta', () => {
+    persist.mockClear();
+    render(<Harness tool="select" initial={[rectangle]} />);
+    const surface = prepareSurface();
+
+    fireEvent.pointerDown(surface, { clientX: 50, clientY: 50, pointerId: 1 });
+    fireEvent.pointerMove(surface, { clientX: 120, clientY: 90, pointerId: 1 });
+    fireEvent.pointerUp(surface, { clientX: 120, clientY: 90, pointerId: 1 });
+
+    const document = persist.mock.calls.at(-1)?.[0] as WhiteboardDocument;
+    expect(document.elements[0]).toMatchObject({ x: 70, y: 40, width: 100, height: 100 });
+  });
+
+  it('selects nothing when the pointer lands on empty canvas', () => {
+    persist.mockClear();
+    render(<Harness tool="select" initial={[rectangle]} />);
+    const surface = prepareSurface();
+
+    fireEvent.pointerDown(surface, { clientX: 500, clientY: 400, pointerId: 1 });
+    fireEvent.pointerUp(surface, { clientX: 500, clientY: 400, pointerId: 1 });
+
+    expect(surface.querySelectorAll('[data-handle]')).toHaveLength(0);
+    expect(persist).not.toHaveBeenCalled();
+  });
+
   it('renders four resize handles for the selected element', () => {
     render(<Harness tool="select" initial={[rectangle]} />);
     const surface = prepareSurface();
@@ -143,6 +168,67 @@ describe('WhiteboardCanvas selection', () => {
 
     expect(surface.querySelectorAll('[data-handle]')).toHaveLength(0);
     expect(persist).not.toHaveBeenCalled();
+  });
+});
+
+describe('WhiteboardCanvas keyboard deletion', () => {
+  const rectangle = createWhiteboardElement('rectangle', { x: 0, y: 0, width: 100, height: 100 });
+
+  /** Stands in for React Flow's document-level delete listener. */
+  function documentKeydownSpy(): { spy: ReturnType<typeof vi.fn>; dispose: () => void } {
+    const spy = vi.fn();
+    document.addEventListener('keydown', spy);
+    return {
+      spy,
+      dispose: () => {
+        document.removeEventListener('keydown', spy);
+      },
+    };
+  }
+
+  function selectShape(surface: SVGSVGElement): void {
+    fireEvent.pointerDown(surface, { clientX: 50, clientY: 50, pointerId: 1 });
+    fireEvent.pointerUp(surface, { clientX: 50, clientY: 50, pointerId: 1 });
+  }
+
+  it.each(['Delete', 'Backspace'])(
+    '%s removes only the selected shape and never reaches the workspace canvas',
+    (key) => {
+      persist.mockClear();
+      render(<Harness tool="select" initial={[rectangle]} />);
+      const surface = prepareSurface();
+      selectShape(surface);
+      const { spy, dispose } = documentKeydownSpy();
+
+      fireEvent.keyDown(surface, { key });
+      dispose();
+
+      const document = persist.mock.calls.at(-1)?.[0] as WhiteboardDocument;
+      expect(document.elements[0]).toMatchObject({ isDeleted: true });
+      expect(spy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('lets Delete bubble to the workspace canvas when no shape is selected', () => {
+    persist.mockClear();
+    render(<Harness tool="select" initial={[rectangle]} />);
+    const surface = prepareSurface();
+    const { spy, dispose } = documentKeydownSpy();
+
+    fireEvent.keyDown(surface, { key: 'Delete' });
+    dispose();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  it('focuses the surface on pointer down so the keyboard target is the board', () => {
+    render(<Harness tool="select" initial={[rectangle]} />);
+    const surface = prepareSurface();
+
+    fireEvent.pointerDown(surface, { clientX: 50, clientY: 50, pointerId: 1 });
+
+    expect(document.activeElement).toBe(surface);
   });
 });
 

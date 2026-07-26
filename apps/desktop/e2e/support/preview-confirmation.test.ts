@@ -194,7 +194,7 @@ function previewBinding(
     action,
     projectRoot: '/tmp/forgeboard-demo',
     cwd: '/tmp/forgeboard-demo',
-    source: 'Development command configured in Settings',
+    source: 'Literal preview command configured on this canvas node in the UI',
     executable: '/usr/bin/node',
     executableSha256: 'a'.repeat(64),
     arguments: ['/tmp/preview-server.mjs'],
