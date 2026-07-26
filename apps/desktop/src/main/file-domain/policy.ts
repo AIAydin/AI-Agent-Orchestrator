@@ -30,9 +30,11 @@ export function evaluateFilePolicy(
 }
 
 /**
- * Sensitivity is the only content boundary: credential-like paths never reach the
- * renderer. Being git-ignored is a scope signal rather than a secret, so an ignored
- * file opens and renders its real content like any other file.
+ * Sensitivity gates what leaves the local user's hands, not what they can see:
+ * the tree, read, save, and reveal paths all serve sensitive entries to the
+ * local user, who owns the files anyway. This assertion remains on the
+ * agent-facing surfaces — attachment manifests, conflict shipping, and media
+ * import — where credential-like content must never travel automatically.
  *
  * Project-wide *search* still skips ignored files (see searchProjectFiles) because
  * walking node_modules, .venv, and build output would cost far more than it returns —
@@ -45,16 +47,5 @@ export function assertFileContentNotSensitive(relativePath: string): void {
       'SENSITIVE_FILE',
       'Sensitive files are not exposed to the embedded renderer.',
     );
-  }
-}
-
-/**
- * Tree listings show ignored entries (the UI marks them), so only sensitive
- * paths are refused here.
- */
-export function assertDirectoryListable(relativePath: string): void {
-  const sensitive = findSensitivePath(relativePath);
-  if (sensitive !== undefined) {
-    throw new FileDomainError('SENSITIVE_FILE', sensitive.reason);
   }
 }

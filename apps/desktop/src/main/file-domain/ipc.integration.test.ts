@@ -99,7 +99,7 @@ describe('FileIpcService', () => {
     ).toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
   });
 
-  it('preserves sensitive-file, symlink-escape, and stale-save denials', async () => {
+  it('serves sensitive files to the local user while preserving symlink-escape and stale-save denials', async () => {
     const target = path.join(projectRoot, 'note.txt');
     await writeFile(target, 'before\n');
     await writeFile(path.join(projectRoot, '.env'), 'TOKEN=local-only\n');
@@ -111,7 +111,10 @@ describe('FileIpcService', () => {
         projectId: PROJECT_ID,
         relativePath: '.env',
       }),
-    ).toMatchObject({ ok: false, error: { code: 'SENSITIVE_FILE' } });
+    ).toMatchObject({
+      ok: true,
+      value: { contentKind: 'text', content: 'TOKEN=local-only\n', sensitive: true },
+    });
     expect(
       await invoke(FILE_IPC_CHANNELS.read, liveEvent(), {
         projectId: PROJECT_ID,

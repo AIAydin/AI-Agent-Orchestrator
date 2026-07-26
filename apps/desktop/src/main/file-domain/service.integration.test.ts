@@ -62,11 +62,11 @@ describe('ProjectFileService', () => {
     expect(tree.truncated).toBe(false);
     expect(tree.entries.find((entry) => entry.name === '.env')).toMatchObject({
       policy: { status: 'sensitive' },
-      canOpen: false,
+      canOpen: true,
     });
     expect(tree.entries.find((entry) => entry.name === 'ignored.txt')).toMatchObject({
       policy: { status: 'ignored' },
-      canOpen: false,
+      canOpen: true,
     });
     expect(tree.entries.find((entry) => entry.name === 'outside-link')).toMatchObject({
       kind: 'symlink',
@@ -76,7 +76,7 @@ describe('ProjectFileService', () => {
     const ignoredListing = await service.tree({ projectId: PROJECT_ID, directory: 'ignored-dir' });
     expect(ignoredListing.entries.find((entry) => entry.name === 'nested.txt')).toMatchObject({
       policy: { status: 'ignored' },
-      canOpen: false,
+      canOpen: true,
     });
     const bounded = await new ProjectFileService(store, {
       maxDirectoryEntries: 2,
@@ -197,7 +197,7 @@ describe('ProjectFileService', () => {
     );
   });
 
-  it('blocks absolute paths, traversal, sensitive content, and symlink escapes', async () => {
+  it('blocks absolute paths, traversal, and symlink escapes while serving local files', async () => {
     await writeFile(path.join(projectRoot, '.gitignore'), 'ignored.txt\n');
     await writeFile(path.join(projectRoot, 'ignored.txt'), 'ignored\n');
     await writeFile(path.join(projectRoot, '.env'), 'TOKEN=secret\n');
@@ -215,14 +215,16 @@ describe('ProjectFileService', () => {
       service.read({ projectId: PROJECT_ID, relativePath: '../outside/secret.txt' }),
       'INVALID_REQUEST',
     );
-    // Ignored is not a refusal: the file opens with its real content.
+    // Neither ignored nor sensitive is a refusal for the local user: both open
+    // with real content, and sensitive documents carry the flag agents key on.
     expect(
       await service.read({ projectId: PROJECT_ID, relativePath: 'ignored.txt' }),
     ).toMatchObject({ contentKind: 'text', content: 'ignored\n' });
-    await expectCode(
-      service.read({ projectId: PROJECT_ID, relativePath: '.env' }),
-      'SENSITIVE_FILE',
-    );
+    expect(await service.read({ projectId: PROJECT_ID, relativePath: '.env' })).toMatchObject({
+      contentKind: 'text',
+      content: 'TOKEN=secret\n',
+      sensitive: true,
+    });
     await expectCode(
       service.read({ projectId: PROJECT_ID, relativePath: 'outside-link' }),
       'PATH_OUTSIDE_PROJECT',
@@ -249,6 +251,7 @@ describe('ProjectFileService', () => {
       }),
       'PATH_OUTSIDE_PROJECT',
     );
+    // Sensitive saves pass the sensitivity gate but still honor the content hash.
     await expectCode(
       service.save({
         projectId: PROJECT_ID,
@@ -256,8 +259,9 @@ describe('ProjectFileService', () => {
         expectedSha256: 'a'.repeat(64),
         content: 'must not write\n',
       }),
-      'SENSITIVE_FILE',
+      'STALE_CONTENT',
     );
+    expect(await readFile(path.join(projectRoot, '.env'), 'utf8')).toBe('TOKEN=secret\n');
     expect(await readFile(path.join(outsideRoot, 'secret.txt'), 'utf8')).toBe('outside\n');
 
     const rejected = await service
@@ -347,14 +351,19 @@ describe('ProjectFileService', () => {
       absolutePath: path.join(projectRoot, 'ignored.txt'),
       kind: 'file',
     });
-    await expectCode(
-      service.read({ projectId: PROJECT_ID, relativePath: '.env' }),
-      'SENSITIVE_FILE',
-    );
-    await expectCode(
-      service.prepareOpenExternal({ projectId: PROJECT_ID, relativePath: '.env' }),
-      'SENSITIVE_FILE',
-    );
+    expect(await service.read({ projectId: PROJECT_ID, relativePath: '.env' })).toMatchObject({
+      contentKind: 'text',
+      content: 'TOKEN=local-only\n',
+      sensitive: true,
+    });
+    expect(
+      await service.prepareOpenExternal({ projectId: PROJECT_ID, relativePath: '.env' }),
+    ).toEqual({
+      projectId: PROJECT_ID,
+      relativePath: '.env',
+      absolutePath: path.join(projectRoot, '.env'),
+      kind: 'file',
+    });
     expect(
       await service.prepareOpenExternal({ projectId: PROJECT_ID, relativePath: 'ignored.txt' }),
     ).toEqual({
@@ -405,31 +414,40 @@ describe('ProjectFileService', () => {
     ).toMatchObject({ content: '{ "theme": "light" }\n' });
   });
 
-  it('refuses sensitive content even when .gitignore also lists it', async () => {
+  it('opens, edits, and flags sensitive content for the local user', async () => {
     await writeFile(path.join(projectRoot, '.gitignore'), '.env\nsecrets/\n');
     await writeFile(path.join(projectRoot, '.env'), 'TOKEN=secret\n');
     await mkdir(path.join(projectRoot, 'secrets'));
     await writeFile(path.join(projectRoot, 'secrets', 'id_rsa'), 'PRIVATE KEY\n');
     const service = new ProjectFileService(store);
 
-    await expectCode(
-      service.read({ projectId: PROJECT_ID, relativePath: '.env' }),
-      'SENSITIVE_FILE',
-    );
-    await expectCode(
-      service.read({ projectId: PROJECT_ID, relativePath: 'secrets/id_rsa' }),
-      'SENSITIVE_FILE',
-    );
-    await expectCode(
+    const opened = await service.read({ projectId: PROJECT_ID, relativePath: '.env' });
+    expect(opened).toMatchObject({
+      contentKind: 'text',
+      content: 'TOKEN=secret\n',
+      readOnly: false,
+      sensitive: true,
+    });
+    expect(
+      await service.read({ projectId: PROJECT_ID, relativePath: 'secrets/id_rsa' }),
+    ).toMatchObject({ contentKind: 'text', content: 'PRIVATE KEY\n', sensitive: true });
+
+    const listing = await service.tree({ projectId: PROJECT_ID, directory: 'secrets' });
+    expect(listing.entries.find((entry) => entry.name === 'id_rsa')).toMatchObject({
+      policy: { status: 'sensitive' },
+      canOpen: true,
+    });
+
+    if (opened.sha256 === null) throw new Error('Expected a text hash for a sensitive file.');
+    await expect(
       service.save({
         projectId: PROJECT_ID,
         relativePath: '.env',
-        expectedSha256: 'a'.repeat(64),
-        content: 'must not write\n',
+        expectedSha256: opened.sha256,
+        content: 'TOKEN=rotated\n',
       }),
-      'SENSITIVE_FILE',
-    );
-    expect(await readFile(path.join(projectRoot, '.env'), 'utf8')).toBe('TOKEN=secret\n');
+    ).resolves.toMatchObject({ content: 'TOKEN=rotated\n', sensitive: true });
+    expect(await readFile(path.join(projectRoot, '.env'), 'utf8')).toBe('TOKEN=rotated\n');
   });
 
   it('fails closed for missing projects and non-canonical project roots', async () => {

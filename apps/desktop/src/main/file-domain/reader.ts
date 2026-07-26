@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 
+import { isSensitivePath } from '@forgeboard/core';
+
 import type { FileDocument } from '../../shared/files/contracts.js';
 import { FileDomainError } from './errors.js';
 import { NO_FOLLOW_FLAG } from './io/flags.js';
@@ -37,6 +39,7 @@ export async function readProjectDocument(
   relativePath: string,
   options: ProjectFileReadOptions,
 ): Promise<FileDocument> {
+  const sensitive = isSensitivePath(relativePath);
   const resolved = await resolveExactProjectPath(root, relativePath);
   const handle = await open(resolved.path, constants.O_RDONLY | NO_FOLLOW_FLAG);
   try {
@@ -49,6 +52,7 @@ export async function readProjectDocument(
       return {
         projectId,
         relativePath,
+        sensitive,
         contentKind: 'too-large',
         content: null,
         encoding: null,
@@ -68,6 +72,7 @@ export async function readProjectDocument(
       return {
         projectId,
         relativePath,
+        sensitive,
         contentKind: 'too-large',
         content: null,
         encoding: null,
@@ -89,6 +94,7 @@ export async function readProjectDocument(
       return {
         projectId,
         relativePath,
+        sensitive,
         contentKind: 'binary',
         content: null,
         encoding: null,
@@ -102,6 +108,7 @@ export async function readProjectDocument(
     return {
       projectId,
       relativePath,
+      sensitive,
       contentKind: 'text',
       content: text,
       encoding: 'utf-8',

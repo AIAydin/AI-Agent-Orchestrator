@@ -79,12 +79,35 @@ describe('WorkspaceProjectTree', () => {
     expect(transfer.getData(WORKSPACE_CONTEXT_DRAG_MIME)).not.toContain('/tmp/project');
     expect(transfer.getData(WORKSPACE_CONTEXT_DRAG_MIME)).not.toContain('file bytes');
 
-    const protectedEntry = screen.getByRole('treeitem', {
-      name: 'Protected file .env (Sensitive)',
+    const sensitiveEntry = screen.getByRole('treeitem', {
+      name: 'Sensitive file .env',
     });
-    expect(protectedEntry.getAttribute('draggable')).toBe('false');
-    expect(protectedEntry.getAttribute('aria-describedby')).toBe(
-      screen.getByRole('tooltip', { name: 'Credential-like file.' }).id,
+    expect(sensitiveEntry.getAttribute('draggable')).toBe('false');
+    expect(sensitiveEntry.getAttribute('aria-disabled')).toBe('false');
+    expect(sensitiveEntry.getAttribute('aria-describedby')).toBe(
+      screen.getByRole('tooltip', {
+        name: 'May hold credentials — opens on the canvas, never shared with agents.',
+      }).id,
+    );
+  });
+
+  it('opens a sensitive file on click without making it draggable', async () => {
+    const onOpenFile = vi.fn();
+    render(
+      <WorkspaceProjectTree
+        projectId={PROJECT_ID}
+        operations={{ tree: projectTreeOperation(), search: vi.fn(), read: vi.fn() }}
+        onOpenFile={onOpenFile}
+      />,
+    );
+
+    const sensitiveEntry = await screen.findByRole('treeitem', { name: 'Sensitive file .env' });
+    fireEvent.click(sensitiveEntry);
+    expect(onOpenFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relativePath: '.env',
+        policy: { status: 'sensitive', reason: 'Credential-like file.' },
+      }),
     );
   });
 
@@ -104,7 +127,7 @@ describe('WorkspaceProjectTree', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Search project files' }), {
       target: { value: 'env' },
     });
-    expect(screen.getByRole('treeitem', { name: 'Protected file .env (Sensitive)' })).toBeTruthy();
+    expect(screen.getByRole('treeitem', { name: 'Sensitive file .env' })).toBeTruthy();
     expect(screen.queryByRole('treeitem', { name: 'File src/index.ts' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh project files' }));
     await waitFor(() => expect(tree).toHaveBeenCalledTimes(4));
@@ -222,7 +245,7 @@ function treeResult(directory: string): FileTreeResult {
               sizeBytes: null,
               modifiedAt: '2026-07-15T12:00:00.000Z',
               policy: { status: 'ignored', reason: 'Ignored by .gitignore.' },
-              canOpen: false,
+              canOpen: true,
             },
             {
               name: 'debug.log',
@@ -231,7 +254,7 @@ function treeResult(directory: string): FileTreeResult {
               sizeBytes: 40,
               modifiedAt: '2026-07-15T12:00:00.000Z',
               policy: { status: 'ignored', reason: 'Ignored by .gitignore.' },
-              canOpen: false,
+              canOpen: true,
             },
             {
               name: '.env',
@@ -240,7 +263,7 @@ function treeResult(directory: string): FileTreeResult {
               sizeBytes: 20,
               modifiedAt: '2026-07-15T12:00:00.000Z',
               policy: { status: 'sensitive', reason: 'Credential-like file.' },
-              canOpen: false,
+              canOpen: true,
             },
           ]
         : directory === 'dist'
@@ -252,7 +275,7 @@ function treeResult(directory: string): FileTreeResult {
                 sizeBytes: 900,
                 modifiedAt: '2026-07-15T12:00:00.000Z',
                 policy: { status: 'ignored', reason: 'Ignored by .gitignore.' },
-                canOpen: false,
+                canOpen: true,
               },
             ]
           : [

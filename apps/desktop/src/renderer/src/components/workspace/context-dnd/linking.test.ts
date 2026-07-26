@@ -175,6 +175,19 @@ describe('Agent project-file context linking', () => {
     ).toBe(false);
   });
 
+  it('refuses to link a sensitive file even though it opens locally', () => {
+    const result = linkProjectFileToAgent({
+      projectId: PROJECT_ID,
+      targetNodeId: 'agent-1',
+      payload: payload({ relativePath: '.env.local' }),
+      document: document({ relativePath: '.env.local', sensitive: true }),
+      nodes: [agentNode()],
+      newNodeId: 'file-created',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.ok ? '' : result.message).toContain("can't be shared with agents");
+  });
+
   it('enforces the executor attachment cap and supports explicit removal', () => {
     const full = agentNode({
       contextAttachmentIds: Array.from(
