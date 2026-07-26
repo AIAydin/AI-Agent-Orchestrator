@@ -1998,3 +1998,8 @@ unchecked when only a subset of their required behavior has proof.
   startup by deferring optional Agent-context storage failures while the protected context path
   remains fail-closed when an Agent actually requests it. The 19 focused unit tests and six
   integration tests passed.
+- 2026-07-24: editing an external Preview node address now navigates its already-connected managed
+  Chrome tab through the existing validated browser-companion open path instead of leaving the tab
+  on its previous page. The focused Preview node suite passed all 30 tests, followed by affected
+  formatting and zero-warning lint checks, the desktop strict typecheck, whitespace validation, and
+  the repository structure gate.
