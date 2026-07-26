@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { expect, test, type ElectronApplication } from '@playwright/test';
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
 import { launchDesktop, watchExternalRequests } from '../support/electron.js';
 import {
@@ -64,10 +64,8 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
         marker: LIVE_MARKER,
       });
 
-      await expect(panel.locator('.test-node-state')).toHaveText('Running');
-      await expect(
-        panel.locator('.test-node-result').first().getByLabel('Test output'),
-      ).toContainText(LIVE_MARKER);
+      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Running');
+      await expect(panel.getByLabel('Test output').first()).toContainText(LIVE_MARKER);
       await expectParsedSummary(panel, {
         passed: 1,
         failed: 0,
@@ -78,7 +76,7 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
       await queueWorkflowNativeResponse(electronApp!, 1);
       await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
       expectExactNodeCancelConfirmation(await waitForWorkflowNativeDialog(electronApp!, 1));
-      await expect(panel.locator('.test-node-state')).toHaveText('Cancelled');
+      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Cancelled');
       await expect.poll(async () => await panel.textContent()).toContain(LIVE_MARKER);
       await expectParsedSummary(panel, {
         passed: 1,
@@ -90,7 +88,7 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
 
     await test.step('reconfigure, rerun, parse the passing summary, and expose a verified artifact', async () => {
       await configureTestNode(panel, PASSING_SCRIPT);
-      await panel.getByRole('button', { name: 'Run again' }).click();
+      await panel.getByRole('button', { name: 'Review and run' }).click();
       const launch = await openLaunchDecision(page);
       await expect(launch).toContainText(PASS_MARKER);
       await queueWorkflowNativeResponse(electronApp!, 1);
@@ -100,20 +98,31 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
         marker: PASS_MARKER,
       });
 
-      await expect(panel.locator('.test-node-state')).toHaveText('Passed');
-      await expect(
-        panel.locator('.test-node-result').first().getByLabel('Test output'),
-      ).toContainText(PASS_MARKER);
+      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Passed');
+      await expect(panel.getByLabel('Test output').first()).toContainText(PASS_MARKER);
       await expectParsedSummary(panel, {
         passed: 4,
         failed: 0,
         skipped: 1,
         total: 5,
       });
-      const artifacts = panel.getByRole('region', {
-        name: 'Verified test artifacts',
-      });
-      await expect(artifacts).toContainText(ARTIFACT_PATH);
+      const workflows = page
+        .locator('.activity-drawer')
+        .getByRole('tabpanel', { name: 'Workflows' });
+      const nodeId = await panel.evaluate(
+        (element) => element.closest('.react-flow__node')?.getAttribute('data-id') ?? '',
+      );
+      expect(nodeId).not.toBe('');
+      await expect
+        .poll(async () => await persistedWorkflowArtifactPaths(page, nodeId), {
+          timeout: 30_000,
+        })
+        .toContain(ARTIFACT_PATH);
+      const refresh = workflows.getByRole('button', { name: 'Refresh' });
+      await refresh.click();
+      await expect(refresh).toBeEnabled();
+      const artifacts = panel.getByLabel('Verified test artifacts');
+      await expect(artifacts).toContainText(ARTIFACT_PATH, { timeout: 30_000 });
       await expect(
         artifacts.getByRole('button', { name: 'Reveal test-node-result.json' }),
       ).toBeVisible();
@@ -137,19 +146,19 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
     const restoredPanel = await selectRestoredTestNode(page);
 
     await test.step('restart restores the prior output, summary, artifact, and cancelled attempt', async () => {
-      await expect(restoredPanel.locator('.test-node-state')).toHaveText('Passed');
-      await expect(
-        restoredPanel.locator('.test-node-result').first().getByLabel('Test output'),
-      ).toContainText(PASS_MARKER);
+      await expect(restoredPanel.locator('.node-face-strip .node-face-status')).toHaveText(
+        'Passed',
+      );
+      await expect(restoredPanel.getByLabel('Test output').first()).toContainText(PASS_MARKER);
       await expectParsedSummary(restoredPanel, {
         passed: 4,
         failed: 0,
         skipped: 1,
         total: 5,
       });
-      await expect(
-        restoredPanel.getByRole('region', { name: 'Verified test artifacts' }),
-      ).toContainText(ARTIFACT_PATH);
+      await expect(restoredPanel.getByLabel('Verified test artifacts')).toContainText(
+        ARTIFACT_PATH,
+      );
       await expect(
         restoredPanel.getByRole('region', { name: 'Previous test attempts' }),
       ).toContainText('Cancelled');
@@ -161,3 +170,63 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });
+
+async function persistedWorkflowArtifactPaths(page: Page, nodeId: string): Promise<string[]> {
+  return await page.evaluate(async (selectedNodeId) => {
+    interface BrowserResult<T> {
+      readonly ok: boolean;
+      readonly value?: T;
+    }
+    interface BrowserProject {
+      readonly id: string;
+    }
+    interface BrowserCanvas {
+      readonly id: string;
+    }
+    interface BrowserWorkflow {
+      readonly testResults: readonly {
+        readonly artifacts: readonly {
+          readonly nodeId: string;
+          readonly relativePath: string;
+        }[];
+      }[];
+    }
+    const api = (
+      globalThis as unknown as {
+        forgeboard: {
+          projects: {
+            recent: () => Promise<BrowserResult<readonly BrowserProject[]>>;
+          };
+          canvas: {
+            load: (projectId: string) => Promise<BrowserResult<BrowserCanvas>>;
+          };
+          workflows: {
+            list: (input: {
+              projectId: string;
+              canvasId: string;
+              limit: number;
+            }) => Promise<BrowserResult<readonly BrowserWorkflow[]>>;
+          };
+        };
+      }
+    ).forgeboard;
+    const projects = await api.projects.recent();
+    const project = projects.value?.[0];
+    if (!projects.ok || project === undefined) return [];
+    const canvas = await api.canvas.load(project.id);
+    if (!canvas.ok || canvas.value === undefined) return [];
+    const workflows = await api.workflows.list({
+      projectId: project.id,
+      canvasId: canvas.value.id,
+      limit: 50,
+    });
+    if (!workflows.ok || workflows.value === undefined) return [];
+    return workflows.value.flatMap((workflow) =>
+      workflow.testResults.flatMap((result) =>
+        result.artifacts
+          .filter((artifact) => artifact.nodeId === selectedNodeId)
+          .map((artifact) => artifact.relativePath),
+      ),
+    );
+  }, nodeId);
+}

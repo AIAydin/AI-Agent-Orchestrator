@@ -22,6 +22,7 @@ import { PanelBottomOpen } from 'lucide-react';
 
 import type { CanvasDocument, RunAdapterId } from '../../../../../shared/application/contracts.js';
 import { emptyCanvasHistory } from '../../../../../shared/canvas/history/contracts.js';
+import { DEFAULT_CANVAS_NODE_DIMENSIONS } from '../../../../../shared/canvas/node-dimensions.js';
 import type { CollaborationMetadataSnapshot } from '../../../../../shared/collaboration/index.js';
 import { FileDocumentSchema } from '../../../../../shared/files/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
@@ -1299,6 +1300,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     graphReadOnly: collaborationCanvas.graphReadOnly,
     openSettings: onOpenSettings,
     reportError: onError,
+    flushCanvas,
     updateNodeData,
     fitGroupFrame,
     arrangeGroupFrame,
@@ -1398,10 +1400,18 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
               })),
             );
             setEdges((items) => items.map((edge) => ({ ...edge, selected: false })));
-            void instance?.setCenter(node.position.x, node.position.y, {
-              zoom: 1.15,
-              duration: settings.reducedMotion ? 0 : 220,
-            });
+            const nodeWidth =
+              node.measured?.width ?? node.width ?? DEFAULT_CANVAS_NODE_DIMENSIONS.width;
+            const nodeHeight =
+              node.measured?.height ?? node.height ?? DEFAULT_CANVAS_NODE_DIMENSIONS.height;
+            void instance?.setCenter(
+              node.position.x + nodeWidth / 2,
+              node.position.y + nodeHeight / 2,
+              {
+                zoom: 1.15,
+                duration: settings.reducedMotion ? 0 : 220,
+              },
+            );
           }}
         />
         {!sidebarLayout.rail.collapsed && (

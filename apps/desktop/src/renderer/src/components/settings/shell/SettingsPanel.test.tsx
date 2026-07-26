@@ -1449,6 +1449,32 @@ describe('SettingsPanel draft transactions', () => {
     expect(updateSettings.mock.calls[0]?.[0].theme).toBe('dark');
     expect(dockerCheck).not.toHaveBeenCalled();
   });
+
+  it('saves unrelated changes when the unchanged default agent is unavailable', async () => {
+    render(
+      <SettingsPanel
+        {...props({
+          agents: [
+            {
+              id: 'codex',
+              label: 'OpenAI Codex CLI',
+              installed: false,
+              executable: null,
+              version: null,
+              providerDisclosure: 'Uses the local CLI account.',
+            },
+          ],
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'dark' }));
+    await clickSaveSettings();
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0].theme).toBe('dark');
+    expect(agentCheck).not.toHaveBeenCalled();
+  });
 });
 
 async function clickSaveSettings(): Promise<void> {

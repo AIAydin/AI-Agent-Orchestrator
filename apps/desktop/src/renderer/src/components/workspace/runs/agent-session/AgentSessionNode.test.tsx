@@ -113,6 +113,7 @@ const NODE_ID = 'node-x';
 const spies = {
   openSettings: vi.fn(),
   reportError: vi.fn(),
+  flushCanvas: vi.fn(() => Promise.resolve(true)),
   updateNodeData: vi.fn(),
   recordHistory: vi.fn(),
   nodeTitle: vi.fn((): string | null => null),
@@ -133,6 +134,7 @@ function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentS
     graphReadOnly: false,
     openSettings: spies.openSettings,
     reportError: spies.reportError,
+    flushCanvas: spies.flushCanvas,
     updateNodeData: spies.updateNodeData,
     fitGroupFrame: spies.fitGroupFrame,
     arrangeGroupFrame: spies.arrangeGroupFrame,
@@ -248,6 +250,25 @@ describe('AgentSessionNode', () => {
     // Peer provisioning happens before prepareLaunch, so the launch fires only after that
     // IPC round trip resolves — never synchronously within the render.
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('button', { name: 'Start session' })).toBeNull();
+    expect(spies.flushCanvas).toHaveBeenCalledOnce();
+    expect(spies.flushCanvas.mock.invocationCallOrder[0]).toBeLessThan(
+      provisionMock.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('does not provision or launch when the current canvas cannot be saved', async () => {
+    spies.flushCanvas.mockResolvedValueOnce(false);
+    controller.loaded = true;
+    renderNode();
+
+    await waitFor(() =>
+      expect(spies.reportError).toHaveBeenCalledWith(
+        "The agent session didn't start because the canvas couldn't be saved.",
+      ),
+    );
+    expect(provisionMock).not.toHaveBeenCalled();
+    expect(controller.prepareLaunch).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Start session' })).toBeNull();
   });
 

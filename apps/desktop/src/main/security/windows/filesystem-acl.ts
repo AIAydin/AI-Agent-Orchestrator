@@ -23,8 +23,21 @@ const DANGEROUS_PARENT_RIGHTS =
   0x40000 | // Change permissions.
   0x80000; // Take ownership.
 
+const POWERSHELL_FAILURE_PREFIX = 'FORGEBOARD_WINDOWS_AUTHORITY_ERROR:';
+const POWERSHELL_FAILURE_TRAP = String.raw`
+trap {
+  $rootException = $_.Exception
+  while ($null -ne $rootException.InnerException) { $rootException = $rootException.InnerException }
+  $failureType = $rootException.GetType().FullName -replace '[^A-Za-z0-9._-]', '_'
+  $failureId = $_.FullyQualifiedErrorId -replace '[^A-Za-z0-9._-]', '_'
+  [Console]::Error.Write('${POWERSHELL_FAILURE_PREFIX}' + $failureType + ',' + $failureId)
+  exit 1
+}
+`;
+
 const INSPECT_DIRECTORY_ACL_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
+${POWERSHELL_FAILURE_TRAP}
 $target = $env:FORGEBOARD_WINDOWS_ACL_PATH
 if ([string]::IsNullOrEmpty($target)) { throw 'The ACL target is missing.' }
 $sections = [System.Security.AccessControl.AccessControlSections]::Access -bor [System.Security.AccessControl.AccessControlSections]::Owner
@@ -65,6 +78,7 @@ $result = [ordered]@{
 
 const PROTECT_DIRECTORY_ACL_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
+${POWERSHELL_FAILURE_TRAP}
 $target = $env:FORGEBOARD_WINDOWS_ACL_PATH
 $userSidValue = $env:FORGEBOARD_WINDOWS_USER_SID
 if ([string]::IsNullOrEmpty($target) -or [string]::IsNullOrEmpty($userSidValue)) {
@@ -86,6 +100,7 @@ $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($sy
 
 const INSPECT_FILE_ACL_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
+${POWERSHELL_FAILURE_TRAP}
 $target = $env:FORGEBOARD_WINDOWS_ACL_PATH
 if ([string]::IsNullOrEmpty($target)) { throw 'The ACL target is missing.' }
 $sections = [System.Security.AccessControl.AccessControlSections]::Access -bor [System.Security.AccessControl.AccessControlSections]::Owner
@@ -126,6 +141,7 @@ $result = [ordered]@{
 
 const PROTECT_FILE_ACL_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
+${POWERSHELL_FAILURE_TRAP}
 $target = $env:FORGEBOARD_WINDOWS_ACL_PATH
 $userSidValue = $env:FORGEBOARD_WINDOWS_USER_SID
 if ([string]::IsNullOrEmpty($target) -or [string]::IsNullOrEmpty($userSidValue)) {
@@ -630,8 +646,12 @@ async function runSystemPowerShell(
         timeout: POWERSHELL_TIMEOUT_MS,
         windowsHide: true,
       },
-      (error, stdout) => {
+      (error, stdout, stderr) => {
         if (error !== null) {
+          const diagnostic = boundedPowerShellFailureDiagnostic(stderr);
+          process.stderr.write(
+            `Forgeboard Windows permission authority failed: ${diagnostic ?? 'unclassified'}\n`,
+          );
           reject(new Error('The bounded Windows permission authority failed.'));
           return;
         }
@@ -640,6 +660,14 @@ async function runSystemPowerShell(
     );
     child.stdin?.end();
   });
+}
+
+export function boundedPowerShellFailureDiagnostic(stderr: string): string | null {
+  const match = new RegExp(
+    `${POWERSHELL_FAILURE_PREFIX}([A-Za-z0-9._-]{1,192}),([A-Za-z0-9._-]{1,192})`,
+    'u',
+  ).exec(stderr);
+  return match === null ? null : `${match[1]},${match[2]}`;
 }
 
 async function resolveSystemWindowsUserSid(): Promise<string> {
@@ -688,6 +716,10 @@ function systemPowerShellPath(): string {
 }
 
 function systemWindowsPath(...segments: readonly string[]): string {
+  return path.win32.join(systemWindowsRoot(), ...segments);
+}
+
+function systemWindowsRoot(): string {
   const systemRoot =
     process.env['SystemRoot'] ?? process.env['SYSTEMROOT'] ?? process.env['WINDIR'];
   if (
@@ -701,14 +733,25 @@ function systemWindowsPath(...segments: readonly string[]): string {
       'Forgeboard could not resolve the system Windows permission authority. No agent context was launched.',
     );
   }
-  return path.win32.join(path.win32.normalize(systemRoot), ...segments);
+  return path.win32.normalize(systemRoot);
 }
 
 function windowsAuthorityEnvironment(
   authorityValues: Readonly<Record<string, string>>,
 ): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = { ...authorityValues };
-  for (const name of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP'] as const) {
+  const systemRoot = systemWindowsRoot();
+  const system32 = path.win32.join(systemRoot, 'System32');
+  const powershell = path.win32.join(system32, 'WindowsPowerShell', 'v1.0');
+  const environment: NodeJS.ProcessEnv = {
+    SystemRoot: systemRoot,
+    WINDIR: systemRoot,
+    ComSpec: path.win32.join(system32, 'cmd.exe'),
+    Path: [system32, systemRoot, powershell].join(';'),
+    PATHEXT: '.COM;.EXE;.BAT;.CMD',
+    PSModulePath: path.win32.join(powershell, 'Modules'),
+    ...authorityValues,
+  };
+  for (const name of ['TEMP', 'TMP'] as const) {
     const value = process.env[name];
     if (value !== undefined) environment[name] = value;
   }

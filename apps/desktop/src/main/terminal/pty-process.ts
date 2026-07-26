@@ -189,7 +189,9 @@ export const createTerminalPty: TerminalPtyFactory = async (launch, beforeSpawn)
 };
 
 export async function ensureNodePtySpawnHelper(): Promise<void> {
-  if (process.platform === 'win32') return;
+  // node-pty builds the helper executable only on macOS. Linux uses forkpty directly and Windows
+  // uses ConPTY/winpty, so requiring a nonexistent helper there would reject healthy installs.
+  if (process.platform !== 'darwin') return;
   const entryPath = require.resolve('node-pty');
   const packageRoot = path.resolve(path.dirname(entryPath), '..');
   const candidates = [

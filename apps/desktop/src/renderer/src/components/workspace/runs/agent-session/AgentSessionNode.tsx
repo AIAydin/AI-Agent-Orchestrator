@@ -59,6 +59,7 @@ export function AgentSessionNode({
     runnableAgents,
     graphReadOnly,
     reportError,
+    flushCanvas,
     updateNodeData,
     recordHistory,
     nodeTitle,
@@ -181,6 +182,10 @@ export function AgentSessionNode({
     provisioningRef.current = true;
     void (async () => {
       try {
+        if (!(await flushCanvas())) {
+          reportError("The agent session didn't start because the canvas couldn't be saved.");
+          return;
+        }
         let view: AgentPeersProvisionView | null = null;
         try {
           const result = await window.forgeboard.agentPeers.provision({

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './support/electron.js';
+import { launchDesktop, renameCanvasNode, watchExternalRequests } from './support/electron.js';
 
 test('immediate app and project closes preserve the latest canvas revision', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-close-persistence-e2e-'));
@@ -26,7 +26,10 @@ test('immediate app and project closes preserve the latest canvas revision', asy
         .locator('.template-section')
         .getByRole('button', { name: /^Note \/ image/ })
         .click();
-      await page.locator('.inspector').getByLabel('Title').fill('Immediate quit proof');
+      await renameCanvasNode(
+        page.getByRole('article', { name: /^Note \/ image: /u }),
+        'Immediate quit proof',
+      );
 
       await electronApp?.close();
       electronApp = null;
@@ -53,7 +56,10 @@ test('immediate app and project closes preserve the latest canvas revision', asy
         .locator('.template-section')
         .getByRole('button', { name: /^Diagram/ })
         .click();
-      await page.locator('.inspector').getByLabel('Title').fill('Immediate project-close proof');
+      await renameCanvasNode(
+        page.getByRole('article', { name: /^Diagram: /u }),
+        'Immediate project-close proof',
+      );
       await page.locator('.project-switcher').click();
 
       await expect(

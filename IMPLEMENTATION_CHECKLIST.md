@@ -1973,26 +1973,20 @@ unchecked when only a subset of their required behavior has proof.
   other profiles, and custom/extension adapters retain native confirmation. All 81 focused unit
   tests, the real-Git managed-worktree integration test, and desktop strict typecheck passed.
 - 2026-07-23: the retired bundled test agent and first-party workflow-template feature were removed
-  from packages, runtime planning, readiness, smoke/release resources, renderer controls, E2E
-  fixtures, documentation, and the lockfile. Legacy settings and saved Agent nodes now discard the
-  removed adapter identifier during repair/hydration, while user-authored saved workflows and the
-  ordinary node palette remain intact. No active package, runtime, UI, documentation, or workflow
-  template references remain. The checkpoint passed strict typecheck, docs, quality, controls,
-  production build, 3,072 unit assertions, and 324 integration assertions; its recorded full-gate
+  throughout runtime, UI, tests, docs, and the lockfile. Legacy settings and saved Agent nodes discard
+  the retired adapter while user workflows and the ordinary palette remain intact. Typecheck, docs,
+  quality, controls, build, 3,072 unit assertions, and 324 integration assertions passed; recorded
   exceptions were a partial Electron install and unrelated in-progress files.
 - 2026-07-24: the workspace project sidebar closes from an always-visible command-bar control,
-  returns its width to the canvas, and persists the choice. Ten tests and every production gate
-  passed; the Electron journey lacked an approved runtime, and E2E typecheck retains existing errors.
+  returns its width to the canvas, and persists the choice. Ten tests and every production gate passed;
+  the Electron journey lacked an approved runtime, and E2E typecheck retains existing errors.
 - 2026-07-24: running Agent and Terminal sessions no longer have Forgeboard-wide or per-window
-  count caps; ordinary launches are limited only by the computer's available resources. Transcript
-  creation likewise has no product-level file-count ceiling while retaining per-session and global
-  byte bounds. A 12-session same-window regression exceeds both retired limits, and OpenCode's
-  installed default TUI remains a zero-argument, main-managed worktree launch. All 3,102 unit tests
-  passed. Of 332 integration tests, 330 passed in the unrestricted full run; both load-sensitive cases
-  passed under unchanged default timeouts in isolation. Docs, quality, typecheck, lint, formatting,
-  structure, controls, and the complete production build passed.
-  Canvas navigation also gains an idle-bounded lightweight paint mode and terminal/preview containment;
-  final-state lint, typecheck, formatting, and 55 affected renderer tests passed.
+  count caps; transcripts retain byte bounds without a file-count ceiling. A 12-session regression
+  exceeds both retired limits, and OpenCode's default TUI remains a zero-argument managed-worktree
+  launch. All 3,102 unit tests passed; 330 of 332 integration tests passed together and both
+  load-sensitive cases passed alone under unchanged timeouts. Docs, quality, typecheck, lint,
+  formatting, structure, controls, and the build passed. Canvas navigation also gains idle-bounded
+  lightweight paint mode and terminal/preview containment; 55 affected renderer tests passed.
 - 2026-07-24: startup recovery now compares the complete stable database identity across provenance
   inspection, so inode reuse cannot hide a replaced primary. Packaged smoke now mirrors normal
   startup by deferring optional Agent-context storage failures while the protected context path
@@ -2003,3 +1997,10 @@ unchecked when only a subset of their required behavior has proof.
   on its previous page. The focused Preview node suite passed all 30 tests, followed by affected
   formatting and zero-warning lint checks, the desktop strict typecheck, whitespace validation, and
   the repository structure gate.
+- 2026-07-24: PR #22 was reconciled with current `main` and newer branch commits without discarding
+  managed-worktree, hosting, startup, Settings, Terminal, canvas, E2E, or invite behavior.
+- 2026-07-24: the post-merge repair persists Agent nodes before launch, makes the canvas hint
+  click-through, centers searched nodes by rendered bounds, and binds Windows ACL checks to explicit
+  system paths with bounded failure diagnostics. Four affected E2E journeys, 36 focused unit and 34
+  focused integration tests, 3,107 unit and 332 integration tests, the 1,462-file structure gate,
+  852-file control audit, formatting, lint, typecheck, production build, and whitespace passed.

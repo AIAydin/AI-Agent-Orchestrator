@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../../support/electron.js';
+import {
+  launchDesktop,
+  runCanvasNodeContextAction,
+  watchExternalRequests,
+} from '../../support/electron.js';
 
 const shortcutModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
@@ -39,10 +43,9 @@ test('a moved project is detected, reviewed, and relinked entirely in the UI', a
     await expect(palette).toBeVisible();
     await palette.getByPlaceholder('Search actions…').fill('Add an agent');
     await page.keyboard.press('Enter');
-    const agentNode = page.getByRole('article', { name: 'Agent: Agent' });
+    const agentNode = page.getByRole('article', { name: /^Agent: /u });
     await expect(agentNode).toBeVisible();
-    await agentNode.click();
-    await page.locator('.inspector').getByRole('button', { name: 'Delete' }).click();
+    await runCanvasNodeContextAction(page, agentNode, 'Delete');
     await expect(agentNode).toHaveCount(0);
 
     await electronApp.close();
@@ -90,7 +93,7 @@ test('a moved project is detected, reviewed, and relinked entirely in the UI', a
     await expect(page.locator('.canvas-title')).toContainText('0 nodes');
     await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
     await page.keyboard.press(`${shortcutModifier}+Z`);
-    await expect(page.getByRole('article', { name: 'Agent: Agent' })).toBeVisible();
+    await expect(page.getByRole('article', { name: /^Agent: /u })).toBeVisible();
     expect(externalRequests).toEqual([]);
   } finally {
     await electronApp?.close().catch(() => undefined);

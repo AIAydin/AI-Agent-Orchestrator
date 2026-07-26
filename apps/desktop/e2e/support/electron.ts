@@ -247,6 +247,42 @@ export function watchNetworkRequests(page: Page, networkRequests: string[]): voi
   page.on('websocket', (webSocket) => capture(webSocket.url()));
 }
 
+export async function renameCanvasNode(node: Locator, title: string): Promise<void> {
+  await node.locator('.canvas-node-title').dblclick();
+  const input = node.getByRole('textbox', { name: 'Node title' });
+  await input.fill(title);
+  await input.press('Enter');
+}
+
+export async function openCanvasNodeDetails(
+  node: Locator,
+  tab: 'Settings' | 'Comments' | 'History' = 'Settings',
+): Promise<Locator> {
+  await node.getByRole('button', { name: /^Node details for /u }).click();
+  const dialog = node.getByRole('dialog', { name: / details$/u });
+  if (tab !== 'Settings') await dialog.getByRole('tab', { name: tab }).click();
+  return dialog;
+}
+
+export async function runCanvasNodeContextAction(
+  page: Page,
+  node: Locator,
+  action: 'Collapse' | 'Delete' | 'Duplicate' | 'Expand' | 'Inspect' | 'Lock' | 'Unlock',
+): Promise<void> {
+  const bounds = await node.boundingBox();
+  if (bounds === null) throw new Error('The canvas node must be visible before opening its menu.');
+  await node.dispatchEvent('contextmenu', {
+    bubbles: true,
+    button: 2,
+    clientX: bounds.x + bounds.width / 2,
+    clientY: bounds.y + bounds.height / 2,
+  });
+  await page
+    .getByRole('menu', { name: /^Actions for /u })
+    .getByRole('menuitem', { name: action })
+    .dispatchEvent('click');
+}
+
 function isLoopbackUrl(url: URL): boolean {
   const hostname = url.hostname
     .replace(/^\[|\]$/gu, '')

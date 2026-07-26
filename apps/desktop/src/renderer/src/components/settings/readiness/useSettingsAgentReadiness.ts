@@ -6,7 +6,10 @@ import {
   type AgentReadinessResult,
   type CheckAgentReadiness,
 } from '../../../../../shared/readiness/contracts.js';
-import { readinessRequestFingerprint } from '../../../../../shared/settings/readiness-requests.js';
+import {
+  readinessRequestFingerprint,
+  settingsAgentReadinessRequestChanged,
+} from '../../../../../shared/settings/readiness-requests.js';
 import {
   agentReadinessResultMatchesRequest,
   configuredAgentReadinessEntries,
@@ -98,9 +101,17 @@ export function useSettingsAgentReadiness(
     checking: new Set([...checking].filter((fingerprint) => !invalidated.has(fingerprint))),
     checkerAvailable: checker !== undefined,
   });
-  const blockingIssues = entries.flatMap((entry) =>
-    entry.blockingIssue === null ? [] : [entry.blockingIssue],
-  );
+  const blockingIssues = entries.flatMap((entry) => {
+    if (entry.blockingIssue === null) return [];
+    const request = entry.draft.request;
+    if (
+      request !== null &&
+      !settingsAgentReadinessRequestChanged(persistedSettings, settings, request)
+    ) {
+      return [];
+    }
+    return [entry.blockingIssue];
+  });
   const isChecking = useCallback(
     (fingerprint: string) =>
       checking.has(fingerprint) && !invalidatedFingerprintsRef.current.has(fingerprint),

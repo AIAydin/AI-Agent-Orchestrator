@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../../support/electron.js';
+import {
+  launchDesktop,
+  runCanvasNodeContextAction,
+  watchExternalRequests,
+} from '../../support/electron.js';
 
 const shortcutModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
@@ -18,10 +22,9 @@ test('canvas undo and redo checkpoints survive full process restarts', async () 
     let page = await electronApp.firstWindow();
 
     await addAgentFromCommandPalette(page);
-    const agentNode = page.getByRole('article', { name: 'Agent: Agent' });
+    const agentNode = page.getByRole('article', { name: /^Agent: /u });
     await expect(agentNode).toBeVisible();
-    await agentNode.click();
-    await page.locator('.inspector').getByRole('button', { name: 'Delete' }).click();
+    await runCanvasNodeContextAction(page, agentNode, 'Delete');
     await expect(agentNode).toHaveCount(0);
 
     await electronApp.close();
@@ -30,7 +33,7 @@ test('canvas undo and redo checkpoints survive full process restarts', async () 
     ({ app: electronApp, page } = await reopenDemo(userDataDirectory, externalRequests));
     await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
     await page.keyboard.press(`${shortcutModifier}+Z`);
-    await expect(page.getByRole('article', { name: 'Agent: Agent' })).toBeVisible();
+    await expect(page.getByRole('article', { name: /^Agent: /u })).toBeVisible();
 
     await electronApp.close();
     electronApp = null;
@@ -38,7 +41,7 @@ test('canvas undo and redo checkpoints survive full process restarts', async () 
     ({ app: electronApp, page } = await reopenDemo(userDataDirectory, externalRequests));
     await expect(page.getByRole('button', { name: 'Redo' })).toBeEnabled();
     await page.keyboard.press(`${shortcutModifier}+Shift+Z`);
-    await expect(page.getByRole('article', { name: 'Agent: Agent' })).toHaveCount(0);
+    await expect(page.getByRole('article', { name: /^Agent: /u })).toHaveCount(0);
     expect(externalRequests).toEqual([]);
   } finally {
     await electronApp?.close().catch(() => undefined);

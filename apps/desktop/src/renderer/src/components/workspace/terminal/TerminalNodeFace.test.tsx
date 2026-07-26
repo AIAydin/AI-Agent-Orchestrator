@@ -103,6 +103,17 @@ describe('TerminalNodeFace', () => {
         command: expect.objectContaining({ executable: '/usr/bin/make' }) as unknown,
       }),
     );
+    fireEvent.change(screen.getByLabelText('Arguments, one per line'), {
+      target: { value: 'test\n--runInBand' },
+    });
+    expect(updateNodeData).toHaveBeenCalledWith(
+      'n1',
+      expect.objectContaining({
+        command: expect.objectContaining({
+          arguments: ['test', '--runInBand'],
+        }) as unknown,
+      }),
+    );
   });
 
   it('disables Start and the config popover for locked nodes', () => {

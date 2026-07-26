@@ -1,6 +1,11 @@
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
 import {
+  openCanvasNodeDetails,
+  renameCanvasNode,
+  runCanvasNodeContextAction,
+} from '../../support/electron.js';
+import {
   addSeparatedTask,
   clickExposedCorner,
   expectNodeNearCanvasCenter,
@@ -31,16 +36,14 @@ test('infinite-canvas interactions persist locally without outbound requests', a
     electronApp = firstSession.app;
     let { page } = firstSession;
     const templates = page.locator('.template-section');
-    const inspector = page.locator('.inspector');
-
     await test.step('search selects and centers an exact canvas node', async () => {
       await templates.getByRole('button', { name: /Product brief/ }).click();
       const brief = page.getByRole('article', {
-        name: 'Product brief: Product brief',
+        name: /^Product brief: /u,
         exact: true,
       });
       await expect(brief).toBeVisible();
-      await inspector.getByLabel('Title').fill('Canvas Alpha');
+      await renameCanvasNode(brief, 'Canvas Alpha');
       await addSeparatedTask(
         page,
         page.getByRole('article', {
@@ -50,12 +53,11 @@ test('infinite-canvas interactions persist locally without outbound requests', a
       );
 
       const task = page.getByRole('article', {
-        name: 'Task: Task',
+        name: /^Task: /u,
         exact: true,
       });
       await expect(task).toBeVisible();
-      await task.click();
-      await inspector.getByLabel('Title').fill('Canvas Beta');
+      await renameCanvasNode(task, 'Canvas Beta');
 
       await page.getByRole('button', { name: 'Nodes', exact: true }).click();
       const search = page.getByRole('textbox', { name: 'Search canvas nodes' });
@@ -64,7 +66,6 @@ test('infinite-canvas interactions persist locally without outbound requests', a
       await expect(result).toBeVisible();
       await expect(page.locator('.rail-node-list button')).toHaveCount(1);
       await result.click();
-      await expect(inspector.getByLabel('Title')).toHaveValue('Canvas Beta');
       await expect(
         flowNode(page.getByRole('article', { name: 'Task: Canvas Beta', exact: true })),
       ).toHaveClass(/selected/u);
@@ -104,10 +105,8 @@ test('infinite-canvas interactions persist locally without outbound requests', a
         name: 'Task: Canvas Beta',
         exact: true,
       });
-      await clickExposedCorner(page, alpha);
-      await page.keyboard.down(shortcutModifier);
-      await clickExposedCorner(page, beta);
-      await page.keyboard.up(shortcutModifier);
+      await clickExposedCorner(alpha);
+      await clickExposedCorner(beta, [shortcutModifier]);
       await expect(page.locator('.react-flow__node.selected')).toHaveCount(2);
 
       await flowNode(beta).focus();
@@ -173,8 +172,7 @@ test('infinite-canvas interactions persist locally without outbound requests', a
           has: page.locator('strong').getByText('Canvas Beta', { exact: true }),
         })
         .click();
-      await expect(inspector.getByLabel('Title')).toHaveValue('Canvas Beta');
-      await inspector.getByRole('button', { name: 'Lock' }).click();
+      await runCanvasNodeContextAction(page, beta, 'Lock');
       await expect(beta.locator('[aria-label="Locked"]')).toBeVisible();
       await expect
         .poll(async () => {
@@ -195,15 +193,19 @@ test('infinite-canvas interactions persist locally without outbound requests', a
       ).toEqual(
         nodeByTitle(lockedState as NonNullable<typeof lockedState>, 'Canvas Beta').position,
       );
-      await inspector.getByRole('button', { name: 'Unlock' }).click();
+      await runCanvasNodeContextAction(page, beta, 'Unlock');
     });
 
     const privateComment = 'Private canvas note retained only on this device.';
     await test.step('a private node comment is created entirely in the local UI', async () => {
-      const comments = inspector.getByRole('region', {
+      const details = await openCanvasNodeDetails(
+        page.getByRole('article', { name: 'Task: Canvas Beta', exact: true }),
+        'Comments',
+      );
+      const comments = details.getByRole('region', {
         name: 'Private comments',
       });
-      await expect(comments.getByText(/Saved only in this project on this device/)).toBeVisible();
+      await expect(comments.getByText(/Saved on this device only/)).toBeVisible();
       await comments.getByLabel('Add a private comment').fill(privateComment);
       await comments.getByRole('button', { name: 'Save locally' }).click();
       await expect(comments.getByText(privateComment, { exact: true })).toBeVisible();
@@ -273,7 +275,11 @@ test('infinite-canvas interactions persist locally without outbound requests', a
           has: page.locator('strong').getByText('Canvas Beta', { exact: true }),
         })
         .click();
-      const comments = page.locator('.inspector').getByRole('region', { name: 'Private comments' });
+      const details = await openCanvasNodeDetails(
+        page.getByRole('article', { name: 'Task: Canvas Beta', exact: true }),
+        'Comments',
+      );
+      const comments = details.getByRole('region', { name: 'Private comments' });
       await expect(comments.getByText(privateComment, { exact: true })).toBeVisible();
       await expect(comments.locator('header small')).toHaveText('1');
     });

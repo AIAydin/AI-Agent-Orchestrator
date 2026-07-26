@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../../support/electron.js';
+import { launchDesktop, renameCanvasNode, watchExternalRequests } from '../../support/electron.js';
 
 test('startup restores a corrupt local database from the verified backup chosen by the user', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-startup-recovery-e2e-'));
@@ -26,11 +26,10 @@ test('startup restores a corrupt local database from the verified backup chosen 
       .locator('.template-section')
       .getByRole('button', { name: /Product brief/ })
       .click();
-    await first.page.getByRole('article', { name: 'Product brief: Product brief' }).click();
-    await first.page
-      .locator('.inspector')
-      .getByLabel('Title')
-      .fill('Recovered from startup backup');
+    await renameCanvasNode(
+      first.page.getByRole('article', { name: /^Product brief: /u }),
+      'Recovered from startup backup',
+    );
 
     const settings = await openDataSettings(first.page);
     await settings.getByLabel('Backup folder').fill(backupDirectory);
