@@ -37,7 +37,7 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
 
       await settings.getByRole('button', { name: 'Agents & runtime' }).click();
       await settings.getByLabel('Docker executable').fill('docker');
-      await settings.getByLabel('Container image').fill('example.invalid/forgeboard-agent:1');
+      await settings.getByLabel('Container image').selectOption('node:22-bookworm');
       await settings.getByLabel('Agent executable inside image').fill('/usr/local/bin/agent');
       await settings.getByLabel('CPU limit').fill('1.5');
       await settings.getByLabel('Memory limit (MB)').fill('2048');

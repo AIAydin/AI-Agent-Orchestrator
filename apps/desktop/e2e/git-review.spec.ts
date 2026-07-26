@@ -24,14 +24,6 @@ test('authoritative Git review stages, unstages, and discloses the exact local c
     watchExternalRequests(page, externalRequests);
 
     await page.getByRole('button', { name: 'Use safe defaults' }).click();
-    await page.getByRole('button', { name: 'Settings' }).click();
-    const settings = page.locator('.settings-modal');
-    await settings.getByRole('button', { name: /Git & previews/ }).click();
-    await settings.getByLabel('Git identity name').fill('Forgeboard E2E Reviewer');
-    await settings.getByLabel('Git identity email').fill('reviewer@forgeboard.invalid');
-    await settings.getByRole('button', { name: /Save settings/ }).click();
-    await expect(settings).toBeHidden();
-
     await page.getByRole('button', { name: /Explore the safe demo/i }).click();
     await expect(page.locator('.canvas-title')).toContainText('0 nodes · 0 connections');
     const projectPath = await page.evaluate(async () => {
@@ -47,6 +39,9 @@ test('authoritative Git review stages, unstages, and discloses the exact local c
       return demo.path;
     });
     const headBefore = gitHead(projectPath);
+    // Commits use the repository's own Git identity, so configure it where Git actually reads it.
+    gitConfig(projectPath, 'user.name', 'Forgeboard E2E Reviewer');
+    gitConfig(projectPath, 'user.email', 'reviewer@forgeboard.invalid');
     await writeFile(join(projectPath, 'review-e2e.txt'), 'authoritative review proof\n', 'utf8');
 
     await page.locator('.command-bar').getByRole('button', { name: 'Changes' }).click();
@@ -84,6 +79,10 @@ test('authoritative Git review stages, unstages, and discloses the exact local c
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });
+
+function gitConfig(repository: string, key: string, value: string): void {
+  execFileSync('git', ['-C', repository, 'config', key, value], { encoding: 'utf8' });
+}
 
 function gitHead(repository: string): string {
   return execFileSync('git', ['-C', repository, 'rev-parse', 'HEAD'], {
