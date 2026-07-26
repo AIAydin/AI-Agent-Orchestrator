@@ -36,7 +36,11 @@ test('an existing non-Git folder can be initialized safely from the project UI',
     await page.getByRole('button', { name: /Open a project folder/i }).click();
 
     await expect(page.locator('.project-switcher')).toContainText('existing-project');
-    await expect(page.getByText('Git not set up yet')).toBeVisible();
+    await expect(
+      page.getByText(
+        'Set up Git so agents can work in their own copies and you can review their changes.',
+      ),
+    ).toBeVisible();
     const initialize = page.getByRole('button', { name: 'Set up Git…' });
     await expect(initialize).toBeVisible();
     await expect(page.getByText('Your files stay exactly as they are.')).toBeVisible();
@@ -49,7 +53,7 @@ test('an existing non-Git folder can be initialized safely from the project UI',
     await answerNativeConfirmation(electronApp, 1);
     await initialize.click();
     await expect(initialize).toBeHidden();
-    await expect(page.locator('.repository-summary')).toContainText('main');
+    await expect(page.locator('.repository-summary')).toHaveCount(0);
     await expect(access(join(projectPath, '.git'))).resolves.toBeUndefined();
     await expect(readFile(existingFile, 'utf8')).resolves.toBe(
       'existing content stays unchanged\n',

@@ -6,7 +6,7 @@ import {
   runCanvasNodeContextAction,
 } from '../../support/electron.js';
 import {
-  addSeparatedTask,
+  addSeparatedNote,
   clickExposedCorner,
   expectNodeNearCanvasCenter,
   flowNode,
@@ -44,7 +44,7 @@ test('infinite-canvas interactions persist locally without outbound requests', a
       });
       await expect(brief).toBeVisible();
       await renameCanvasNode(brief, 'Canvas Alpha');
-      await addSeparatedTask(
+      await addSeparatedNote(
         page,
         page.getByRole('article', {
           name: 'Product brief: Canvas Alpha',
@@ -52,12 +52,12 @@ test('infinite-canvas interactions persist locally without outbound requests', a
         }),
       );
 
-      const task = page.getByRole('article', {
-        name: /^Task: /u,
+      const note = page.getByRole('article', {
+        name: /^Note: /u,
         exact: true,
       });
-      await expect(task).toBeVisible();
-      await renameCanvasNode(task, 'Canvas Beta');
+      await expect(note).toBeVisible();
+      await renameCanvasNode(note, 'Canvas Beta');
 
       await page.getByRole('button', { name: 'Nodes', exact: true }).click();
       const search = page.getByRole('textbox', { name: 'Search canvas nodes' });
@@ -67,11 +67,11 @@ test('infinite-canvas interactions persist locally without outbound requests', a
       await expect(page.locator('.rail-node-list button')).toHaveCount(1);
       await result.click();
       await expect(
-        flowNode(page.getByRole('article', { name: 'Task: Canvas Beta', exact: true })),
+        flowNode(page.getByRole('article', { name: 'Note: Canvas Beta', exact: true })),
       ).toHaveClass(/selected/u);
       await expectNodeNearCanvasCenter(
         page,
-        page.getByRole('article', { name: 'Task: Canvas Beta', exact: true }),
+        page.getByRole('article', { name: 'Note: Canvas Beta', exact: true }),
       );
       await search.fill('');
     });
@@ -94,7 +94,7 @@ test('infinite-canvas interactions persist locally without outbound requests', a
         }),
       ).toBeVisible();
       await expect(
-        page.getByRole('article', { name: 'Task: Canvas Beta', exact: true }),
+        page.getByRole('article', { name: 'Note: Canvas Beta', exact: true }),
       ).toBeVisible();
 
       const alpha = page.getByRole('article', {
@@ -102,7 +102,7 @@ test('infinite-canvas interactions persist locally without outbound requests', a
         exact: true,
       });
       const beta = page.getByRole('article', {
-        name: 'Task: Canvas Beta',
+        name: 'Note: Canvas Beta',
         exact: true,
       });
       await clickExposedCorner(alpha);
@@ -145,7 +145,7 @@ test('infinite-canvas interactions persist locally without outbound requests', a
 
     await test.step('copy, paste, duplicate, and locking preserve honest graph behavior', async () => {
       const beta = page.getByRole('article', {
-        name: 'Task: Canvas Beta',
+        name: 'Note: Canvas Beta',
         exact: true,
       });
       await page
@@ -159,14 +159,14 @@ test('infinite-canvas interactions persist locally without outbound requests', a
       await page.keyboard.press(`${shortcutModifier}+v`);
       await expect(
         page.getByRole('article', {
-          name: 'Task: Canvas Beta copy',
+          name: 'Note: Canvas Beta copy',
           exact: true,
         }),
       ).toBeVisible();
       await page.keyboard.press(`${shortcutModifier}+d`);
       await expect(
         page.getByRole('article', {
-          name: 'Task: Canvas Beta copy copy',
+          name: 'Note: Canvas Beta copy copy',
           exact: true,
         }),
       ).toBeVisible();
@@ -204,7 +204,7 @@ test('infinite-canvas interactions persist locally without outbound requests', a
     const privateComment = 'Private canvas note retained only on this device.';
     await test.step('a private node comment is created entirely in the local UI', async () => {
       const details = await openCanvasNodeDetails(
-        page.getByRole('article', { name: 'Task: Canvas Beta', exact: true }),
+        page.getByRole('article', { name: 'Note: Canvas Beta', exact: true }),
         'Comments',
       );
       const comments = details.getByRole('region', {
@@ -255,17 +255,17 @@ test('infinite-canvas interactions persist locally without outbound requests', a
         }),
       ).toBeVisible();
       await expect(
-        page.getByRole('article', { name: 'Task: Canvas Beta', exact: true }),
+        page.getByRole('article', { name: 'Note: Canvas Beta', exact: true }),
       ).toBeVisible();
       await expect(
         page.getByRole('article', {
-          name: 'Task: Canvas Beta copy',
+          name: 'Note: Canvas Beta copy',
           exact: true,
         }),
       ).toBeVisible();
       await expect(
         page.getByRole('article', {
-          name: 'Task: Canvas Beta copy copy',
+          name: 'Note: Canvas Beta copy copy',
           exact: true,
         }),
       ).toBeVisible();
@@ -281,7 +281,7 @@ test('infinite-canvas interactions persist locally without outbound requests', a
         })
         .click();
       const details = await openCanvasNodeDetails(
-        page.getByRole('article', { name: 'Task: Canvas Beta', exact: true }),
+        page.getByRole('article', { name: 'Note: Canvas Beta', exact: true }),
         'Comments',
       );
       const comments = details.getByRole('region', { name: 'Private comments' });

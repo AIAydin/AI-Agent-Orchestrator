@@ -360,6 +360,21 @@ export function watchNetworkRequests(page: Page, networkRequests: string[]): voi
   page.on('websocket', (webSocket) => capture(webSocket.url()));
 }
 
+/**
+ * Leave the open project through the project-switcher menu and land back on the launcher.
+ * The switcher opens a menu now, so closing takes the explicit "Close project" item.
+ */
+export async function closeProjectFromSwitcher(page: Page): Promise<void> {
+  await page.locator('.project-switcher').click();
+  await page
+    .getByRole('menu', { name: 'Switch project' })
+    .getByRole('menuitem', { name: 'Close project' })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: /Build software in a visual workshop/i }),
+  ).toBeVisible();
+}
+
 export async function renameCanvasNode(node: Locator, title: string): Promise<void> {
   await node.locator('.canvas-node-title').dblclick();
   const input = node.getByRole('textbox', { name: 'Node title' });
