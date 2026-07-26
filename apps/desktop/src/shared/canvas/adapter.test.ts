@@ -999,6 +999,33 @@ describe('canonical desktop canvas adapter', () => {
     });
   });
 
+  it('preserves the Test node command line across canonical save and reload', () => {
+    const configured = legacy({
+      nodes: [
+        node('test-1', 'test', {
+          command: {
+            executable: 'node',
+            arguments: ['-e', 'process.stdout.write("ok")'],
+            environmentNames: [],
+          },
+        }),
+      ],
+      edges: [],
+    });
+
+    const synchronized = synchronizeCanvasDocument(configured);
+    expect(synchronized.ok).toBe(true);
+    if (!synchronized.ok) return;
+
+    const reloaded = synchronizeCanvasDocument(synchronized.document);
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) return;
+    expect(reloaded.document.nodes[0]?.data.command).toMatchObject({
+      executable: 'node',
+      arguments: ['-e', 'process.stdout.write("ok")'],
+    });
+  });
+
   it('persists UI-authored test commands and bounded review-gate configuration canonically', () => {
     const migrated = canonicalCanvasFromLegacy(
       legacy({
@@ -1060,9 +1087,10 @@ describe('canonical desktop canvas adapter', () => {
     const surface = legacySurfaceFromCanonical(migrated.canvas);
     expect(surface.nodes[0]?.data).toMatchObject({
       checkKind: 'test',
+      // The Test face reads `arguments`, exactly like the Terminal face.
       command: {
         executable: 'pnpm',
-        args: ['run', 'test'],
+        arguments: ['run', 'test'],
         cwdRelative: 'packages/app',
         environmentNames: ['CI'],
       },
