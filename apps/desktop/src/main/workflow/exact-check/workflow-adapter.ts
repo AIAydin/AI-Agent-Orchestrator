@@ -37,9 +37,11 @@ export type ExactCheckWorkflowBackend = Pick<
   'prepare' | 'launchApproved' | 'discardPlan'
 >;
 
-/** Adapts canonical Test nodes to the approval-gated exact-check runtime. */
+/** Adapts canonical Test nodes to the fingerprint-gated exact-check runtime. */
 export class ExactCheckWorkflowAdapter implements WorkflowNodeExecutor {
   public readonly id = 'exact-check';
+  /** Run on the Test node is the decision; the prepared plan is still matched before it spawns. */
+  public readonly launchesWithoutApproval = true;
 
   public constructor(private readonly backend: ExactCheckWorkflowBackend) {}
 

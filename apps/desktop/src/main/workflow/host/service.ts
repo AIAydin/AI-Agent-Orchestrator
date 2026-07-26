@@ -61,6 +61,8 @@ import { completeInternalReviewGate, queueEligibleRevisionAttempts } from './rev
 const MAX_PUMP_ITERATIONS_PADDING = 20;
 const INTERNAL_EXECUTOR_ID = 'forgeboard.internal';
 const UNSUPPORTED_EXECUTOR_ID = 'forgeboard.unsupported';
+/** Audit actor for launches whose approval is the Run control the user pressed on the node. */
+const RUN_REQUEST_ACTOR = 'node-run-request';
 
 export interface WorkflowHostStore {
   createWorkflowExecution: LocalStore['createWorkflowExecution'];
@@ -336,8 +338,8 @@ export class WorkflowHost {
   public async approveNode(input: ApproveWorkflowNodeInput): Promise<WorkflowHostState> {
     this.#assertAvailable();
     return await this.#serialize(input.executionId, async () => {
-      let record = this.#requireExecution(input.executionId);
-      let runtime = runtimeFromRecord(record);
+      const record = this.#requireExecution(input.executionId);
+      const runtime = runtimeFromRecord(record);
       const bindingRecord = this.store
         .listWorkflowNodeBindings(input.executionId)
         .find((binding) => binding.nodeId === input.nodeId);
@@ -363,56 +365,173 @@ export class WorkflowHost {
         this.#auditApproval(input, 'denied', 'prepared-plan-unavailable');
         throw new Error('The prepared launch is no longer available. Review what will run.');
       }
-      const approvedAt = occurredAt(this.#now(), record.updatedAt);
-      if (Date.parse(binding.expiresAt ?? '') <= Date.parse(approvedAt)) {
-        await this.#discardPrepared(nodeKey(input.executionId, input.nodeId));
+      if (
+        Date.parse(binding.expiresAt ?? '') <= Date.parse(occurredAt(this.#now(), record.updatedAt))
+      ) {
+        await this.#discardPrepared(preparedKey);
         this.#auditApproval(input, 'denied', 'expired');
         throw new Error('The prepared workflow launch expired. Review what will run.');
       }
+      const launched = await this.#launchPrepared(record, binding, prepared, input);
+      return launched.started
+        ? this.#state(input.executionId, launched.record)
+        : await this.#pumpLocked(input.executionId, launched.record);
+    });
+  }
 
-      const launching = bindingPayload({ ...binding, phase: 'launching', updatedAt: approvedAt });
+  /**
+   * Persists the launching binding, starts the executor, and records the running node. Callers hold
+   * the execution lock and have already matched the prepared plan to its stored binding.
+   */
+  async #launchPrepared(
+    initialRecord: WorkflowExecutionRecord,
+    binding: WorkflowHostBindingPayload,
+    prepared: PreparedEntry,
+    input: ApproveWorkflowNodeInput,
+  ): Promise<{ readonly record: WorkflowExecutionRecord; readonly started: boolean }> {
+    let record = initialRecord;
+    let runtime = runtimeFromRecord(record);
+    const preparedKey = nodeKey(input.executionId, input.nodeId);
+    const approvedAt = occurredAt(this.#now(), record.updatedAt);
+    const launching = bindingPayload({ ...binding, phase: 'launching', updatedAt: approvedAt });
+    record = this.#persist(
+      record,
+      runtime,
+      'node.launching',
+      approvedAt,
+      {
+        nodeId: input.nodeId,
+        attempt: binding.attempt,
+      },
+      [bindingUpdate(input.nodeId, launching)],
+    );
+    runtime = runtimeFromRecord(record);
+    const node = nodeFor(runtime, input.nodeId);
+    const context = executorContext(record, runtime, node, binding.attempt);
+    const approval: WorkflowLaunchApproval = {
+      preparationId: input.preparationId,
+      approvalFingerprint: input.approvalFingerprint,
+      approvedBy: input.approvedBy,
+      approvedAt,
+    };
+
+    let handle: WorkflowNodeExecutionHandle;
+    try {
+      handle = await prepared.executor.launch(context, prepared.preparation, approval);
+    } catch (error) {
+      const reason = errorMessage(error);
+      runtime = failWorkflowNodeBeforeLaunch(
+        runtime,
+        input.nodeId,
+        { failureCode: 'EXECUTOR_LAUNCH_FAILED', reason },
+        occurredAt(this.#now(), record.updatedAt),
+      );
+      const failedAt = runtime.run.updatedAt;
       record = this.#persist(
         record,
         runtime,
-        'node.launching',
-        approvedAt,
+        'node.launch-failed',
+        failedAt,
+        {
+          nodeId: input.nodeId,
+          reason,
+        },
+        [
+          bindingUpdate(
+            input.nodeId,
+            bindingPayload({
+              schemaVersion: 1,
+              nodeId: input.nodeId,
+              attempt: binding.attempt,
+              executorId: binding.executorId,
+              phase: 'failed',
+              lastError: reason,
+              updatedAt: failedAt,
+            }),
+          ),
+        ],
+      );
+      await this.#discardPrepared(preparedKey);
+      this.#auditApproval(input, 'failed', 'launch-failed');
+      return { record, started: false };
+    }
+    this.#prepared.delete(preparedKey);
+
+    const startedAt = occurredAt(this.#now(), record.updatedAt);
+    try {
+      runtime = startWorkflowNode(runtime, input.nodeId, handle.executionReference, startedAt);
+    } catch (error) {
+      const cancellation = await settledCancellation(handle);
+      const reason = errorMessage(error);
+      runtime = failWorkflowNodeBeforeLaunch(
+        runtime,
+        input.nodeId,
+        { failureCode: 'START_TRANSITION_REJECTED', reason },
+        startedAt,
+      );
+      record = this.#persist(
+        record,
+        runtime,
+        'node.start-rejected',
+        startedAt,
+        {
+          nodeId: input.nodeId,
+          reason,
+        },
+        [bindingUpdate(input.nodeId, null)],
+      );
+      this.#auditApproval(input, 'failed', 'start-transition-rejected');
+      if (cancellation !== undefined) {
+        throw new AggregateError(
+          [error, cancellation],
+          'The workflow start transition was rejected and the launched process did not cancel cleanly.',
+        );
+      }
+      return { record, started: false };
+    }
+
+    const runningBinding = bindingPayload({
+      schemaVersion: 1,
+      nodeId: input.nodeId,
+      attempt: binding.attempt,
+      executorId: binding.executorId,
+      phase: 'running',
+      externalId: handle.externalId,
+      executionReference: handle.executionReference,
+      updatedAt: startedAt,
+    });
+    try {
+      record = this.#persist(
+        record,
+        runtime,
+        'node.started',
+        startedAt,
         {
           nodeId: input.nodeId,
           attempt: binding.attempt,
+          executorId: binding.executorId,
+          externalId: handle.externalId,
         },
-        [bindingUpdate(input.nodeId, launching)],
+        [bindingUpdate(input.nodeId, runningBinding)],
       );
-      runtime = runtimeFromRecord(record);
-      const node = nodeFor(runtime, input.nodeId);
-      const context = executorContext(record, runtime, node, binding.attempt);
-      const approval: WorkflowLaunchApproval = {
-        preparationId: input.preparationId,
-        approvalFingerprint: input.approvalFingerprint,
-        approvedBy: input.approvedBy,
-        approvedAt,
-      };
-
-      let handle: WorkflowNodeExecutionHandle;
+    } catch (persistenceError) {
+      const cancellation = await settledCancellation(handle);
+      const reason = `The launched workflow process could not be recorded: ${errorMessage(persistenceError)}`;
+      let recoveryFailure: unknown;
       try {
-        handle = await prepared.executor.launch(context, prepared.preparation, approval);
-      } catch (error) {
-        const reason = errorMessage(error);
-        runtime = failWorkflowNodeBeforeLaunch(
-          runtime,
+        const failedAt = occurredAt(this.#now(), record.updatedAt);
+        const failedRuntime = failWorkflowNodeBeforeLaunch(
+          runtimeFromRecord(record),
           input.nodeId,
-          { failureCode: 'EXECUTOR_LAUNCH_FAILED', reason },
-          occurredAt(this.#now(), record.updatedAt),
+          { failureCode: 'START_PERSIST_FAILED', reason },
+          failedAt,
         );
-        const failedAt = runtime.run.updatedAt;
         record = this.#persist(
           record,
-          runtime,
-          'node.launch-failed',
+          failedRuntime,
+          'node.start-persist-failed',
           failedAt,
-          {
-            nodeId: input.nodeId,
-            reason,
-          },
+          { nodeId: input.nodeId, reason },
           [
             bindingUpdate(
               input.nodeId,
@@ -428,156 +547,59 @@ export class WorkflowHost {
             ),
           ],
         );
-        await this.#discardPrepared(preparedKey);
-        this.#auditApproval(input, 'failed', 'launch-failed');
-        return await this.#pumpLocked(input.executionId, record);
-      }
-      this.#prepared.delete(preparedKey);
-
-      const startedAt = occurredAt(this.#now(), record.updatedAt);
-      try {
-        runtime = startWorkflowNode(runtime, input.nodeId, handle.executionReference, startedAt);
       } catch (error) {
-        const cancellation = await settledCancellation(handle);
-        const reason = errorMessage(error);
-        runtime = failWorkflowNodeBeforeLaunch(
-          runtime,
-          input.nodeId,
-          { failureCode: 'START_TRANSITION_REJECTED', reason },
-          startedAt,
-        );
-        record = this.#persist(
-          record,
-          runtime,
-          'node.start-rejected',
-          startedAt,
-          {
-            nodeId: input.nodeId,
-            reason,
-          },
-          [bindingUpdate(input.nodeId, null)],
-        );
-        this.#auditApproval(input, 'failed', 'start-transition-rejected');
-        if (cancellation !== undefined) {
-          throw new AggregateError(
-            [error, cancellation],
-            'The workflow start transition was rejected and the launched process did not cancel cleanly.',
-          );
-        }
-        return await this.#pumpLocked(input.executionId, record);
+        recoveryFailure = error;
       }
-
-      const runningBinding = bindingPayload({
-        schemaVersion: 1,
-        nodeId: input.nodeId,
-        attempt: binding.attempt,
-        executorId: binding.executorId,
-        phase: 'running',
-        externalId: handle.externalId,
-        executionReference: handle.executionReference,
-        updatedAt: startedAt,
-      });
-      try {
-        record = this.#persist(
-          record,
-          runtime,
-          'node.started',
-          startedAt,
-          {
-            nodeId: input.nodeId,
-            attempt: binding.attempt,
-            executorId: binding.executorId,
-            externalId: handle.externalId,
-          },
-          [bindingUpdate(input.nodeId, runningBinding)],
-        );
-      } catch (persistenceError) {
-        const cancellation = await settledCancellation(handle);
-        const reason = `The launched workflow process could not be recorded: ${errorMessage(persistenceError)}`;
-        let recoveryFailure: unknown;
-        try {
-          const failedAt = occurredAt(this.#now(), record.updatedAt);
-          const failedRuntime = failWorkflowNodeBeforeLaunch(
-            runtimeFromRecord(record),
-            input.nodeId,
-            { failureCode: 'START_PERSIST_FAILED', reason },
-            failedAt,
-          );
-          record = this.#persist(
-            record,
-            failedRuntime,
-            'node.start-persist-failed',
-            failedAt,
-            { nodeId: input.nodeId, reason },
-            [
-              bindingUpdate(
-                input.nodeId,
-                bindingPayload({
-                  schemaVersion: 1,
-                  nodeId: input.nodeId,
-                  attempt: binding.attempt,
-                  executorId: binding.executorId,
-                  phase: 'failed',
-                  lastError: reason,
-                  updatedAt: failedAt,
-                }),
-              ),
-            ],
-          );
-        } catch (error) {
-          recoveryFailure = error;
-        }
-        this.#auditApproval(input, 'failed', 'start-persistence-failed');
-        this.#notify(
-          input.executionId,
-          'host-error',
-          this.#now().toISOString(),
-          { message: reason },
-          input.nodeId,
-        );
-        const failures = [persistenceError, cancellation, recoveryFailure].filter(
-          (failure) => failure !== undefined,
-        );
-        throw failures.length === 1
-          ? persistenceError
-          : new AggregateError(
-              failures,
-              'The launched workflow process could not be durably recorded or cleaned up.',
-            );
-      }
-      const active: ActiveEntry = {
-        nodeId: input.nodeId,
-        attempt: binding.attempt,
-        handle,
-        unsubscribeInteraction: undefined,
-      };
-      active.unsubscribeInteraction = handle.subscribeInteraction?.((event) => {
-        try {
-          this.#emitInteraction({
-            ...event,
-            executionId: input.executionId,
-            nodeId: input.nodeId,
-            attempt: binding.attempt,
-          });
-        } catch {
-          // Ephemeral renderer output cannot disrupt the supervised workflow process.
-        }
-      });
-      this.#active.set(nodeKey(input.executionId, input.nodeId), active);
-      this.#auditApproval(input, 'allowed', 'launched');
+      this.#auditApproval(input, 'failed', 'start-persistence-failed');
       this.#notify(
         input.executionId,
-        'node-started',
-        startedAt,
-        {
-          nodeId: input.nodeId,
-          attempt: binding.attempt,
-        },
+        'host-error',
+        this.#now().toISOString(),
+        { message: reason },
         input.nodeId,
       );
-      this.#watchCompletion(input.executionId, input.nodeId, binding.attempt, handle);
-      return this.#state(input.executionId, record);
+      const failures = [persistenceError, cancellation, recoveryFailure].filter(
+        (failure) => failure !== undefined,
+      );
+      throw failures.length === 1
+        ? persistenceError
+        : new AggregateError(
+            failures,
+            'The launched workflow process could not be durably recorded or cleaned up.',
+          );
+    }
+    const active: ActiveEntry = {
+      nodeId: input.nodeId,
+      attempt: binding.attempt,
+      handle,
+      unsubscribeInteraction: undefined,
+    };
+    active.unsubscribeInteraction = handle.subscribeInteraction?.((event) => {
+      try {
+        this.#emitInteraction({
+          ...event,
+          executionId: input.executionId,
+          nodeId: input.nodeId,
+          attempt: binding.attempt,
+        });
+      } catch {
+        // Ephemeral renderer output cannot disrupt the supervised workflow process.
+      }
     });
+    this.#active.set(nodeKey(input.executionId, input.nodeId), active);
+    this.#auditApproval(input, 'allowed', 'launched');
+    this.#notify(
+      input.executionId,
+      'node-started',
+      startedAt,
+      {
+        nodeId: input.nodeId,
+        attempt: binding.attempt,
+      },
+      input.nodeId,
+    );
+    this.#watchCompletion(input.executionId, input.nodeId, binding.attempt, handle);
+    return { record, started: true };
   }
 
   public async approveHumanDecision(
@@ -1066,10 +1088,15 @@ export class WorkflowHost {
         const attempt = runtime.run.nodeRuns[nodeId]?.attempt;
         if (attempt === undefined) throw new Error(`Workflow node is outside the plan: ${nodeId}`);
         let unregisteredPreparation: PreparedEntry | undefined;
+        let selfApproved:
+          | { binding: WorkflowHostBindingPayload; prepared: PreparedEntry }
+          | undefined;
+        const withoutApproval = executor.launchesWithoutApproval === true;
         try {
           const context = executorContext(record, runtime, node, attempt);
           const preparation = await executor.prepare(context);
-          unregisteredPreparation = { executor, context, preparation };
+          const entry: PreparedEntry = { executor, context, preparation };
+          unregisteredPreparation = entry;
           const waitingAt = occurredAt(this.#now(), record.updatedAt);
           const binding = bindingPayload({
             schemaVersion: 1,
@@ -1086,7 +1113,7 @@ export class WorkflowHost {
           record = this.#persist(
             record,
             runtime,
-            'node.approval-requested',
+            withoutApproval ? 'node.prepared' : 'node.approval-requested',
             waitingAt,
             {
               nodeId,
@@ -1099,23 +1126,27 @@ export class WorkflowHost {
             },
             [bindingUpdate(nodeId, binding)],
           );
-          this.#prepared.set(nodeKey(executionId, nodeId), { executor, context, preparation });
+          this.#prepared.set(nodeKey(executionId, nodeId), entry);
           unregisteredPreparation = undefined;
-          this.#notify(
-            executionId,
-            'approval-requested',
-            waitingAt,
-            {
+          if (withoutApproval) {
+            selfApproved = { binding, prepared: entry };
+          } else {
+            this.#notify(
+              executionId,
+              'approval-requested',
+              waitingAt,
+              {
+                nodeId,
+                attempt,
+                executorId: executor.id,
+                preparationId: preparation.preparationId,
+                approvalFingerprint: preparation.approvalFingerprint,
+                expiresAt: preparation.expiresAt,
+                disclosure: preparation.disclosure,
+              },
               nodeId,
-              attempt,
-              executorId: executor.id,
-              preparationId: preparation.preparationId,
-              approvalFingerprint: preparation.approvalFingerprint,
-              expiresAt: preparation.expiresAt,
-              disclosure: preparation.disclosure,
-            },
-            nodeId,
-          );
+            );
+          }
           progressed = true;
         } catch (error) {
           let cleanupFailure: unknown;
@@ -1142,7 +1173,7 @@ export class WorkflowHost {
           if (cleanupFailure === undefined && error instanceof GitDelegateApprovalRequiredError) {
             const waitingAt = occurredAt(this.#now(), record.updatedAt);
             const reason = boundedHostReason(
-              `${error.message} Choose Refresh in Workflows to review the exact Git command and retry.`,
+              `${error.message} Run this node again to review the exact Git command and retry.`,
             );
             record = this.#persist(
               record,
@@ -1217,6 +1248,22 @@ export class WorkflowHost {
           );
           progressed = true;
           if (cleanupFailure !== undefined) throw failure;
+        }
+        if (selfApproved !== undefined) {
+          const launched = await this.#launchPrepared(
+            record,
+            selfApproved.binding,
+            selfApproved.prepared,
+            {
+              executionId,
+              nodeId,
+              preparationId: selfApproved.prepared.preparation.preparationId,
+              approvalFingerprint: selfApproved.prepared.preparation.approvalFingerprint,
+              approvedBy: RUN_REQUEST_ACTOR,
+            },
+          );
+          record = launched.record;
+          runtime = runtimeFromRecord(record);
         }
       }
       runtime = runtimeFromRecord(record);
