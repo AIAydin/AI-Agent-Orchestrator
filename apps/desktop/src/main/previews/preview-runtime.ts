@@ -614,13 +614,13 @@ export async function resolvePreviewLaunchCommand(
     ).trim();
     if (!configuredExecutable) {
       throw new Error(
-        'Choose a detected package script in the Preview panel or configure a Development server command in Settings.',
+        'This preview node has no start command yet. Open its settings and pick a script, or type one.',
       );
     }
     const executable = await locateExecutable(configuredExecutable, cwd);
     if (!executable) {
       throw new Error(
-        'The configured Development server executable was not found. Choose it again in Settings.',
+        "That start command was not found. Open the preview node's settings and choose another.",
       );
     }
     return {
@@ -684,7 +684,7 @@ async function readPackageJsonForPreview(
     return { metadata: parsed as PreviewPackageJson, identity };
   } catch {
     throw new Error(
-      `No readable package.json was found in ${cwd}. Choose a detected project folder or configure a Development server command in Settings.`,
+      `No readable package.json was found in ${cwd}. Open the preview node's settings and choose another folder, or type a start command.`,
     );
   }
 }
@@ -734,7 +734,7 @@ async function packageManagerLaunch(
     }
     if (/[%!]/u.test(located)) {
       throw new Error(
-        `${packageManager} was found at a path that cannot be launched safely. Choose a Development server executable in Settings.`,
+        `${packageManager} was found at a path that cannot be launched safely. Open the preview node's settings and type a start command instead.`,
       );
     }
     const configuredCommandProcessor =
@@ -748,7 +748,7 @@ async function packageManagerLaunch(
     const commandProcessor = await locateExecutable(configuredCommandProcessor, cwd);
     if (!commandProcessor) {
       throw new Error(
-        'The canonical Windows command processor was not found. Choose a Development server executable in Settings.',
+        "The canonical Windows command processor was not found. Open the preview node's settings and type a start command instead.",
       );
     }
     return {
