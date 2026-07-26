@@ -340,15 +340,37 @@ function connectionHandle(node: Locator, side: 'source' | 'target'): Locator {
 }
 
 async function connectHandles(page: Page, source: Locator, target: Locator): Promise<void> {
-  const sourcePoint = await exposedHandlePoint(source, 'source');
-  const targetPoint = await exposedHandlePoint(target, 'target');
+  // The floating minimap overlays the bottom-right of the canvas and, on smaller
+  // windows, covers a node's handles. It is not what this test proves, so take it
+  // out of the hit-testing path for the drag and restore it afterwards.
+  const restoreMinimap = await hideMinimap(page);
+  try {
+    const sourcePoint = await exposedHandlePoint(source, 'source');
+    const targetPoint = await exposedHandlePoint(target, 'target');
 
-  await page.mouse.move(sourcePoint.x, sourcePoint.y);
-  await page.mouse.down();
-  await page.mouse.move(targetPoint.x, targetPoint.y, {
-    steps: 12,
+    await page.mouse.move(sourcePoint.x, sourcePoint.y);
+    await page.mouse.down();
+    await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 12 });
+    await page.mouse.up();
+  } finally {
+    await restoreMinimap();
+  }
+}
+
+/** Hides the minimap overlay, returning a function that puts it back. */
+async function hideMinimap(page: Page): Promise<() => Promise<void>> {
+  const minimap = page.locator('.react-flow__minimap');
+  if ((await minimap.count()) === 0) return () => Promise.resolve();
+  await minimap.evaluate((element: HTMLElement) => {
+    element.dataset.e2ePreviousDisplay = element.style.display;
+    element.style.display = 'none';
   });
-  await page.mouse.up();
+  return async () => {
+    await minimap.evaluate((element: HTMLElement) => {
+      element.style.display = element.dataset.e2ePreviousDisplay ?? '';
+      delete element.dataset.e2ePreviousDisplay;
+    });
+  };
 }
 
 async function exposedHandlePoint(
