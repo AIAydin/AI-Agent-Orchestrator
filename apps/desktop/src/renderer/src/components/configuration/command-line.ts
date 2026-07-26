@@ -1,6 +1,8 @@
 /**
- * One-line command editing for the test face. Tokens split on whitespace;
- * single or double quotes keep spaces inside one argument.
+ * One-line command editing for node faces (test runs, preview dev servers).
+ * Tokens split on whitespace; single or double quotes keep spaces inside one
+ * argument. The result is always an explicit executable plus argument list —
+ * the main process still receives that array and never a shell string.
  */
 export function parseCommandLine(value: string): { executable: string; arguments: string[] } {
   const tokens: string[] = [];
