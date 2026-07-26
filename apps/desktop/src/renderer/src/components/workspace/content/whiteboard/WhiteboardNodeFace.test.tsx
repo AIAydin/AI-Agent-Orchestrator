@@ -10,7 +10,12 @@ import {
   AgentSessionProvider,
   type AgentSessionContextValue,
 } from '../../runs/agent-session/AgentSessionContext.js';
-import { installPointerSupport, stubBoundingRect } from './drawing/pointer-testing.js';
+import {
+  clickSurface,
+  installMouseFocusDefault,
+  installPointerSupport,
+  stubBoundingRect,
+} from './drawing/pointer-testing.js';
 import { WhiteboardNodeFace } from './WhiteboardNodeFace.js';
 
 const updateNodeData = vi.fn();
@@ -164,31 +169,95 @@ describe('WhiteboardNodeFace drawing', () => {
   });
 });
 
+/**
+ * Driven with the whole browser click — pointer events, their mouse counterparts, and the
+ * focus move `mousedown` performs — because the text tool's one real failure mode lived
+ * entirely in the gap between the press and the release. A test that fires `pointerDown`
+ * alone reports a working text tool on a board where clicking does nothing.
+ */
 describe('WhiteboardNodeFace inline text', () => {
+  let disposeMouseFocus = (): void => undefined;
+
+  beforeEach(() => {
+    disposeMouseFocus = installMouseFocusDefault();
+  });
+  afterEach(() => {
+    disposeMouseFocus();
+  });
+
+  /** Picks the text tool, then clicks the board the way a mouse does. */
+  function clickWithTextTool(x = 40, y = 60): void {
+    fireEvent.click(screen.getByRole('button', { name: 'Add text' }));
+    clickSurface(canvas(), x, y);
+  }
+
+  function editor(): HTMLInputElement {
+    return screen.getByRole<HTMLInputElement>('textbox', { name: 'Whiteboard text' });
+  }
+
+  it('leaves a focused editor on the board after the click completes', () => {
+    renderFace();
+    clickWithTextTool();
+
+    // The surface takes focus on mousedown; the editor must still end up with the caret.
+    expect(document.activeElement).toBe(editor());
+  });
+
+  it('shows typed text in the editor before it is committed', () => {
+    renderFace();
+    clickWithTextTool();
+    fireEvent.change(editor(), { target: { value: 'Login scr' } });
+
+    expect(editor().value).toBe('Login scr');
+    expect(updateNodeData).not.toHaveBeenCalled();
+  });
+
   it('commits typed text at the clicked point and tracks the annotation', () => {
     renderFace();
-    fireEvent.click(screen.getByRole('button', { name: 'Add text' }));
-    fireEvent.pointerDown(canvas(), { clientX: 40, clientY: 60, pointerId: 1 });
+    clickWithTextTool();
 
-    const input = screen.getByRole('textbox', { name: 'Whiteboard text' });
-    fireEvent.change(input, { target: { value: 'Login screen' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.change(editor(), { target: { value: 'Login screen' } });
+    fireEvent.keyDown(editor(), { key: 'Enter' });
 
     const patch = lastPatch();
     expect(patch.excalidraw.elements).toMatchObject([{ type: 'text', x: 40, y: 60 }]);
     expect(patch.annotationIds).toEqual([patch.excalidraw.elements[0]?.id]);
   });
 
+  it('commits the draft when the editor loses focus', () => {
+    renderFace();
+    clickWithTextTool();
+
+    fireEvent.change(editor(), { target: { value: 'Committed by blur' } });
+    fireEvent.blur(editor());
+
+    expect(lastPatch().excalidraw.elements).toMatchObject([{ type: 'text' }]);
+  });
+
   it('discards the draft on Escape', () => {
     renderFace();
-    fireEvent.click(screen.getByRole('button', { name: 'Add text' }));
-    fireEvent.pointerDown(canvas(), { clientX: 40, clientY: 60, pointerId: 1 });
+    clickWithTextTool();
 
-    const input = screen.getByRole('textbox', { name: 'Whiteboard text' });
-    fireEvent.change(input, { target: { value: 'Discard me' } });
-    fireEvent.keyDown(input, { key: 'Escape' });
+    fireEvent.change(editor(), { target: { value: 'Discard me' } });
+    fireEvent.keyDown(editor(), { key: 'Escape' });
 
     expect(updateNodeData).not.toHaveBeenCalled();
+    expect(screen.queryByRole('textbox', { name: 'Whiteboard text' })).toBeNull();
+  });
+
+  it('draws the committed text on the board and keeps it across a re-render', () => {
+    const view = render(<ControlledFace />);
+    clickWithTextTool(120, 200);
+    fireEvent.change(editor(), { target: { value: 'Persisted line' } });
+    fireEvent.keyDown(editor(), { key: 'Enter' });
+
+    const drawn = (): (string | null)[] =>
+      [...canvas().querySelectorAll('text')].map((node) => node.textContent);
+    expect(drawn()).toEqual(['Persisted line']);
+
+    // Re-rendering must redraw from the persisted node data, not from the discarded draft.
+    view.rerender(<ControlledFace />);
+    expect(drawn()).toEqual(['Persisted line']);
     expect(screen.queryByRole('textbox', { name: 'Whiteboard text' })).toBeNull();
   });
 });

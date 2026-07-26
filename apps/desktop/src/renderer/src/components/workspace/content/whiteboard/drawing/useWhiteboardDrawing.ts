@@ -38,6 +38,7 @@ export type WhiteboardDraft =
     }
   | { readonly kind: 'arrow'; readonly start: WhiteboardPoint; readonly current: WhiteboardPoint }
   | { readonly kind: 'stroke'; readonly points: readonly WhiteboardPoint[] }
+  | { readonly kind: 'text'; readonly point: WhiteboardPoint }
   | {
       readonly kind: 'move';
       readonly id: string;
@@ -136,7 +137,13 @@ export function useWhiteboardDrawing({
         return;
       }
       if (tool === 'text') {
-        setTextDraft({ id: null, point, value: '' });
+        // Only remember where the caret goes. The editor itself is mounted on release by
+        // `endGesture`, never on press: `mousedown` follows `pointerdown` and its default
+        // action moves focus to whatever is under the pointer — here the focusable drawing
+        // surface. An editor mounted during `pointerdown` is therefore blurred microseconds
+        // later, and the blur-commits-the-draft rule tears it straight back down, so the
+        // text tool looks like it does nothing at all.
+        setDraft({ kind: 'text', point });
         return;
       }
       if (tool === 'select') {
@@ -175,6 +182,10 @@ export function useWhiteboardDrawing({
   const endGesture = useCallback(() => {
     setDraft(null);
     if (draft === null || readOnly) return;
+    if (draft.kind === 'text') {
+      setTextDraft({ id: null, point: draft.point, value: '' });
+      return;
+    }
     const created = createdElement(draft);
     if (created !== null) {
       commit({ ...document, elements: [...elements, created] }, undefined);

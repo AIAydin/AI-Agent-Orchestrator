@@ -277,6 +277,26 @@ describe('cancelling and locking', () => {
 });
 
 describe('inline text', () => {
+  it('opens the editor on release rather than on press', () => {
+    const { result } = setup();
+    act(() => {
+      result.current.setTool('text');
+    });
+    act(() => {
+      result.current.beginGesture([40, 60]);
+    });
+
+    // The press must leave nothing to focus: the browser moves focus to the drawing
+    // surface right after `pointerdown`, which would blur an editor mounted here.
+    expect(result.current.textDraft).toBeNull();
+
+    act(() => {
+      result.current.endGesture();
+    });
+
+    expect(result.current.textDraft).toMatchObject({ id: null, point: [40, 60], value: '' });
+  });
+
   it('creates a text element at the clicked point and tracks it as an annotation', () => {
     const { result, onPersist } = setup(documentOf(), { annotationIds: ['existing'] });
     act(() => {
@@ -284,6 +304,9 @@ describe('inline text', () => {
     });
     act(() => {
       result.current.beginGesture([40, 60]);
+    });
+    act(() => {
+      result.current.endGesture();
     });
 
     expect(result.current.textDraft).toMatchObject({ id: null, point: [40, 60], value: '' });
@@ -310,6 +333,9 @@ describe('inline text', () => {
       result.current.beginGesture([40, 60]);
     });
     act(() => {
+      result.current.endGesture();
+    });
+    act(() => {
       result.current.changeText('   ');
     });
     act(() => {
@@ -327,6 +353,9 @@ describe('inline text', () => {
     });
     act(() => {
       result.current.beginGesture([40, 60]);
+    });
+    act(() => {
+      result.current.endGesture();
     });
     act(() => {
       result.current.changeText('Discard me');
