@@ -22,11 +22,11 @@ test('canvas undo and redo checkpoints survive full process restarts', async () 
     ({ app: electronApp } = await openFreshDemo(userDataDirectory, externalRequests));
     let page = await electronApp.firstWindow();
 
-    await addAgentFromCommandPalette(page);
-    const agentNode = page.getByRole('article', { name: /^Agent: /u });
-    await expect(agentNode).toBeVisible();
-    await runCanvasNodeContextAction(page, agentNode, 'Delete');
-    await expect(agentNode).toHaveCount(0);
+    await addBriefFromCommandPalette(page);
+    const briefNode = page.getByRole('article', { name: /^Product brief: /u });
+    await expect(briefNode).toBeVisible();
+    await runCanvasNodeContextAction(page, briefNode, 'Delete');
+    await expect(briefNode).toHaveCount(0);
 
     await electronApp.close();
     electronApp = null;
@@ -34,7 +34,7 @@ test('canvas undo and redo checkpoints survive full process restarts', async () 
     ({ app: electronApp, page } = await reopenDemo(userDataDirectory, externalRequests));
     await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
     await page.keyboard.press(`${shortcutModifier}+Z`);
-    await expect(page.getByRole('article', { name: /^Agent: /u })).toBeVisible();
+    await expect(page.getByRole('article', { name: /^Product brief: /u })).toBeVisible();
 
     await electronApp.close();
     electronApp = null;
@@ -42,7 +42,7 @@ test('canvas undo and redo checkpoints survive full process restarts', async () 
     ({ app: electronApp, page } = await reopenDemo(userDataDirectory, externalRequests));
     await expect(page.getByRole('button', { name: 'Redo' })).toBeEnabled();
     await page.keyboard.press(`${shortcutModifier}+Shift+Z`);
-    await expect(page.getByRole('article', { name: /^Agent: /u })).toHaveCount(0);
+    await expect(page.getByRole('article', { name: /^Product brief: /u })).toHaveCount(0);
     expect(externalRequests).toEqual([]);
   } finally {
     await closeElectronAfterTest(electronApp);
@@ -80,11 +80,15 @@ async function reopenDemo(
   return session;
 }
 
-async function addAgentFromCommandPalette(page: Page): Promise<void> {
+/**
+ * A product brief, not an agent: agent nodes launch a real CLI session as soon as they appear,
+ * which would tie this durability proof to whichever agent CLIs the computer has installed.
+ */
+async function addBriefFromCommandPalette(page: Page): Promise<void> {
   await page.keyboard.press(`${shortcutModifier}+K`);
   const palette = page.getByRole('dialog', { name: 'Command palette' });
   await expect(palette).toBeVisible();
-  await palette.getByPlaceholder('Search actions…').fill('Add an agent');
+  await palette.getByPlaceholder('Search actions…').fill('Add a product brief');
   await page.keyboard.press('Enter');
   await expect(palette).toBeHidden();
 }

@@ -42,12 +42,14 @@ test('a moved project is detected, reviewed, and relinked entirely in the UI', a
     await page.keyboard.press(`${shortcutModifier}+K`);
     const palette = page.getByRole('dialog', { name: 'Command palette' });
     await expect(palette).toBeVisible();
-    await palette.getByPlaceholder('Search actions…').fill('Add an agent');
+    // A product brief, not an agent: agent nodes launch a real CLI session the moment they
+    // appear, which would tie this recovery proof to the agents installed on this computer.
+    await palette.getByPlaceholder('Search actions…').fill('Add a product brief');
     await page.keyboard.press('Enter');
-    const agentNode = page.getByRole('article', { name: /^Agent: /u });
-    await expect(agentNode).toBeVisible();
-    await runCanvasNodeContextAction(page, agentNode, 'Delete');
-    await expect(agentNode).toHaveCount(0);
+    const briefNode = page.getByRole('article', { name: /^Product brief: /u });
+    await expect(briefNode).toBeVisible();
+    await runCanvasNodeContextAction(page, briefNode, 'Delete');
+    await expect(briefNode).toHaveCount(0);
 
     await electronApp.close();
     electronApp = null;
@@ -94,7 +96,7 @@ test('a moved project is detected, reviewed, and relinked entirely in the UI', a
     await expect(page.locator('.canvas-title')).toContainText('0 nodes');
     await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
     await page.keyboard.press(`${shortcutModifier}+Z`);
-    await expect(page.getByRole('article', { name: /^Agent: /u })).toBeVisible();
+    await expect(page.getByRole('article', { name: /^Product brief: /u })).toBeVisible();
     expect(externalRequests).toEqual([]);
   } finally {
     await closeElectronAfterTest(electronApp);

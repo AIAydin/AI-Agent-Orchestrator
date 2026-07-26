@@ -179,13 +179,13 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       const canvasBox = await canvasRegion.boundingBox();
       const releasePlanBox = await releasePlan.boundingBox();
       if (!canvasBox || !releasePlanBox)
-        throw new Error('The canvas and release-plan node must be visible before adding a task.');
-      await templates.getByRole('button', { name: /^Task/ }).dragTo(canvasRegion, {
+        throw new Error('The canvas and release-plan node must be visible before adding a note.');
+      await templates.getByRole('button', { name: /^Note/ }).dragTo(canvasRegion, {
         targetPosition: separatedDropPosition(canvasBox, releasePlanBox),
       });
-      const taskNode = page.getByRole('article', { name: /^Task: /u });
-      await expect(taskNode).toBeVisible();
-      taskTitle = (await taskNode.getAttribute('aria-label'))?.replace(/^Task: /u, '') ?? '';
+      const noteNode = page.getByRole('article', { name: /^Note: /u });
+      await expect(noteNode).toBeVisible();
+      taskTitle = (await noteNode.getAttribute('aria-label'))?.replace(/^Note: /u, '') ?? '';
       expect(taskTitle).not.toBe('');
       await expect(page.locator('.canvas-title')).toContainText('2 nodes · 0 connections');
     });
@@ -197,10 +197,8 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await runCanvasNodeContextAction(page, releasePlan, 'Unlock');
       await expect(releasePlan.locator('[aria-label="Locked"]')).toHaveCount(0);
 
-      const source = releasePlan.locator('.react-flow__handle-right');
-      const target = page
-        .getByRole('article', { name: /^Task: /u })
-        .locator('.react-flow__handle-left');
+      const source = connectionHandle(releasePlan, 'source');
+      const target = connectionHandle(page.getByRole('article', { name: /^Note: /u }), 'target');
       await connectHandles(page, source, target);
       await expect(page.locator('.canvas-title')).toContainText('2 nodes · 1 connections');
       await expect(
@@ -215,19 +213,23 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await page.keyboard.press(`${shortcutModifier}+K`);
       const palette = page.getByRole('dialog', { name: 'Command palette' });
       await expect(palette).toBeVisible();
-      await palette.getByPlaceholder('Search actions…').fill('Add an agent');
+      // Deliberately not "Add an agent": agent nodes now launch a real CLI session the moment
+      // they appear, so a first-run journey would depend on whichever agents this computer has.
+      await palette.getByPlaceholder('Search actions…').fill('Add a product brief');
       await page.keyboard.press('Enter');
       await expect(palette).toBeHidden();
-      const agentNode = page.getByRole('article', { name: /^Agent: /u });
-      await expect(agentNode).toBeVisible();
+      const paletteNode = page
+        .getByRole('article', { name: /^Product brief: /u })
+        .filter({ hasNotText: 'Release plan' });
+      await expect(paletteNode).toBeVisible();
 
-      await clickExposedNodeEdge(page, agentNode);
-      await runCanvasNodeContextAction(page, agentNode, 'Delete');
-      await expect(agentNode).toHaveCount(0);
+      await clickExposedNodeEdge(page, paletteNode);
+      await runCanvasNodeContextAction(page, paletteNode, 'Delete');
+      await expect(paletteNode).toHaveCount(0);
       await page.keyboard.press(`${shortcutModifier}+Z`);
-      await expect(agentNode).toBeVisible();
+      await expect(paletteNode).toBeVisible();
       await page.keyboard.press(`${shortcutModifier}+Shift+Z`);
-      await expect(agentNode).toHaveCount(0);
+      await expect(paletteNode).toHaveCount(0);
 
       await page.keyboard.press(`${shortcutModifier}+K`);
       await expect(palette).toBeVisible();
@@ -268,7 +270,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await expect(
         page.getByRole('article', { name: 'Product brief: Release plan' }),
       ).toBeVisible();
-      await expect(page.getByRole('article', { name: /^Task: /u })).toBeVisible();
+      await expect(page.getByRole('article', { name: /^Note: /u })).toBeVisible();
       await expect(
         page
           .getByRole('article', { name: 'Product brief: Release plan' })
@@ -325,6 +327,16 @@ test('a first-time user can configure and persist a local visual workshop', asyn
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });
+
+/**
+ * Connection handles render as siblings of `.canvas-node`, not children, so the node surface can
+ * clip its own chrome without slicing the handles. Reach them through the React Flow wrapper.
+ */
+function connectionHandle(node: Locator, side: 'source' | 'target'): Locator {
+  return node
+    .locator('xpath=ancestor::*[contains(@class, "react-flow__node")][1]')
+    .locator(`.node-handle.${side}`);
+}
 
 async function connectHandles(page: Page, source: Locator, target: Locator): Promise<void> {
   const sourcePoint = await exposedHandlePoint(source, 'source');
