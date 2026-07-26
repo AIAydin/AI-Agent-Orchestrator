@@ -1,6 +1,16 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -20,6 +30,7 @@ import {
   type StoredRunWorktreeState,
 } from '../../storage-schemas.js';
 import { ManagedTerminalWorkspaceService } from './service.js';
+import { claudeHistoryDirectoryName } from './session-history-link.js';
 
 const execFileAsync = promisify(execFile);
 const PROJECT_ID = '10000000-0000-4000-8000-000000000001';
@@ -186,6 +197,72 @@ describe('ManagedTerminalWorkspaceService', () => {
       'claude-test-model',
     ]);
     await service.discard(workspace);
+  });
+
+  it("lets a worktree session read and write the project's Claude history", async () => {
+    const fixture = await createFixture();
+    const home = path.join(fixture.repository, '..', 'home');
+    const projectHistory = path.join(
+      home,
+      '.claude',
+      'projects',
+      claudeHistoryDirectoryName(fixture.repository),
+    );
+    await mkdir(projectHistory, { recursive: true });
+    await writeFile(path.join(projectHistory, 'existing-session.jsonl'), '{"type":"summary"}\n');
+    const service = new ManagedTerminalWorkspaceService(fixture.store, () => fixture.settings, {
+      repositories: fixture.repositories,
+      worktrees: new WorktreeService(fixture.repositories),
+      createId: () => RUN_IDS[0],
+      now: () => new Date(NOW),
+      homeDirectory: () => home,
+    });
+
+    const workspace = await service.provision({
+      project: fixture.project,
+      nodeId: 'agent-one',
+      adapterId: 'claude',
+    });
+
+    // What the CLI running in the worktree will look at, derived from its cwd exactly as claude does.
+    const worktreeHistory = path.join(
+      home,
+      '.claude',
+      'projects',
+      claudeHistoryDirectoryName(workspace.rootPath),
+    );
+    expect((await lstat(worktreeHistory)).isSymbolicLink()).toBe(true);
+    expect(await realpath(worktreeHistory)).toBe(await realpath(projectHistory));
+    // Forward: the resume picker in the worktree sees the project's real sessions.
+    expect(await readdir(worktreeHistory)).toEqual(['existing-session.jsonl']);
+    // Reverse: a session started in the worktree stays resumable from the project checkout.
+    await writeFile(path.join(worktreeHistory, 'worktree-session.jsonl'), '{"type":"summary"}\n');
+    expect((await readdir(projectHistory)).sort()).toEqual([
+      'existing-session.jsonl',
+      'worktree-session.jsonl',
+    ]);
+  });
+
+  it('still provisions when the project has no Claude history to inherit', async () => {
+    const fixture = await createFixture();
+    const home = path.join(fixture.repository, '..', 'home');
+    const service = new ManagedTerminalWorkspaceService(fixture.store, () => fixture.settings, {
+      repositories: fixture.repositories,
+      worktrees: new WorktreeService(fixture.repositories),
+      createId: () => RUN_IDS[0],
+      now: () => new Date(NOW),
+      homeDirectory: () => home,
+    });
+
+    const workspace = await service.provision({
+      project: fixture.project,
+      nodeId: 'agent-one',
+      adapterId: 'claude',
+    });
+
+    expect(workspace.rootPath).not.toBe(fixture.repository);
+    // No history to inherit means nothing is invented under the owner's home either.
+    await expect(readdirIfPresent(path.join(home, '.claude', 'projects'))).resolves.toEqual([]);
   });
 });
 
@@ -383,6 +460,15 @@ function session(
 async function git(cwd: string, args: readonly string[]): Promise<string> {
   const result = await execFileAsync('git', args, { cwd });
   return result.stdout.trim();
+}
+
+async function readdirIfPresent(directory: string): Promise<string[]> {
+  try {
+    return await readdir(directory);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return [];
+    throw error;
+  }
 }
 
 async function readFileIfPresent(file: string): Promise<string | null> {

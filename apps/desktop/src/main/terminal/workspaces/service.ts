@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
 import path from 'node:path';
 
 import {
@@ -29,6 +30,12 @@ import type {
   PreparedTerminalWorkspace,
   TerminalWorkspaceManager,
 } from './contracts.js';
+import {
+  linkSessionHistoryForWorktree,
+  nodeSessionHistoryFileSystem,
+  type SessionHistoryFileSystem,
+  type SessionHistoryLinkOutcome,
+} from './session-history-link.js';
 
 type ManagedTerminalWorkspaceStore = Pick<
   LocalStore,
@@ -40,6 +47,9 @@ interface ManagedTerminalWorkspaceOptions {
   readonly worktrees?: WorktreeService;
   readonly createId?: () => string;
   readonly now?: () => Date;
+  /** Injectable so tests exercise session-history linking without touching the real `~`. */
+  readonly homeDirectory?: () => string;
+  readonly sessionHistoryFileSystem?: SessionHistoryFileSystem;
 }
 
 /**
@@ -52,6 +62,8 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
   readonly #worktrees: WorktreeService;
   readonly #createId: () => string;
   readonly #now: () => Date;
+  readonly #homeDirectory: () => string;
+  readonly #sessionHistoryFileSystem: SessionHistoryFileSystem;
 
   public constructor(
     private readonly store: ManagedTerminalWorkspaceStore,
@@ -62,6 +74,9 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     this.#worktrees = options.worktrees ?? new WorktreeService(this.#repositories);
     this.#createId = options.createId ?? randomUUID;
     this.#now = options.now ?? (() => new Date());
+    this.#homeDirectory = options.homeDirectory ?? homedir;
+    this.#sessionHistoryFileSystem =
+      options.sessionHistoryFileSystem ?? nodeSessionHistoryFileSystem;
   }
 
   public async provision(input: {
@@ -152,6 +167,14 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       }
       throw error;
     }
+    await this.#inheritProjectSessionHistory({
+      runtime,
+      adapterId: input.adapterId,
+      ownership: provisioned.ownership,
+      projectId: currentProject.id,
+      nodeId: input.nodeId,
+      runId,
+    });
     const workspace: PreparedTerminalWorkspace = {
       ownership: provisioned.ownership,
       rootPath: provisioned.ownership.worktreePath,
@@ -494,6 +517,52 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     });
   }
 
+  /**
+   * A managed worktree is a directory the agent CLI has never seen, and CLIs that key their session
+   * history by working directory therefore start it empty -- the resume picker says "No sessions
+   * yet" even though the project has years of history. Before the CLI ever runs, point the
+   * worktree's history directory at the project's, so resume lists the owner's real sessions and
+   * sessions started in the worktree are written into the project's history (and so stay resumable
+   * from the project checkout after the worktree is cleaned up).
+   *
+   * Best effort in every direction: a missing project history, an occupied destination, a read-only
+   * home, or a platform without symbolic links is audited and ignored, never surfaced into the
+   * launch path. Docker-isolated sessions are skipped outright -- that runtime bind-mounts the
+   * worktree at a container path and shares nothing else from the host, so the container's CLI
+   * never reads the host's history at all.
+   */
+  async #inheritProjectSessionHistory(input: {
+    readonly runtime: 'host' | 'docker';
+    readonly adapterId: string;
+    readonly ownership: WorktreeOwnership;
+    readonly projectId: string;
+    readonly nodeId: string;
+    readonly runId: string;
+  }): Promise<void> {
+    if (input.runtime !== 'host') return;
+    const outcome = await linkSessionHistoryForWorktree(
+      {
+        adapterId: input.adapterId,
+        repositoryRoot: input.ownership.repositoryRoot,
+        worktreePath: input.ownership.worktreePath,
+        homeDirectory: this.#homeDirectory(),
+      },
+      this.#sessionHistoryFileSystem,
+    );
+    this.#safeAudit('session-history-link', sessionHistoryAuditOutcome(outcome), {
+      projectId: input.projectId,
+      nodeId: input.nodeId,
+      runId: input.runId,
+      adapterId: input.adapterId,
+      ...(outcome.linked
+        ? {
+            projectHistoryDirectory: outcome.location.projectHistoryDirectory,
+            worktreeHistoryDirectory: outcome.location.worktreeHistoryDirectory,
+          }
+        : { reason: outcome.reason, detail: outcome.detail }),
+    });
+  }
+
   #persistedAgentConfiguration(
     projectId: string,
     nodeId: string,
@@ -622,6 +691,17 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       // The worktree/session result must not be rewritten if audit storage is already unavailable.
     }
   }
+}
+
+/**
+ * `denied` covers the deliberate no-ops -- an adapter whose history is not directory-keyed, no
+ * project history to inherit, something already at the destination -- and is never an error.
+ */
+function sessionHistoryAuditOutcome(
+  outcome: SessionHistoryLinkOutcome,
+): 'allowed' | 'denied' | 'failed' {
+  if (outcome.linked) return 'allowed';
+  return outcome.reason === 'link-failed' ? 'failed' : 'denied';
 }
 
 function effectiveAgentModel(
