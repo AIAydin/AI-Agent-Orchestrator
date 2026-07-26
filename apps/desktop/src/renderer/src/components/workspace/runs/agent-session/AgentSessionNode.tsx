@@ -78,9 +78,6 @@ export function AgentSessionNode({
     settings,
     runnableAgents,
     graphReadOnly,
-    gateFor,
-    recheckProvider,
-    openSettings,
     reportError,
     flushCanvas,
     updateNodeData,
@@ -138,10 +135,8 @@ export function AgentSessionNode({
 
   const readOnly = graphReadOnly || data.locked || interactions.readOnly;
   const theme = providerTheme(adapter);
-  const gate = gateFor(adapter);
   const unavailableReason = agentSessionUnavailableReason(agent);
-  const blocked = gate !== null && gate.state !== 'connected';
-  const canStart = unavailableReason === null && !blocked;
+  const canStart = unavailableReason === null;
 
   const hasActiveSession = controller.session !== null && controller.active;
   const endedSession = controller.session !== null && !controller.active;
@@ -250,6 +245,18 @@ export function AgentSessionNode({
   };
 
   const startSession = (): void => provisionAndRelaunch();
+
+  // Zero-click sessions: an agent node IS its CLI. Once the initial session listing settles,
+  // a node without a live session launches one — creation and workspace reopen alike, even
+  // over a persisted ended session. At most once per mount (the ref survives StrictMode's
+  // re-run), so a session that dies rests on the exit strip instead of crash-looping.
+  const autoLaunchedRef = useRef(false);
+  useEffect(() => {
+    if (!controller.loaded || autoLaunchedRef.current) return;
+    autoLaunchedRef.current = true;
+    if (readOnly || !canStart || controller.active || controller.error !== null) return;
+    startSession();
+  });
 
   useEffect(() => {
     if (!pendingStartRef.current) return;
@@ -427,28 +434,17 @@ export function AgentSessionNode({
           </span>
           {unavailableReason !== null ? (
             <p className="agent-start-reason">{unavailableReason}</p>
-          ) : gate !== null && gate.warning !== null ? (
-            <div className="recovery-guidance warning">
-              <p>{gate.warning}</p>
-              <div className="recovery-guidance-actions">
-                <button type="button" className="button" onClick={() => recheckProvider(adapter)}>
-                  {gate.actionLabel}
-                </button>
-                <button type="button" className="button" onClick={() => openSettings()}>
-                  Open settings
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {canStart && (
+          ) : controller.error !== null ? (
             <button
               type="button"
               className="button primary"
               disabled={readOnly}
               onClick={() => startSession()}
             >
-              Start session
+              Retry
             </button>
+          ) : readOnly ? null : (
+            <p className="agent-start-reason">Starting…</p>
           )}
         </div>
       )}

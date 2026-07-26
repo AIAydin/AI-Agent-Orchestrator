@@ -15,12 +15,12 @@ import type {
   TerminalSessionView,
 } from '../../../../../../shared/terminal/index.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
-import type { AgentProviderGate } from '../useAgentProviderGate.js';
 import { CanvasNodeInteractionProvider } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
 import { AgentSessionProvider, type AgentSessionContextValue } from './AgentSessionContext.js';
 import { AgentSessionNode } from './AgentSessionNode.js';
 
 const controller = {
+  loaded: false,
   session: null as {
     id: string;
     status: string;
@@ -110,10 +110,7 @@ const settings: AppSettings = AppSettingsSchema.parse({
 
 const NODE_ID = 'node-x';
 
-let gate: AgentProviderGate | null = null;
 const spies = {
-  gateFor: vi.fn((): AgentProviderGate | null => gate),
-  recheckProvider: vi.fn(),
   openSettings: vi.fn(),
   reportError: vi.fn(),
   flushCanvas: vi.fn(() => Promise.resolve(true)),
@@ -135,8 +132,6 @@ function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentS
     settings,
     runnableAgents: [claude],
     graphReadOnly: false,
-    gateFor: spies.gateFor,
-    recheckProvider: spies.recheckProvider,
     openSettings: spies.openSettings,
     reportError: spies.reportError,
     flushCanvas: spies.flushCanvas,
@@ -220,7 +215,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  gate = null;
+  controller.loaded = false;
   controller.session = null;
   controller.active = false;
   controller.pendingPlan = null;
@@ -249,13 +244,13 @@ beforeEach(() => {
 });
 
 describe('AgentSessionNode', () => {
-  it('offers Start session on the start card and prepares a launch on click', async () => {
+  it('launches the CLI automatically once the session list settles', async () => {
+    controller.loaded = true;
     renderNode();
-    const start = screen.getByRole('button', { name: 'Start session' });
-    fireEvent.click(start);
-    // Peer provisioning now happens before prepareLaunch, so the launch fires only after that
-    // IPC round trip resolves — no longer synchronously within the click handler.
+    // Peer provisioning happens before prepareLaunch, so the launch fires only after that
+    // IPC round trip resolves — never synchronously within the render.
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('button', { name: 'Start session' })).toBeNull();
     expect(spies.flushCanvas).toHaveBeenCalledOnce();
     expect(spies.flushCanvas.mock.invocationCallOrder[0]).toBeLessThan(
       provisionMock.mock.invocationCallOrder[0]!,
@@ -264,9 +259,8 @@ describe('AgentSessionNode', () => {
 
   it('does not provision or launch when the current canvas cannot be saved', async () => {
     spies.flushCanvas.mockResolvedValueOnce(false);
+    controller.loaded = true;
     renderNode();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
 
     await waitFor(() =>
       expect(spies.reportError).toHaveBeenCalledWith(
@@ -275,6 +269,7 @@ describe('AgentSessionNode', () => {
     );
     expect(provisionMock).not.toHaveBeenCalled();
     expect(controller.prepareLaunch).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Start session' })).toBeNull();
   });
 
   it('requests a managed worktree and records the durable run returned by main', () => {
@@ -335,8 +330,8 @@ describe('AgentSessionNode', () => {
         extraArguments: ['--mcp-config', '/tmp/peer-mcp.json'],
       },
     });
+    controller.loaded = true;
     renderNode();
-    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
 
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
 
@@ -371,8 +366,8 @@ describe('AgentSessionNode', () => {
         extraArguments: [],
       },
     });
+    controller.loaded = true;
     renderNode();
-    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
 
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
     expect(await screen.findByText('Peer tools unavailable.')).toBeTruthy();
@@ -380,8 +375,8 @@ describe('AgentSessionNode', () => {
 
   it('still starts the session with a fallback hint when provisioning rejects', async () => {
     provisionMock.mockRejectedValueOnce(new Error('agent-peers hub unreachable'));
+    controller.loaded = true;
     renderNode();
-    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
 
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
     expect(await screen.findByText('Peer tools unavailable.')).toBeTruthy();
@@ -412,23 +407,63 @@ describe('AgentSessionNode', () => {
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
   });
 
-  it('hides Start behind a provider gate warning and rechecks the provider', () => {
-    gate = {
-      providerId: 'anthropic' as never,
-      productName: 'Claude',
-      state: 'unknown',
-      settled: true,
-      busy: false,
-      blockedReason: 'needs a refresh',
-      warning: 'needs a refresh',
-      actionLabel: 'Refresh status',
-      busyActionLabel: 'Refreshing…',
-    };
+  it('shows a terse Starting state — no gate, settings, or Start buttons on the node', () => {
     renderNode();
+    expect(screen.getByText('Starting…')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Start session' })).toBeNull();
-    expect(screen.getByText('needs a refresh')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
-    expect(spies.recheckProvider).toHaveBeenCalledWith('claude');
+    expect(screen.queryByRole('button', { name: 'Refresh status' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open settings' })).toBeNull();
+  });
+
+  it('does not launch before the session list has settled', () => {
+    renderNode();
+    expect(provisionMock).not.toHaveBeenCalled();
+    expect(controller.prepareLaunch).not.toHaveBeenCalled();
+  });
+
+  it('launches only once per mount, even across re-renders', async () => {
+    controller.loaded = true;
+    const view = render(nodeTree(nodeData()));
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+    view.rerender(nodeTree(nodeData()));
+    view.rerender(nodeTree(nodeData()));
+    expect(controller.prepareLaunch).toHaveBeenCalledOnce();
+    expect(provisionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not launch when the node is read-only', () => {
+    controller.loaded = true;
+    renderNode(nodeData({ locked: true }));
+    expect(provisionMock).not.toHaveBeenCalled();
+    expect(controller.prepareLaunch).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Start session' })).toBeNull();
+  });
+
+  it('does not launch over a reattached live session', () => {
+    controller.loaded = true;
+    controller.session = { id: 's1', status: 'running' };
+    controller.active = true;
+    renderNode();
+    expect(provisionMock).not.toHaveBeenCalled();
+    expect(controller.prepareLaunch).not.toHaveBeenCalled();
+    expect(screen.getByTestId('terminal-surface')).toBeTruthy();
+  });
+
+  it('relaunches over a persisted ended session on mount', async () => {
+    controller.loaded = true;
+    controller.session = { id: 's0', status: 'exited', exitCode: 0, exitSignal: null };
+    controller.active = false;
+    renderNode();
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+  });
+
+  it('offers Retry instead of auto-launching after a controller error', async () => {
+    controller.loaded = true;
+    controller.error = 'The provider CLI could not start.';
+    renderNode();
+    expect(controller.prepareLaunch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
   });
 
   it('renders the terminal surface while a session is active', () => {
@@ -566,9 +601,9 @@ describe('AgentSessionNode', () => {
         extraArguments: [],
       },
     });
+    controller.loaded = true;
     const view = render(nodeTree(nodeData()));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
     expect(provisionMock).toHaveBeenCalledTimes(1);
     expect(

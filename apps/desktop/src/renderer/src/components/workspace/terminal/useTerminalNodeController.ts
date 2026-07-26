@@ -30,6 +30,8 @@ interface UseTerminalNodeControllerOptions {
 }
 
 export interface TerminalNodeController {
+  /** True once the initial session listing has settled, whether it loaded or failed. */
+  readonly loaded: boolean;
   readonly session: TerminalSessionView | null;
   readonly sessions: readonly TerminalSessionView[];
   readonly output: readonly TerminalOutputChunk[];
@@ -59,6 +61,7 @@ export function useTerminalNodeController({
   onSessionChange,
   operations,
 }: UseTerminalNodeControllerOptions): TerminalNodeController {
+  const [loaded, setLoaded] = useState(false);
   const [session, setSessionState] = useState<TerminalSessionView | null>(null);
   const [sessions, setSessions] = useState<readonly TerminalSessionView[]>([]);
   const [output, setOutputState] = useState<readonly TerminalOutputChunk[]>([]);
@@ -217,7 +220,10 @@ export function useTerminalNodeController({
         reportError(cause, 'Could not load the terminal sessions.');
       }
     } finally {
-      if (generation === generationRef.current) clearBusy('loading');
+      if (generation === generationRef.current) {
+        clearBusy('loading');
+        if (mountedRef.current) setLoaded(true);
+      }
     }
   }, [
     chooseAndLoadSession,
@@ -478,6 +484,7 @@ export function useTerminalNodeController({
   }, [clearBusy, mergeSession, operations, reportError]);
 
   return {
+    loaded,
     session,
     sessions,
     output,
