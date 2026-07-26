@@ -1366,7 +1366,7 @@ export class TerminalService {
   #automaticPeerArguments(pending: PendingLaunch, adapterId: string): readonly string[] {
     if (pending.peerProvisionId === undefined) return [];
     // Peer material (hub URL, config paths) is host-scoped and would dangle inside a container.
-    if ((workspace.runtime ?? 'host') === 'docker') {
+    if ((pending.workspace?.runtime ?? 'host') === 'docker') {
       throw new Error('Peer tools are not available in Docker isolated sessions yet.');
     }
     const material = this.#peerProvider?.launchMaterialForProvision(pending.peerProvisionId);
