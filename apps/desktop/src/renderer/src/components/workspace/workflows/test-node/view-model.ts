@@ -13,7 +13,6 @@ export interface TestNodeAttemptView {
   readonly updatedAt: string;
   readonly output: string;
   readonly outputTruncated: boolean;
-  readonly approvalRequired: boolean;
   readonly active: boolean;
 }
 
@@ -54,7 +53,6 @@ export function latestTestAttempt(
           updatedAt: execution.updatedAt,
           output,
           outputTruncated: check?.outputTruncated ?? matching.some((event) => event.truncated),
-          approvalRequired: execution.approvals.some((approval) => approval.nodeId === nodeId),
           active,
         },
       ];
@@ -67,7 +65,6 @@ export function latestTestAttempt(
 }
 
 export function testStatusLabel(attempt: TestNodeAttemptView): string {
-  if (attempt.approvalRequired) return 'Review required';
   return {
     queued: 'Queued',
     running: 'Running',

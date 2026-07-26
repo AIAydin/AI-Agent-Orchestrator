@@ -113,11 +113,6 @@ export function TestNodeFace({ id, data }: NodeFaceProps): JSX.Element {
           )}
         </div>
 
-        {current?.approvalRequired === true ? (
-          <p role="status" className="test-face-warning">
-            Waiting for your approval in the Workflows panel.
-          </p>
-        ) : null}
         {current?.statusReason !== undefined ? (
           <p className="test-face-warning">{current.statusReason}</p>
         ) : null}
