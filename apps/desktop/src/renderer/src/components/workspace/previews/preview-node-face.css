@@ -153,8 +153,10 @@ webview.preview-face-webview {
   gap: 4px;
   color: var(--text-soft);
 }
-.preview-face-row select {
+.preview-face-row select,
+.preview-face-row input {
   font-size: var(--text-xs);
+  min-width: 0;
 }
 .preview-face-orient,
 .preview-face-settings-link {
