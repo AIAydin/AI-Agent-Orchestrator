@@ -71,6 +71,27 @@ describe('ProjectVideoService', () => {
     ).resolves.toMatchObject({ size: MP4_BYTES.length });
   });
 
+  it('plays a git-ignored project video and still refuses sensitive paths', async () => {
+    await writeFile(path.join(projectRoot, '.gitignore'), 'recordings/\n');
+    await mkdir(path.join(projectRoot, 'recordings'));
+    await writeFile(path.join(projectRoot, 'recordings', 'demo.mp4'), MP4_BYTES);
+    await mkdir(path.join(projectRoot, '.ssh'));
+    await writeFile(path.join(projectRoot, '.ssh', 'demo.mp4'), MP4_BYTES);
+    const video = service();
+
+    const loaded = await video.load({
+      projectId: PROJECT_ID,
+      relativePath: 'recordings/demo.mp4',
+    });
+    expect(loaded).toMatchObject({ status: 'available', mimeType: 'video/mp4' });
+    if (loaded.status !== 'available') throw new Error('Expected playable video');
+    await expect(video.fileUrlForProtocolRequest(loaded.playbackUrl)).resolves.toMatch(/^file:/u);
+
+    await expect(
+      video.load({ projectId: PROJECT_ID, relativePath: '.ssh/demo.mp4' }),
+    ).rejects.toMatchObject({ code: 'SENSITIVE_FILE' });
+  });
+
   it('rejects disguised content and invalid capability URLs', async () => {
     await writeFile(path.join(projectRoot, 'fake.mp4'), 'not a video');
     await expect(

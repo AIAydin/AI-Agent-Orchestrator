@@ -1,9 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { loadProjectIgnoreMatcher } from '@forgeboard/core';
 import type { BrowserWindow, Dialog } from 'electron';
 
-import { assertFileContentAllowed } from '../../file-domain/policy.js';
+import { assertFileContentNotSensitive } from '../../file-domain/policy.js';
 import { readProjectDocument } from '../../file-domain/reader.js';
 import { saveProjectDocument } from '../../file-domain/writer.js';
 import type { GitReviewTargetView } from '../../../shared/git/contracts.js';
@@ -141,8 +140,7 @@ export class ConflictFileService {
     if (inspection.operation !== plan.operation || current?.currentSha256 !== plan.expectedSha256) {
       throw new Error('The conflict operation or file changed after review.');
     }
-    const matcher = await loadProjectIgnoreMatcher(plan.repositoryRoot);
-    assertFileContentAllowed(matcher, plan.path);
+    assertFileContentNotSensitive(plan.path);
     await saveProjectDocument(
       plan.repositoryRoot,
       plan.target.projectId,
@@ -201,10 +199,9 @@ export class ConflictFileService {
       throw new Error(
         `Resolve the conflict set in smaller steps; more than ${String(MAX_CONFLICTS)} paths are active.`,
       );
-    const matcher = await loadProjectIgnoreMatcher(target.repositoryRoot);
     const files = await Promise.all(
       state.conflictedPaths.map(async (path) => {
-        assertFileContentAllowed(matcher, path);
+        assertFileContentNotSensitive(path);
         const current = await readProjectDocument(
           target.repositoryRoot,
           target.view.projectId,

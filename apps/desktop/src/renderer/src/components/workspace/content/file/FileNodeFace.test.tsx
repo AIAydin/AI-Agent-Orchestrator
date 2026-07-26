@@ -90,13 +90,25 @@ describe('FileNodeFace', () => {
 
   it('surfaces the read policy message for files the renderer cannot read', async () => {
     read.mockRejectedValue({
-      code: 'IGNORED_FILE',
-      message: 'Ignored files are not exposed to the embedded renderer.',
+      code: 'SENSITIVE_FILE',
+      message: 'Sensitive files are not exposed to the embedded renderer.',
     });
     render(<FileNodeFace id="n1" data={nodeData({ file: fileReference })} />);
     expect(
-      await screen.findByText('Ignored files are not exposed to the embedded renderer.'),
+      await screen.findByText('Sensitive files are not exposed to the embedded renderer.'),
     ).toBeTruthy();
+  });
+
+  it('renders the code of a git-ignored file like any other file', async () => {
+    const ignored = { ...fileReference, relativePath: '.gemini/settings.json' };
+    read.mockResolvedValue(
+      document({ relativePath: ignored.relativePath, content: '{ "theme": "dark" }\n' }),
+    );
+    render(<FileNodeFace id="n1" data={nodeData({ file: ignored })} />);
+
+    expect(screen.getByText('settings.json')).toBeTruthy();
+    const code = await screen.findByTestId('code-view');
+    expect(code.textContent).toContain('{ "theme": "dark" }');
   });
 
   it('keeps binary files content-free with a terse reason', async () => {
@@ -116,9 +128,7 @@ describe('FileNodeFace', () => {
   });
 
   it('marks a missing file instead of reading it', () => {
-    render(
-      <FileNodeFace id="n1" data={nodeData({ file: { ...fileReference, missing: true } })} />,
-    );
+    render(<FileNodeFace id="n1" data={nodeData({ file: { ...fileReference, missing: true } })} />);
     expect(screen.getByText('This file is missing on disk.')).toBeTruthy();
     expect(read).not.toHaveBeenCalled();
   });

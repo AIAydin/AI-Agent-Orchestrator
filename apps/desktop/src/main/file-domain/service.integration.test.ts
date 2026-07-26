@@ -197,7 +197,7 @@ describe('ProjectFileService', () => {
     );
   });
 
-  it('blocks absolute paths, traversal, ignored content, sensitive content, and symlink escapes', async () => {
+  it('blocks absolute paths, traversal, sensitive content, and symlink escapes', async () => {
     await writeFile(path.join(projectRoot, '.gitignore'), 'ignored.txt\n');
     await writeFile(path.join(projectRoot, 'ignored.txt'), 'ignored\n');
     await writeFile(path.join(projectRoot, '.env'), 'TOKEN=secret\n');
@@ -215,10 +215,10 @@ describe('ProjectFileService', () => {
       service.read({ projectId: PROJECT_ID, relativePath: '../outside/secret.txt' }),
       'INVALID_REQUEST',
     );
-    await expectCode(
-      service.read({ projectId: PROJECT_ID, relativePath: 'ignored.txt' }),
-      'IGNORED_FILE',
-    );
+    // Ignored is not a refusal: the file opens with its real content.
+    expect(
+      await service.read({ projectId: PROJECT_ID, relativePath: 'ignored.txt' }),
+    ).toMatchObject({ contentKind: 'text', content: 'ignored\n' });
     await expectCode(
       service.read({ projectId: PROJECT_ID, relativePath: '.env' }),
       'SENSITIVE_FILE',
@@ -352,17 +352,84 @@ describe('ProjectFileService', () => {
       'SENSITIVE_FILE',
     );
     await expectCode(
-      service.read({ projectId: PROJECT_ID, relativePath: 'ignored.txt' }),
-      'IGNORED_FILE',
-    );
-    await expectCode(
       service.prepareOpenExternal({ projectId: PROJECT_ID, relativePath: '.env' }),
       'SENSITIVE_FILE',
     );
-    await expectCode(
-      service.prepareOpenExternal({ projectId: PROJECT_ID, relativePath: 'ignored.txt' }),
-      'IGNORED_FILE',
+    expect(
+      await service.prepareOpenExternal({ projectId: PROJECT_ID, relativePath: 'ignored.txt' }),
+    ).toEqual({
+      projectId: PROJECT_ID,
+      relativePath: 'ignored.txt',
+      absolutePath: path.join(projectRoot, 'ignored.txt'),
+      kind: 'file',
+    });
+  });
+
+  it('opens, reverts, and saves git-ignored files exactly like tracked ones', async () => {
+    await writeFile(
+      path.join(projectRoot, '.gitignore'),
+      '.gemini/\nnode_modules/\nbuild-output.txt\n',
     );
+    await mkdir(path.join(projectRoot, '.gemini'));
+    const nested = path.join(projectRoot, '.gemini', 'settings.json');
+    await writeFile(nested, '{ "theme": "dark" }\n');
+    await writeFile(path.join(projectRoot, 'build-output.txt'), 'generated\n');
+    const service = new ProjectFileService(store);
+
+    const opened = await service.read({
+      projectId: PROJECT_ID,
+      relativePath: '.gemini/settings.json',
+    });
+    expect(opened).toMatchObject({
+      contentKind: 'text',
+      content: '{ "theme": "dark" }\n',
+      readOnly: false,
+      readOnlyReason: null,
+    });
+    expect(
+      await service.read({ projectId: PROJECT_ID, relativePath: 'build-output.txt' }),
+    ).toMatchObject({ contentKind: 'text', content: 'generated\n' });
+
+    if (opened.sha256 === null) throw new Error('Expected a text hash for an ignored file.');
+    await expect(
+      service.save({
+        projectId: PROJECT_ID,
+        relativePath: '.gemini/settings.json',
+        expectedSha256: opened.sha256,
+        content: '{ "theme": "light" }\n',
+      }),
+    ).resolves.toMatchObject({ content: '{ "theme": "light" }\n' });
+    expect(await readFile(nested, 'utf8')).toBe('{ "theme": "light" }\n');
+    expect(
+      await service.revert({ projectId: PROJECT_ID, relativePath: '.gemini/settings.json' }),
+    ).toMatchObject({ content: '{ "theme": "light" }\n' });
+  });
+
+  it('refuses sensitive content even when .gitignore also lists it', async () => {
+    await writeFile(path.join(projectRoot, '.gitignore'), '.env\nsecrets/\n');
+    await writeFile(path.join(projectRoot, '.env'), 'TOKEN=secret\n');
+    await mkdir(path.join(projectRoot, 'secrets'));
+    await writeFile(path.join(projectRoot, 'secrets', 'id_rsa'), 'PRIVATE KEY\n');
+    const service = new ProjectFileService(store);
+
+    await expectCode(
+      service.read({ projectId: PROJECT_ID, relativePath: '.env' }),
+      'SENSITIVE_FILE',
+    );
+    await expectCode(
+      service.read({ projectId: PROJECT_ID, relativePath: 'secrets/id_rsa' }),
+      'SENSITIVE_FILE',
+    );
+    await expectCode(
+      service.save({
+        projectId: PROJECT_ID,
+        relativePath: '.env',
+        expectedSha256: 'a'.repeat(64),
+        content: 'must not write\n',
+      }),
+      'SENSITIVE_FILE',
+    );
+    expect(await readFile(path.join(projectRoot, '.env'), 'utf8')).toBe('TOKEN=secret\n');
   });
 
   it('fails closed for missing projects and non-canonical project roots', async () => {

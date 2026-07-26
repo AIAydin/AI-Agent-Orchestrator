@@ -54,7 +54,7 @@ export async function listProjectDirectory(
       relativePath,
       kind === 'directory',
       kind === 'symlink',
-    ).entry;
+    );
     entries.push({
       name,
       relativePath,

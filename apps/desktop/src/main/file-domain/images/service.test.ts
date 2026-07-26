@@ -85,7 +85,7 @@ describe('ProjectImageService', () => {
     });
   });
 
-  it('keeps disguised and ignored files inert', async () => {
+  it('keeps disguised files inert but loads git-ignored images', async () => {
     await writeFile(path.join(projectRoot, 'fake.png'), '<svg onload="alert(1)"></svg>');
     await writeFile(path.join(projectRoot, '.gitignore'), 'ignored.png\n');
     await writeFile(path.join(projectRoot, 'ignored.png'), PNG_BYTES);
@@ -93,9 +93,20 @@ describe('ProjectImageService', () => {
     const disguised = await service().load({ projectId: PROJECT_ID, relativePath: 'fake.png' });
     expect(disguised).toMatchObject({ status: 'unavailable' });
     expect(disguised.status === 'unavailable' ? disguised.message : '').toMatch(/signature/u);
+
+    const ignored = await service().load({ projectId: PROJECT_ID, relativePath: 'ignored.png' });
+    expect(ignored).toMatchObject({ status: 'available' });
+    expect(ignored.status === 'available' ? ignored.dataUrl : '').toMatch(
+      /^data:image\/png;base64,/u,
+    );
+  });
+
+  it('refuses sensitive images even when they are readable on disk', async () => {
+    await writeFile(path.join(projectRoot, 'service-account.json'), PNG_BYTES);
+
     await expect(
-      service().load({ projectId: PROJECT_ID, relativePath: 'ignored.png' }),
-    ).rejects.toMatchObject({ code: 'IGNORED_FILE' });
+      service().load({ projectId: PROJECT_ID, relativePath: 'service-account.json' }),
+    ).rejects.toMatchObject({ code: 'SENSITIVE_FILE' });
   });
 
   function service(): ProjectImageService {
