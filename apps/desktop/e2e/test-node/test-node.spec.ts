@@ -1,37 +1,27 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { expect, test, type ElectronApplication } from '@playwright/test';
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
 import {
   closeElectronAfterTest,
   launchDesktop,
   watchExternalRequests,
 } from '../support/electron.js';
-import {
-  ARTIFACT_PATH,
-  LIVE_MARKER,
-  LONG_RUNNING_SCRIPT,
-  PASS_MARKER,
-  PASSING_SCRIPT,
-  addAndSelectTestNode,
-  configureTestNode,
-  expectParsedSummary,
-  openLaunchDecision,
-  openSafeDemo,
-  selectRestoredTestNode,
-} from './fixture.js';
-import {
-  expectExactLaunchConfirmation,
-  expectExactNodeCancelConfirmation,
-  installWorkflowNativeDialogHarness,
-  queueWorkflowNativeResponse,
-  waitForWorkflowNativeDialog,
-} from './native-confirmation.js';
 
-test('a Test node streams, cancels, reruns, verifies artifacts, and restores entirely through the UI', async () => {
+const SIDE_EFFECT_FILE = 'forgeboard-test-node-ran.txt';
+const COMMAND_LINE = `node -e "require('node:fs').writeFileSync('${SIDE_EFFECT_FILE}','ran')"`;
+const DESCRIPTION = 'Writes a file if it ever runs.';
+
+/**
+ * The Test node is now a single command line, a description, and Run with an output preview.
+ * The exact command the user typed has to survive a full restart, and nothing may execute until
+ * the user actually asks for a run.
+ */
+test('a Test node keeps its exact command line and description across a restart', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-test-node-e2e-'));
+  const sideEffectPath = join(userDataDirectory, 'demo', 'forgeboard-demo', SIDE_EFFECT_FILE);
   let electronApp: ElectronApplication | null = null;
   const externalRequests: string[] = [];
 
@@ -40,95 +30,16 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
     electronApp = firstSession.app;
     let page = firstSession.page;
     watchExternalRequests(page, externalRequests);
-    await installWorkflowNativeDialogHarness(electronApp);
+    await installDenyAllNativeDialogs(electronApp);
     await openSafeDemo(page);
 
-    const panel = await addAndSelectTestNode(page);
-    await test.step('configure the long-running exact command and artifact path in the UI', async () => {
-      await configureTestNode(panel, LONG_RUNNING_SCRIPT);
-      const configuration = panel.getByRole('group', {
-        name: 'Test command configuration',
-      });
-      await expect(configuration.getByLabel('Program')).toHaveValue('node');
-      await expect(configuration.getByLabel(/Arguments/u)).toHaveValue(
-        `-e\n${LONG_RUNNING_SCRIPT}`,
-      );
-      await expect(configuration.getByLabel(/Result files to keep/u)).toHaveValue(ARTIFACT_PATH);
-    });
-
-    await test.step('review the exact launch, observe live parsed output, and cancel only the node', async () => {
-      await panel.getByRole('button', { name: 'Review and run' }).click();
-      const launch = await openLaunchDecision(page);
-      await expect(launch).toContainText(LIVE_MARKER);
-      await expect(launch).toContainText(ARTIFACT_PATH);
-      await queueWorkflowNativeResponse(electronApp!, 1);
-      await launch.getByRole('button', { name: 'Continue to approval' }).click();
-      expectExactLaunchConfirmation(await waitForWorkflowNativeDialog(electronApp!, 0), {
-        artifactPath: ARTIFACT_PATH,
-        marker: LIVE_MARKER,
-      });
-
-      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Running');
-      await expect(panel.getByLabel('Test output').first()).toContainText(LIVE_MARKER);
-      await expectParsedSummary(panel, {
-        passed: 1,
-        failed: 0,
-        skipped: 0,
-        total: 1,
-      });
-
-      await queueWorkflowNativeResponse(electronApp!, 1);
-      await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
-      expectExactNodeCancelConfirmation(await waitForWorkflowNativeDialog(electronApp!, 1));
-      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Cancelled');
-      await expect.poll(async () => await panel.textContent()).toContain(LIVE_MARKER);
-      await expectParsedSummary(panel, {
-        passed: 1,
-        failed: 0,
-        skipped: 0,
-        total: 1,
-      });
-    });
-
-    await test.step('reconfigure, rerun, parse the passing summary, and expose a verified artifact', async () => {
-      await configureTestNode(panel, PASSING_SCRIPT);
-      await panel.getByRole('button', { name: 'Review and run' }).click();
-      const launch = await openLaunchDecision(page);
-      await expect(launch).toContainText(PASS_MARKER);
-      await queueWorkflowNativeResponse(electronApp!, 1);
-      await launch.getByRole('button', { name: 'Continue to approval' }).click();
-      expectExactLaunchConfirmation(await waitForWorkflowNativeDialog(electronApp!, 2), {
-        artifactPath: ARTIFACT_PATH,
-        marker: PASS_MARKER,
-      });
-
-      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Passed');
-      await expect(panel.getByLabel('Test output').first()).toContainText(PASS_MARKER);
-      await expectParsedSummary(panel, {
-        passed: 4,
-        failed: 0,
-        skipped: 1,
-        total: 5,
-      });
-      const workflows = page
-        .locator('.activity-drawer')
-        .getByRole('tabpanel', { name: 'Workflows' });
-      const refresh = workflows.getByRole('button', { name: 'Refresh' });
-      const artifacts = panel.getByLabel('Verified test artifacts');
-      await expect(async () => {
-        await refresh.click();
-        await expect(refresh).toBeEnabled();
-        await expect(artifacts).toContainText(ARTIFACT_PATH, { timeout: 1_000 });
-      }).toPass({ timeout: 30_000 });
-      await expect(
-        artifacts.getByRole('button', { name: 'Reveal test-node-result.json' }),
-      ).toBeVisible();
-      await expect(
-        artifacts.getByRole('button', { name: 'Open test-node-result.json' }),
-      ).toBeVisible();
-      await expect(panel.getByRole('region', { name: 'Previous test attempts' })).toContainText(
-        'Cancelled',
-      );
+    let panel = await addAndSelectTestNode(page);
+    await test.step('one command line and a description are edited in place', async () => {
+      await panel.getByLabel('Command').fill(COMMAND_LINE);
+      await panel.getByLabel('Description').fill(DESCRIPTION);
+      await expect(panel.getByLabel('Command')).toHaveValue(COMMAND_LINE);
+      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Not run');
+      await expect(page.locator('.autosave-state')).toContainText('Saved locally');
     });
 
     await electronApp.close();
@@ -140,25 +51,14 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
     watchExternalRequests(page, externalRequests);
     await expect(page.locator('.setup-shell')).toHaveCount(0);
     await page.locator('.recent-list button').click();
-    const restoredPanel = await selectRestoredTestNode(page);
 
-    await test.step('restart restores the prior output, summary, artifact, and cancelled attempt', async () => {
-      await expect(restoredPanel.locator('.node-face-strip .node-face-status')).toHaveText(
-        'Passed',
-      );
-      await expect(restoredPanel.getByLabel('Test output').first()).toContainText(PASS_MARKER);
-      await expectParsedSummary(restoredPanel, {
-        passed: 4,
-        failed: 0,
-        skipped: 1,
-        total: 5,
-      });
-      await expect(restoredPanel.getByLabel('Verified test artifacts')).toContainText(
-        ARTIFACT_PATH,
-      );
-      await expect(
-        restoredPanel.getByRole('region', { name: 'Previous test attempts' }),
-      ).toContainText('Cancelled');
+    await test.step('restart restores the exact command and description, still unrun', async () => {
+      panel = await selectTestNode(page);
+      await expect(panel.getByLabel('Command')).toHaveValue(COMMAND_LINE);
+      await expect(panel.getByLabel('Description')).toHaveValue(DESCRIPTION);
+      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Not run');
+      // Configuring a command must never be enough to execute it.
+      await expect(access(sideEffectPath)).rejects.toMatchObject({ code: 'ENOENT' });
     });
 
     expect(externalRequests).toEqual([]);
@@ -167,3 +67,31 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });
+
+async function openSafeDemo(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Use safe defaults' }).click();
+  await page.getByRole('button', { name: /Explore the safe demo/i }).click();
+  await expect(page.locator('.project-switcher')).toContainText('forgeboard-demo');
+}
+
+async function addAndSelectTestNode(page: Page) {
+  await page.locator('.template-section').getByRole('button', { name: /^Test/ }).click();
+  return await selectTestNode(page);
+}
+
+async function selectTestNode(page: Page) {
+  await page.getByRole('article', { name: /^Test: /u }).click();
+  const panel = page.getByRole('region', { name: 'Test runner' });
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
+/** Any native confirmation reached from this flow must be refused, never silently approved. */
+async function installDenyAllNativeDialogs(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ dialog }) => {
+    Object.defineProperty(dialog, 'showMessageBox', {
+      configurable: true,
+      value: () => Promise.resolve({ response: 0, checkboxChecked: false }),
+    });
+  });
+}
