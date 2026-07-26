@@ -20,17 +20,13 @@ import {
   useProjectFileBrowser,
   type ProjectFileBrowserOperations,
 } from '../../file-editor/browser/useProjectFileBrowser.js';
-import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
-import { writeWorkspaceContextDrag, type WorkspaceContextDragPayload } from './contracts.js';
+import { writeWorkspaceContextDrag } from './contracts.js';
 import './WorkspaceProjectTree.css';
 
 interface WorkspaceProjectTreeProps {
   readonly projectId: string;
   readonly operations: ProjectFileBrowserOperations;
-  readonly agentTargets?: readonly WorkshopNode[];
-  readonly readOnly?: boolean;
-  readonly onAttach?: (targetNodeId: string, payload: WorkspaceContextDragPayload) => Promise<void>;
   /** Opens the clicked file as a file node on the canvas. */
   readonly onOpenFile?: (entry: FileTreeEntry) => void;
 }
@@ -43,9 +39,6 @@ interface ProjectTreeRow {
 export function WorkspaceProjectTree({
   projectId,
   operations,
-  agentTargets = [],
-  readOnly = false,
-  onAttach,
   onOpenFile,
 }: WorkspaceProjectTreeProps) {
   const browser = useProjectFileBrowser(projectId, operations);
@@ -54,13 +47,6 @@ export function WorkspaceProjectTree({
   );
   const [query, setQuery] = useState('');
   const [selectedFile, setSelectedFile] = useState<FileTreeEntry | null>(null);
-  const [targetNodeId, setTargetNodeId] = useState('');
-  const [attaching, setAttaching] = useState(false);
-  const [attachMessage, setAttachMessage] = useState<string | null>(null);
-  const agents = useMemo(
-    () => agentTargets.filter((node) => node.data.kind === 'agent' && !node.data.locked),
-    [agentTargets],
-  );
   const searching = query.trim() !== '';
   const rows = useMemo<readonly ProjectTreeRow[]>(
     () =>
@@ -74,10 +60,6 @@ export function WorkspaceProjectTree({
           ),
     [browser.entries, expandedDirectories, query, searching],
   );
-  useEffect(() => {
-    if (!agents.some((agent) => agent.id === targetNodeId)) setTargetNodeId(agents[0]?.id ?? '');
-  }, [agents, targetNodeId]);
-
   // Directories the background scan skips (ignored folders) list lazily on first expand.
   const indexedParents = useMemo(() => {
     const parents = new Set<string>();
@@ -174,63 +156,6 @@ export function WorkspaceProjectTree({
           </p>
         ) : null}
       </div>
-      {selectedFile !== null && onAttach !== undefined ? (
-        <div
-          className="workspace-project-tree-attach"
-          aria-label="Attach the selected file to an agent"
-        >
-          {agents.length === 0 ? (
-            <p>Add and unlock an agent on the canvas to attach files.</p>
-          ) : (
-            <>
-              <label>
-                Attach to agent
-                <select
-                  name="workspace-project-tree-agent-context-target"
-                  value={targetNodeId}
-                  disabled={readOnly || attaching}
-                  onChange={(event) => setTargetNodeId(event.target.value)}
-                >
-                  {agents.map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {agent.data.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                disabled={readOnly || attaching || targetNodeId.length === 0}
-                onClick={() => {
-                  if (targetNodeId.length === 0) return;
-                  setAttaching(true);
-                  setAttachMessage(null);
-                  void onAttach(targetNodeId, {
-                    schemaVersion: 1,
-                    kind: 'project-file',
-                    projectId,
-                    relativePath: selectedFile.relativePath,
-                  })
-                    .then(() => setAttachMessage('Attached — this agent can now use the file.'))
-                    .catch((cause: unknown) =>
-                      setAttachMessage(
-                        cause instanceof Error
-                          ? cause.message
-                          : "The selected file couldn't be attached. Try again.",
-                      ),
-                    )
-                    .finally(() => setAttaching(false));
-                }}
-              >
-                {attaching ? 'Checking…' : 'Attach selected file'}
-              </button>
-            </>
-          )}
-          {attachMessage !== null ? (
-            <p role={attachMessage.startsWith('Attached') ? 'status' : 'alert'}>{attachMessage}</p>
-          ) : null}
-        </div>
-      ) : null}
       <footer role="status">
         <span>{browser.entries.length} items</span>
         {browser.bounded ? <span>Not all files shown</span> : null}

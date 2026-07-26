@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Bot,
   Check,
+  ChevronDown,
   ChevronRight,
   Clock3,
   Code2,
@@ -47,8 +48,11 @@ interface WelcomeProps {
 
 type WelcomeBusyAction = 'open' | 'clone' | 'create' | 'demo';
 
+const RECENT_VISIBLE_DEFAULT = 5;
+
 export function Welcome(props: WelcomeProps) {
   const [dialogMode, setDialogMode] = useState<ProjectDialogMode | null>(null);
+  const [showAllRecent, setShowAllRecent] = useState(false);
   const [recovery, setRecovery] = useState<ProjectRecoveryAssessment | null>(null);
   const [recoveryBusy, setRecoveryBusy] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<WelcomeBusyAction | null>(null);
@@ -256,54 +260,68 @@ export function Welcome(props: WelcomeProps) {
             </div>
           ) : (
             <div className="recent-list">
-              {props.recent.slice(0, 5).map((project) =>
-                project.missing ? (
-                  <div className="recent-project missing" key={project.id}>
-                    <span className="repo-glyph" aria-hidden="true">
-                      <AlertTriangle size={17} />
-                    </span>
-                    <span className="recent-name">
-                      <strong>{project.name}</strong>
-                      <small>{project.path}</small>
-                    </span>
-                    <span className="missing-badge">
-                      <AlertTriangle size={12} /> Missing folder
-                    </span>
+              {(showAllRecent ? props.recent : props.recent.slice(0, RECENT_VISIBLE_DEFAULT)).map(
+                (project) =>
+                  project.missing ? (
+                    <div className="recent-project missing" key={project.id}>
+                      <span className="repo-glyph" aria-hidden="true">
+                        <AlertTriangle size={17} />
+                      </span>
+                      <span className="recent-name">
+                        <strong>{project.name}</strong>
+                        <small>{project.path}</small>
+                      </span>
+                      <span className="missing-badge">
+                        <AlertTriangle size={12} /> Missing folder
+                      </span>
+                      <button
+                        className="locate-project-button"
+                        type="button"
+                        disabled={props.busy || recoveryBusy !== null}
+                        onClick={() => void locateMovedProject(project.id)}
+                        aria-label={`Locate moved repository for ${project.name}`}
+                      >
+                        <FolderSearch size={14} />
+                        {recoveryBusy === project.id ? 'Searching…' : 'Locate'}
+                      </button>
+                    </div>
+                  ) : (
                     <button
-                      className="locate-project-button"
+                      className="recent-project recent-open"
+                      key={project.id}
                       type="button"
-                      disabled={props.busy || recoveryBusy !== null}
-                      onClick={() => void locateMovedProject(project.id)}
-                      aria-label={`Locate moved repository for ${project.name}`}
+                      onClick={() => {
+                        setBusyAction('open');
+                        props.onOpenRecent(project.path);
+                      }}
+                      disabled={props.busy}
                     >
-                      <FolderSearch size={14} />
-                      {recoveryBusy === project.id ? 'Searching…' : 'Locate'}
+                      <span className="repo-glyph">
+                        <Code2 size={17} />
+                      </span>
+                      <span className="recent-name">
+                        <strong>{project.name}</strong>
+                        <small>{project.path}</small>
+                      </span>
+                      <span className="branch-badge">
+                        <GitBranch size={12} /> {project.health.branch ?? 'no branch'}
+                      </span>
+                      <ChevronRight size={16} />
                     </button>
-                  </div>
-                ) : (
-                  <button
-                    className="recent-project recent-open"
-                    key={project.id}
-                    type="button"
-                    onClick={() => {
-                      setBusyAction('open');
-                      props.onOpenRecent(project.path);
-                    }}
-                    disabled={props.busy}
-                  >
-                    <span className="repo-glyph">
-                      <Code2 size={17} />
-                    </span>
-                    <span className="recent-name">
-                      <strong>{project.name}</strong>
-                      <small>{project.path}</small>
-                    </span>
-                    <span className="branch-badge">
-                      <GitBranch size={12} /> {project.health.branch ?? 'no branch'}
-                    </span>
-                    <ChevronRight size={16} />
-                  </button>
-                ),
+                  ),
+              )}
+              {props.recent.length > RECENT_VISIBLE_DEFAULT && (
+                <button
+                  className="recent-show-more"
+                  type="button"
+                  aria-expanded={showAllRecent}
+                  onClick={() => setShowAllRecent((current) => !current)}
+                >
+                  <ChevronDown size={14} className={showAllRecent ? 'open' : undefined} />
+                  {showAllRecent
+                    ? 'Show less'
+                    : `Show ${props.recent.length - RECENT_VISIBLE_DEFAULT} more`}
+                </button>
               )}
             </div>
           )}

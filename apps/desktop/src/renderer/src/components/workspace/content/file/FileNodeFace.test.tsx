@@ -1,13 +1,29 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('../../../file-editor/MonacoTextEditor.js', () => ({
-  MonacoTextEditor: ({ value, readOnly }: { value: string; readOnly: boolean }) => (
-    <div data-testid="code-view" data-readonly={String(readOnly)}>
-      {value}
-    </div>
+  MonacoTextEditor: ({
+    value,
+    readOnly,
+    ariaLabel,
+    onChange,
+  }: {
+    value: string;
+    readOnly: boolean;
+    ariaLabel: string;
+    onChange: (next: string) => void;
+  }) => (
+    <textarea
+      data-testid="code-view"
+      data-readonly={String(readOnly)}
+      name="code-view"
+      aria-label={ariaLabel}
+      value={value}
+      readOnly={readOnly}
+      onChange={(event) => onChange(event.target.value)}
+    />
   ),
 }));
 
@@ -15,6 +31,8 @@ import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import { FileNodeFace } from './FileNodeFace.js';
 
 const read = vi.fn();
+const save = vi.fn();
+const revert = vi.fn();
 
 afterEach(() => {
   cleanup();
@@ -22,9 +40,11 @@ afterEach(() => {
 });
 beforeEach(() => {
   read.mockReset();
+  save.mockReset();
+  revert.mockReset();
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
-    value: { files: { read } },
+    value: { files: { read, save, revert } },
   });
 });
 
@@ -64,21 +84,71 @@ function document(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function codeView(): HTMLTextAreaElement {
+  const element = screen.getByTestId('code-view');
+  if (!(element instanceof HTMLTextAreaElement)) throw new Error('code view is not a textarea');
+  return element;
+}
+
 describe('FileNodeFace', () => {
-  it('shows the file name and a read-only code view — nothing else', async () => {
+  it('shows the file name and an editable code view with no idle chrome', async () => {
     read.mockResolvedValue(document());
     render(<FileNodeFace id="n1" data={nodeData({ file: fileReference })} />);
 
     expect(screen.getByText('app.ts')).toBeTruthy();
     const code = await screen.findByTestId('code-view');
-    expect(code.getAttribute('data-readonly')).toBe('true');
-    expect(code.textContent).toContain('export const answer = 42;');
+    expect(code.getAttribute('data-readonly')).toBe('false');
+    expect((code as HTMLTextAreaElement).value).toContain('export const answer = 42;');
     expect(read).toHaveBeenCalledWith({
       projectId: fileReference.projectId,
       relativePath: fileReference.relativePath,
     });
-    // Minimal by design: no Choose, no Change, no Settings, no buttons at all.
+    // Minimal by design: Save appears only once there is something to save.
     expect(screen.queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('marks edits as unsaved and writes them back through files.save', async () => {
+    read.mockResolvedValue(document());
+    save.mockResolvedValue(
+      document({ content: 'export const answer = 43;\n', sha256: 'b'.repeat(64) }),
+    );
+    render(<FileNodeFace id="n1" data={nodeData({ file: fileReference })} />);
+    await screen.findByTestId('code-view');
+
+    fireEvent.change(codeView(), { target: { value: 'export const answer = 43;\n' } });
+    expect(screen.getByText('Unsaved')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith({
+        projectId: fileReference.projectId,
+        relativePath: fileReference.relativePath,
+        content: 'export const answer = 43;\n',
+        expectedSha256: 'a'.repeat(64),
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText('Unsaved')).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+  });
+
+  it('surfaces a failed save and offers to reload the saved file', async () => {
+    read.mockResolvedValue(document());
+    save.mockRejectedValue({
+      code: 'STALE_CONTENT',
+      message: 'The file changed on disk since it was opened.',
+    });
+    revert.mockResolvedValue(document({ content: 'fresh from disk\n' }));
+    render(<FileNodeFace id="n1" data={nodeData({ file: fileReference })} />);
+    await screen.findByTestId('code-view');
+
+    fireEvent.change(codeView(), { target: { value: 'stale edit\n' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The file changed on disk since it was opened.',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(codeView().value).toBe('fresh from disk\n'));
   });
 
   it('hints at the project tree when no file is linked and reads nothing', () => {
@@ -108,7 +178,7 @@ describe('FileNodeFace', () => {
 
     expect(screen.getByText('settings.json')).toBeTruthy();
     const code = await screen.findByTestId('code-view');
-    expect(code.textContent).toContain('{ "theme": "dark" }');
+    expect((code as HTMLTextAreaElement).value).toContain('{ "theme": "dark" }');
   });
 
   it('keeps binary files content-free with a terse reason', async () => {

@@ -46,7 +46,6 @@ describe('WorkspaceRail accessibility', () => {
       nodes: [],
       fileOperations: fileOperations(),
       initializingGit: false,
-      collaborationGraphReadOnly: false,
       runnableAgents: [],
       onTabChange: vi.fn(),
       onSearchChange: vi.fn(),
@@ -55,7 +54,6 @@ describe('WorkspaceRail accessibility', () => {
       onAddExtensionNode: vi.fn(),
       onInitializeGit: vi.fn(),
       onSelectNode: vi.fn(),
-      onAttachAgentContext: vi.fn(),
       onOpenProjectFile: vi.fn(),
     };
     const { rerender } = render(<WorkspaceRail {...props} tab="project" />);
@@ -103,7 +101,6 @@ describe('WorkspaceRail accessibility', () => {
         nodes={[]}
         fileOperations={fileOperations()}
         initializingGit={false}
-        collaborationGraphReadOnly={false}
         runnableAgents={[]}
         onTabChange={vi.fn()}
         onSearchChange={vi.fn()}
@@ -112,7 +109,6 @@ describe('WorkspaceRail accessibility', () => {
         onAddExtensionNode={vi.fn()}
         onInitializeGit={onInitializeGit}
         onSelectNode={vi.fn()}
-        onAttachAgentContext={vi.fn()}
         onOpenProjectFile={vi.fn()}
       />,
     );
@@ -134,7 +130,6 @@ describe('WorkspaceRail accessibility', () => {
         nodes={[]}
         fileOperations={fileOperations()}
         initializingGit={false}
-        collaborationGraphReadOnly={false}
         runnableAgents={[claudeAgent]}
         onTabChange={vi.fn()}
         onSearchChange={vi.fn()}
@@ -143,7 +138,6 @@ describe('WorkspaceRail accessibility', () => {
         onAddExtensionNode={vi.fn()}
         onInitializeGit={vi.fn()}
         onSelectNode={vi.fn()}
-        onAttachAgentContext={vi.fn()}
         onOpenProjectFile={vi.fn()}
       />,
     );

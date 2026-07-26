@@ -1419,7 +1419,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           nodeRegistry={nodeRegistry}
           fileOperations={window.forgeboard.files}
           initializingGit={initializingGit}
-          collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
           runnableAgents={runnableAgents}
           onTabChange={setRailTab}
           onSearchChange={setSearch}
@@ -1427,7 +1426,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onAddAgentNode={addAgentNode}
           onAddExtensionNode={addExtensionNode}
           onInitializeGit={() => void initializeGit()}
-          onAttachAgentContext={attachProjectFileContext}
           onOpenProjectFile={openProjectFileOnCanvas}
           onSelectNode={(node) => {
             setSelectedNodeId(node.id);

@@ -9,7 +9,6 @@ import type { FileTreeEntry } from '../../../../../shared/files/contracts.js';
 import type { ProjectFileBrowserOperations } from '../../file-editor/browser/useProjectFileBrowser.js';
 import type { NodeKind, WorkshopNode } from '../canvas/CanvasNode.js';
 import { WorkspaceProjectTree } from '../context-dnd/WorkspaceProjectTree.js';
-import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import type { ExtensionTemplate } from '../model/types.js';
 import { providerBrandLogo } from '../node-registry/brand-logos.js';
 import { providerTheme } from '../node-registry/provider-themes.js';
@@ -26,7 +25,6 @@ interface WorkspaceRailProps {
   nodeRegistry?: NodeTypeRegistry;
   fileOperations: ProjectFileBrowserOperations;
   initializingGit: boolean;
-  collaborationGraphReadOnly: boolean;
   runnableAgents: readonly (AgentDetection & { id: RunAdapterId })[];
   onTabChange: (tab: 'project' | 'nodes') => void;
   onSearchChange: (value: string) => void;
@@ -35,10 +33,6 @@ interface WorkspaceRailProps {
   onAddExtensionNode: (template: ExtensionTemplate) => void;
   onInitializeGit: () => void;
   onSelectNode: (node: WorkshopNode) => void;
-  onAttachAgentContext: (
-    targetNodeId: string,
-    payload: WorkspaceContextDragPayload,
-  ) => Promise<void>;
   onOpenProjectFile: (entry: FileTreeEntry) => void;
 }
 
@@ -53,7 +47,6 @@ export function WorkspaceRail({
   nodeRegistry = BUILT_IN_NODE_REGISTRY,
   fileOperations,
   initializingGit,
-  collaborationGraphReadOnly,
   runnableAgents,
   onTabChange,
   onSearchChange,
@@ -62,7 +55,6 @@ export function WorkspaceRail({
   onAddExtensionNode,
   onInitializeGit,
   onSelectNode,
-  onAttachAgentContext,
   onOpenProjectFile,
 }: WorkspaceRailProps) {
   return (
@@ -100,9 +92,6 @@ export function WorkspaceRail({
           <WorkspaceProjectTree
             projectId={project.id}
             operations={fileOperations}
-            agentTargets={nodes}
-            readOnly={collaborationGraphReadOnly}
-            onAttach={onAttachAgentContext}
             onOpenFile={onOpenProjectFile}
           />
           <ProjectTemplates

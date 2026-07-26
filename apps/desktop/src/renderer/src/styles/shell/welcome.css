@@ -229,6 +229,30 @@
 .recent-list > button.recent-project:hover {
   background: var(--surface-subtle);
 }
+.recent-list > .recent-show-more {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-soft);
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+.recent-list > .recent-show-more:hover {
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+.recent-list > .recent-show-more svg {
+  transition: transform 0.15s ease;
+}
+.recent-list > .recent-show-more svg.open {
+  transform: rotate(180deg);
+}
 .recent-project.missing {
   grid-template-columns: 32px minmax(0, 1fr) auto auto;
   background: color-mix(in srgb, var(--red) 4%, transparent);
