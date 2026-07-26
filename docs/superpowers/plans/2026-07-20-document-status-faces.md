@@ -1605,7 +1605,7 @@ export function useNoteImagePreviews(
               projectId,
               relativePath: image.relativePath,
               message:
-                cause instanceof Error ? cause.message : 'Forgeboard could not load this image.',
+                cause instanceof Error ? cause.message : 'Artemis could not load this image.',
             },
           ];
         }

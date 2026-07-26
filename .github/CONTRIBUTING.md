@@ -1,6 +1,6 @@
 # Contributing
 
-Forgeboard welcomes focused issues and pull requests. By contributing, you agree that your work is
+Artemis welcomes focused issues and pull requests. By contributing, you agree that your work is
 licensed under the MIT license.
 
 ## Setup
@@ -13,7 +13,7 @@ pnpm verify
 
 Changes that affect a trust boundary must include threat analysis and tests. New agent adapters and
 node types must use validated manifests and documented extension points. Never add telemetry or a
-Forgeboard-owned model proxy.
+Artemis-owned model proxy.
 
 Keep work grouped in named feature or domain subfolders. No hand-written source, test, style, script,
 workflow, or configuration file may exceed 2,000 lines. Maintained folders under apps, packages,

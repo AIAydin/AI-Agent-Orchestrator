@@ -6,7 +6,7 @@ Status: Implemented
 ## Goal
 
 Web and Mobile Preview nodes accept local development ports and public web addresses without
-turning Electron into a general-purpose browser. Local loopback pages stay in Forgeboard's hardened
+turning Electron into a general-purpose browser. Local loopback pages stay in Artemis's hardened
 webview. Public HTTPS pages open in an ordinary, visible Google Chrome window where sign-in,
 cookies, password-manager behavior, navigation, and site compatibility work as Chrome intends.
 
@@ -14,16 +14,16 @@ cookies, password-manager behavior, navigation, and site compatibility work as C
 
 - External pages never mount in an Electron webview. The renderer and the main-process attachment
   guard both enforce this boundary.
-- Forgeboard launches Google Chrome with `--remote-debugging-pipe` and a dedicated per-project,
+- Artemis launches Google Chrome with `--remote-debugging-pipe` and a dedicated per-project,
   per-node `--user-data-dir`. It never opens the user's personal Chrome profile and does not expose a
   TCP debugging port.
 - Public addresses must use HTTPS and cannot contain URL credentials. Loopback HTTP remains
   available for local development.
 - Chrome cookies and website storage persist only in the dedicated companion profile. Disconnecting
   closes Chrome without deleting that profile; **Clear saved Chrome data** closes Chrome and erases
-  it after native confirmation. Forgeboard privacy reset erases every companion profile.
-- Forgeboard does not collect Chrome diagnostics or console logs. Chrome pushes bounded compressed
-  screencast frames over the private process pipe; Forgeboard acknowledges them immediately and
+  it after native confirmation. Artemis privacy reset erases every companion profile.
+- Artemis does not collect Chrome diagnostics or console logs. Chrome pushes bounded compressed
+  screencast frames over the private process pipe; Artemis acknowledges them immediately and
   transfers each sequence only once. Only validated viewport and user-input events travel back.
 
 ## User flow
@@ -49,7 +49,7 @@ styles, console output, cookies, storage, or the Chrome debugging transport. **A
 request browser actions** can only be enabled while observation is enabled. Changing the Preview
 address revokes both permissions and requires fresh consent.
 
-A token-scoped peer must also have a direct, unmuted Context edge to the Preview node. Forgeboard
+A token-scoped peer must also have a direct, unmuted Context edge to the Preview node. Artemis
 rechecks that edge, both node permissions, the exact Chrome connection, the page origin, and the
 page/navigation version on every request and again after an approval prompt. Page controls are
 described with short-lived opaque UUID handles created in an isolated Chrome execution world;
@@ -78,7 +78,7 @@ authority.
 - `agent-peers/preview-control` validates the narrow agent action contracts and owns cancel-default
   native one-time approval. `@forgeboard/peer-mcp` publishes the bounded tools without exposing the
   private Chrome transport.
-- `ipc.ts` accepts requests only from the Forgeboard main frame and owns the native destructive-data
+- `ipc.ts` accepts requests only from the Artemis main frame and owns the native destructive-data
   confirmation.
 - `ChromeCompanionSurface.tsx` and `useBrowserCompanion.ts` provide the node UI and status polling.
 

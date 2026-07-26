@@ -16,14 +16,14 @@ The whiteboard face renders an **inert** SVG with no pointer handling at all:
 - Shapes can only be created from the "Tools" popover, and land at a fixed staircase position — `x = 24 + (index % 8) * 22`, `y = 24 + (index % 6) * 22` (`model.ts:88`).
 - They are then repositioned and resized by _typing numbers_ into x/y/width/height fields in the face's Tools popover (`WhiteboardNodeFace.tsx`, the `whiteboard-face-number-grid` block).
 
-This matches the original intent — `IMPLEMENTATION_CHECKLIST.md:1489` describes "UI-only rectangle, ellipse, diamond, arrow, and text-annotation editing… rendered solely with Forgeboard-owned inert React SVG primitives" — so this is an unimplemented capability, not a regression.
+This matches the original intent — `IMPLEMENTATION_CHECKLIST.md:1489` describes "UI-only rectangle, ellipse, diamond, arrow, and text-annotation editing… rendered solely with Artemis-owned inert React SVG primitives" — so this is an unimplemented capability, not a regression.
 
 ## Decisions made during brainstorming
 
 - **Scope:** drag-to-create shapes, move, corner-handle resize, **and** a freehand pen (a new `freedraw` element type).
 - **Tool selector:** a persistent tool strip in the existing header row, replacing the "Tools" popover. A popover cannot host modal tools — it would have to be reopened for every stroke.
 - **Text:** click empty canvas with the text tool to drop a caret and type in place; double-click an existing text to re-edit it. New text elements still register in `annotationIds`, so agent context is unchanged.
-- **Stay Forgeboard-owned:** no third-party drawing library. The document stays bounded, sanitized, Excalidraw-compatible JSON rendered by our own SVG primitives.
+- **Stay Artemis-owned:** no third-party drawing library. The document stays bounded, sanitized, Excalidraw-compatible JSON rendered by our own SVG primitives.
 - **No pan/zoom inside the node.** The viewBox stays a fixed 960×640 scaled to fit.
 
 ## Constraint: structure gate

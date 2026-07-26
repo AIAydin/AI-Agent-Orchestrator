@@ -12,7 +12,7 @@ Spec: `docs/superpowers/specs/2026-07-22-whiteboard-drawing-design.md`
 
 ## Global Constraints
 
-- **No new dependencies.** The whiteboard stays Forgeboard-owned inert SVG.
+- **No new dependencies.** The whiteboard stays Artemis-owned inert SVG.
 - **Structure gate** (`scripts/structure/check.mjs`): max 12 hand-written files per directory, max 2,000 lines per file. `content/whiteboard/` ends at 7 files, `content/whiteboard/drawing/` at 11.
 - **Run `check:structure` from the checkout being verified.** The gate supports both primary checkouts and worktrees.
 - **Zero-warning lint:** `corepack pnpm lint` runs with `--max-warnings=0`. No unused exports, no dead code.

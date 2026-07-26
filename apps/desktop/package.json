@@ -4,7 +4,7 @@
   "private": true,
   "description": "A local-first visual workshop for software-building agents.",
   "desktopName": "forgeboard.desktop",
-  "homepage": "https://github.com/AIAydin/AI-Agent-Orchestrator",
+  "homepage": "https://github.com/AIAydin/Artemis",
   "author": {
     "name": "Artemis contributors",
     "email": "AIAydin@users.noreply.github.com"
@@ -105,12 +105,12 @@
       }
     ],
     "mac": {
-      "artifactName": "Forgeboard-${version}-mac-${arch}.${ext}",
+      "artifactName": "Artemis-${version}-mac-${arch}.${ext}",
       "icon": "build/icon.png",
       "category": "public.app-category.developer-tools",
       "hardenedRuntime": true,
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Forgeboard uses the microphone only while you record a local voice command. Audio is transcribed on this device and is not saved."
+        "NSMicrophoneUsageDescription": "Artemis uses the microphone only while you record a local voice command. Audio is transcribed on this device and is not saved."
       },
       "target": [
         "dmg",
@@ -124,14 +124,14 @@
       ]
     },
     "nsis": {
-      "artifactName": "Forgeboard-${version}-windows-${arch}-setup.${ext}",
+      "artifactName": "Artemis-${version}-windows-${arch}-setup.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Forgeboard"
+      "shortcutName": "Artemis"
     },
     "linux": {
       "executableName": "forgeboard",
@@ -145,7 +145,7 @@
       "synopsis": "Local-first visual workshop for coding agents"
     },
     "appImage": {
-      "artifactName": "Forgeboard-${version}-linux-${arch}.${ext}"
+      "artifactName": "Artemis-${version}-linux-${arch}.${ext}"
     },
     "deb": {
       "artifactName": "forgeboard_${version}_${arch}.${ext}",

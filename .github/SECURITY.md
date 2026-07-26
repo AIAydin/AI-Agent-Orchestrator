@@ -8,7 +8,7 @@ and any suggested mitigation.
 
 ## Security posture
 
-Forgeboard treats repositories, files, imported canvases, terminal output, agent messages, rendered
+Artemis treats repositories, files, imported canvases, terminal output, agent messages, rendered
 Markdown/SVG, collaboration clients, and preview pages as untrusted. No repository instruction is
 authority to execute a command or broaden permissions.
 
@@ -25,11 +25,11 @@ exact bundled, detected, overridden, or custom executable. Missing executables, 
 configuration, adapter/executable mismatch, failed bounded probes, and unrecognized versions keep
 the setup step blocked. Readiness evidence is not process-launch authority.
 
-Agent launches use executable-plus-argument arrays without Forgeboard shell interpolation. Writable
+Agent launches use executable-plus-argument arrays without Artemis shell interpolation. Writable
 agents default to isolated Git worktrees. CWD isolation is explicitly not described as a sandbox. An
 optional Docker profile runs a configured in-image agent as a non-root user with one
 assigned-worktree mount, resource limits, a read-only container filesystem, default seccomp, dropped
-capabilities, and network disabled unless the user explicitly enables it. Forgeboard adds no host
+capabilities, and network disabled unless the user explicitly enables it. Artemis adds no host
 credential stores, keychains, SSH agents, Docker socket, or extra host mounts to the container.
 
 Docker images are never pulled automatically. Run planning uses an identity-bound Docker client to
@@ -40,7 +40,7 @@ binds the exact image, registry endpoint, Docker executable, and expected in-con
 main rechecks the disclosure before issuing the executor-only permit. The pull uses a bounded
 argument array and output/timeout limits; the explicit Settings readiness action can then use a
 disposable,
-no-network, no-mount `--version` probe. Immediately before an approved launch, Forgeboard rechecks
+no-network, no-mount `--version` probe. Immediately before an approved launch, Artemis rechecks
 the Docker client identity and mutable tag-to-image-ID binding, then runs the exact disclosed argv
 once against the approved immutable image ID with `--pull never`. A missing or broken in-image
 entrypoint fails that supervised launch instead of causing an undisclosed preflight execution.
@@ -54,7 +54,7 @@ compressed or unexpected content, oversized responses, malformed release metadat
 tags and release URLs, and stale or mismatched window authority. Checks can be cancelled and use an
 absolute deadline.
 
-Forgeboard does not download or install application updates. A discovered release is retained as
+Artemis does not download or install application updates. A discovered release is retained as
 short-lived main-process authority only; opening its exact official GitHub page requires a second
 cancel-default native confirmation. Disabled mode sends no release request, and an imported legacy
 automatic-download preference grants no capability. No published release or installer is implied by
@@ -64,7 +64,7 @@ this check-only surface.
 
 Lint, typecheck, test, build, and custom checks execute user-approved, potentially untrusted
 repository code with the user's desktop privileges; they are quality tools, not a sandbox. A package
-manager may invoke repository scripts, lifecycle hooks, or its own shell. Forgeboard directly spawns
+manager may invoke repository scripts, lifecycle hooks, or its own shell. Artemis directly spawns
 native executables with `shell: false`; supported Windows package-manager `.cmd` shims use a
 constrained, disclosed absolute `cmd.exe` wrapper. The renderer supplies only a stored check
 identity. Electron main owns the configured executable, arguments, canonical working directory, and
@@ -88,7 +88,7 @@ closing storage.
 
 ### Filesystem boundaries
 
-Forgeboard-owned file selection and context paths are canonicalized, symlinks resolved, and
+Artemis-owned file selection and context paths are canonicalized, symlinks resolved, and
 containment checked against approved roots immediately before access. Traversal, NUL bytes, device
 paths, credential patterns, and symlink escapes are denied. Ignored and sensitive files are not
 attached as context unless the exact file has the required high-friction override. A Custom profile
@@ -104,7 +104,7 @@ report requires a present raw DACL and separately flags callback or otherwise un
 that projected access rules might omit. Missing identity or inspection services, an absent DACL,
 unsupported ACEs, excess/unexpected rules or fields, and malformed output all fail closed. Structural
 parents reject untrusted write, replace, delete, ACL-change, or ownership-change authority;
-confidential parents also reject untrusted read, list, and traverse access. Forgeboard-created private
+confidential parents also reject untrusted read, list, and traverse access. Artemis-created private
 objects must have a protected DACL owned by the current SID with exactly current-SID and LocalSystem
 full-control rules.
 
@@ -124,7 +124,7 @@ single-instance lock and never follows unknown, symlink, malformed, or foreign-S
 
 ### Backups and recovery imports
 
-SQLite backup creation is main-owned and accepts only the UI-selected destination. Forgeboard
+SQLite backup creation is main-owned and accepts only the UI-selected destination. Artemis
 requires a canonical ordinary directory, builds each backup in an isolated staging folder, rejects
 links and path changes, performs a SQLite integrity check, and verifies stable size and SHA-256
 content before recording success. POSIX builds require a current-user-owned destination that is not
@@ -141,8 +141,8 @@ Cleanup failures remain visible in Backup health and do not invalidate the newly
 missing recorded backup is never treated as proof of deletion; complete local-data deletion requires
 a separate cancel-default native choice before forgetting its record, with an explicit warning that
 a detached copy may survive. If the primary database cannot be opened safely, startup offers a
-cancel-default native chooser for a verified Forgeboard SQLite backup. The selected file is copied
-without modification into private staging, checked read-only for exact Forgeboard schema
+cancel-default native chooser for a verified Artemis SQLite backup. The selected file is copied
+without modification into private staging, checked read-only for exact Artemis schema
 provenance, migrated only in that private copy when necessary, fully integrity-checked, and bound by
 size and SHA-256 before installation. The primary database and sidecars are quarantined through a
 durable, fsync-backed journal; interrupted operations are reconciled before SQLite opens, and failed
@@ -158,7 +158,7 @@ rechecks both before mutation, and first preserves the displaced canvas as a new
 content differs. Import requires a user-selected ordinary file no larger than 16 MiB, rejects a
 final-component symlink, validates the strict versioned export schema, and records an exact-byte
 SHA-256 digest. Immediately
-before a transactional merge or replacement, Forgeboard rereads the same stable file and requires
+before a transactional merge or replacement, Artemis rereads the same stable file and requires
 its file name, size, digest, and disclosed record counts to match. Portable files do not contain
 repository files or extension source folders.
 
@@ -195,7 +195,7 @@ author/committer environment variables, hooks, and signing cannot override the r
 
 The Electron shell denies unexpected top-level navigation, new windows, permissions, downloads, and
 non-loopback renderer traffic. Preview nodes accept only runtime-owned loopback ports and validated
-hosts, then render the page in a sandboxed frame without Node or Forgeboard preload access. Preview
+hosts, then render the page in a sandboxed frame without Node or Artemis preload access. Preview
 content cannot open a system-browser URL implicitly. Native development commands are still ordinary
 user processes; Docker is required for hard network/filesystem isolation.
 
@@ -209,7 +209,7 @@ bounds resources, and requires an exact digest-bound permission confirmation in 
 system dialog before install or update. It stages a trusted ledger record before mutation and
 activates only after success. Discovery revalidates installed snapshots, requires an exact active
 ledger match, and quarantines missing, pending, revoked, mismatched, or corrupt entries instead of
-loading them. Canvas controls and local-reference pickers are Forgeboard-owned; persisted values are
+loading them. Canvas controls and local-reference pickers are Artemis-owned; persisted values are
 bounded and revalidated. Actual CLI runs resolve active manifests again immediately before launch
 and retain their separate launch disclosure and approval. See
 [`docs/EXTENSIONS.md`](../docs/EXTENSIONS.md).
@@ -219,7 +219,7 @@ and retain their separate launch disclosure and approval. See
 `.env*`, private keys, certificates, common credential files, OS keychains, CLI auth stores, ignored
 files, and configured secret patterns are excluded from automatic context by default. SQLite has no
 structured authentication-token field. Unredacted agent, preview, or check output can still contain
-a secret printed by the child process. Forgeboard currently delegates authentication to local CLIs
+a secret printed by the child process. Artemis currently delegates authentication to local CLIs
 and therefore does not request or manage their tokens; a future integration that must handle one
 cannot ship until an operating-system vault is wired.
 
@@ -231,7 +231,7 @@ and backup validation recompute the chain, compare its durable head, and require
 triggers. Those triggers reject event updates, checkpoint updates, and unhashed direct inserts.
 
 Configured audit retention can delete only the verified contiguous leading prefix. Before deletion,
-Forgeboard appends a hash-linked checkpoint containing the first/last pruned sequence, terminal event
+Artemis appends a hash-linked checkpoint containing the first/last pruned sequence, terminal event
 hash, count, and pruning time. It stops at the first retained event even if a later imported event has
 an older timestamp. Portable replace resets the prior chain before imported redacted events are
 re-chained locally, and it clears device-local saved approvals. Explicit privacy deletion clears the
@@ -269,5 +269,5 @@ and audited mutations; it never loads extension code into the renderer.
 
 ## Supported versions
 
-Forgeboard has no published release yet. After publication, security fixes will target the latest
+Artemis has no published release yet. After publication, security fixes will target the latest
 released pre-1.0 version.

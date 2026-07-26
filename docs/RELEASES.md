@@ -1,6 +1,6 @@
 # Releases and signing
 
-Forgeboard is intended to be downloaded by end users from GitHub Releases without Node.js, pnpm, a
+Artemis is intended to be downloaded by end users from GitHub Releases without Node.js, pnpm, a
 source checkout, or config-file edits. The source repository is public and currently has no tags or
 published end-user release. For a matching release tag, the workflow is configured to build native
 installers on GitHub-hosted macOS, Windows, and Linux runners, execute the verification and
@@ -10,7 +10,7 @@ from starting, so pushing a tag now would not produce a release. Published relea
 immutable corresponding source archives for the bundled Git toolchain; see
 [`THIRD_PARTY_NOTICES.md`](legal/THIRD_PARTY_NOTICES.md).
 
-## Installing Forgeboard
+## Installing Artemis
 
 Follow the concise [platform install guide](install/README.md) for exact architecture-specific
 filenames, checksum commands, and first-launch instructions. Each published build will attach a
@@ -23,8 +23,8 @@ notarized releases remove or reduce those warnings; release notes must always st
 produced.
 
 Installed builds expose **Settings → Connectivity → Application updates** for an explicit
-stable, prerelease, or disabled check against the fixed official Forgeboard GitHub Releases
-endpoint. The check runs only after a cancel-default native approval. Forgeboard does not poll,
+stable, prerelease, or disabled check against the fixed official Artemis GitHub Releases
+endpoint. The check runs only after a cancel-default native approval. Artemis does not poll,
 download, or install updates automatically; it can only show a validated release and, after another
 native confirmation, open that exact release page in the system browser. This capability does not
 mean a release exists; availability is determined from the official repository at check time.

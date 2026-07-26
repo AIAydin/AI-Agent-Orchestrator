@@ -5,7 +5,7 @@ Status: Approved (brainstorm), pending implementation plan
 
 ## Goal
 
-Every node on the ForgeBoard canvas carries a **distinct, friendly name** shown prominently at the top of the node. That name is the single identifier both the user and agents use to refer to the node — the peer channels (`list_agents` / `send_message`) already address agents by `node.title`, so the shown name and the addressable name are the same thing.
+Every node on the Artemis canvas carries a **distinct, friendly name** shown prominently at the top of the node. That name is the single identifier both the user and agents use to refer to the node — the peer channels (`list_agents` / `send_message`) already address agents by `node.title`, so the shown name and the addressable name are the same thing.
 
 ## Problem today
 

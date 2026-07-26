@@ -1,6 +1,6 @@
 # Permission profiles
 
-Forgeboard permission profiles are configured in **Settings → Permissions** or during first-run
+Artemis permission profiles are configured in **Settings → Permissions** or during first-run
 setup. Agent nodes can then choose a profile from the inspector. Normal use does not require
 editing source files, JSON, environment files, or adapter manifests; settings export/import is an
 optional portability feature.
@@ -8,7 +8,7 @@ optional portability feature.
 ## Selected-agent readiness is a setup gate
 
 The first-run agent step cannot continue until the currently selected CLI has ready evidence from
-Electron main. Forgeboard resolves the bundled executable, detected command, UI-selected override,
+Electron main. Artemis resolves the bundled executable, detected command, UI-selected override,
 or complete custom-CLI draft, then runs only that candidate's bounded version and capability probes.
 An invalid custom configuration, missing executable, failed probe, adapter mismatch, or unrecognized
 version keeps **Continue** disabled and shows an actionable reason. A successful result includes the
@@ -70,33 +70,33 @@ malformed report fails closed.
 The structural parent check rejects untrusted create, write, replace, delete, permission-change, and
 ownership-change authority while permitting read-only discovery. Existing backup destinations use a
 stricter confidential-parent check that also rejects untrusted read, list, and traverse access.
-Forgeboard-created private directories and files use protected DACLs owned by the current user SID
+Artemis-created private directories and files use protected DACLs owned by the current user SID
 with exactly current-SID and LocalSystem full-control rules; any later drift blocks the operation.
 
 ## Built-in profiles
 
 ### Plan / read-only
 
-Forgeboard asks a supported provider to use its plan/read-only mode in the primary checkout. This
+Artemis asks a supported provider to use its plan/read-only mode in the primary checkout. This
 is a provider control, not an operating-system sandbox. A generic process can still have the
 current desktop user's filesystem and network privileges.
 
 ### Worktree write
 
-Forgeboard creates a dedicated managed Git worktree and asks the provider to confine writes to it.
+Artemis creates a dedicated managed Git worktree and asks the provider to confine writes to it.
 Changes remain outside the primary checkout until reviewed. A working directory alone does not
 prevent a host process or its descendants from accessing other locations allowed to the desktop
 user.
 
 ### Docker isolated
 
-Forgeboard runs a configured in-image agent as a non-root user with one assigned-worktree bind,
+Artemis runs a configured in-image agent as a non-root user with one assigned-worktree bind,
 `--pull never`, a read-only container filesystem, dropped capabilities, no-new-privileges,
 resource limits, and no host credential mounts. Network access is disabled unless explicitly
 enabled in the UI.
 
 Clicking **Review & run** invokes the selected Docker client for bounded daemon and image-metadata
-preflight. It does not run the in-image agent. Forgeboard binds the reviewed launch to a strict
+preflight. It does not run the in-image agent. Artemis binds the reviewed launch to a strict
 immutable `sha256:` image ID, rechecks the Docker client identity and tag binding after approval,
 and then starts the exact disclosed agent command once. The separate **Check Docker** action in
 Settings may run a constrained, no-network, no-host-mount `--version` readiness probe.
@@ -116,7 +116,7 @@ The editor controls:
 
 ### Custom Host
 
-Every Custom Host run receives a managed worktree. Forgeboard canonicalizes configured roots,
+Every Custom Host run receives a managed worktree. Artemis canonicalizes configured roots,
 rejects traversal, symlink aliases, non-folder roots, and context outside readable roots, and binds
 the selected top-level executable's identity and content immediately before launch.
 
@@ -196,7 +196,7 @@ and exact-head CI reads pass through a main-owned outbound gate. The cancel-defa
 displays the exact action, transport, credential-free endpoint/resource, and action-specific impact.
 For a pull request this includes the exact bounded title and body; the body is sent through standard
 input and is not stored in audit metadata. The plan is bound to the originating window, expires
-after a short interval, and is consumed once. After approval, Forgeboard rebuilds and fingerprints
+after a short interval, and is consumed once. After approval, Artemis rebuilds and fingerprints
 the disclosure; changed destinations, source evidence, or actions fail closed. Only the gate can
 mint the opaque permit accepted by the low-level outbound executors. See
 [Remote Git and GitHub delivery](git/GITHUB_DELIVERY.md).
@@ -216,7 +216,7 @@ push.
 
 ### Local-effect classification
 
-Forgeboard maintains an exact architecture-tested inventory of mutation-capable Electron, child-
+Artemis maintains an exact architecture-tested inventory of mutation-capable Electron, child-
 process, filesystem, SQLite, and process-signal capabilities used by desktop main. A new capability
 or owner module fails the normal test suite until it is assigned one reviewed policy: audited
 authority, durable internal state, reviewed runtime, journaled startup recovery, ordinary project
@@ -235,7 +235,7 @@ crash. Once the restored database is validated, its redacted recovery audit is p
 ## Context is separately approved
 
 Permission to read visible worktree content is not permission to attach it to a provider prompt.
-Forgeboard context uses explicit File nodes and resolver-supplied manifest evidence. Each
+Artemis context uses explicit File nodes and resolver-supplied manifest evidence. Each
 attachment carries its own SHA-256 digest; the source file, managed-worktree copy, and approved
 digest must match. The review shows the logical selected paths and hashes; randomized runtime paths
 are intentionally not exposed to the renderer. Immediately before spawn, Electron main re-evaluates
@@ -244,10 +244,10 @@ copies its exact digest-bound bytes through a stable handle into a private per-r
 actual launch arguments, initial input, and context list use those snapshot files, not the mutable
 source paths.
 
-For Docker, Forgeboard adds one separate read-only snapshot mount at `/forgeboard-context`; the
+For Docker, Artemis adds one separate read-only snapshot mount at `/forgeboard-context`; the
 approved whole-worktree mount and its read/write policy do not change. Main retains the snapshot
 until the supervised session reaches a terminal result and removes it on completion or launch
-failure. On Windows, Host and Docker snapshots both remain under Forgeboard's per-user
+failure. On Windows, Host and Docker snapshots both remain under Artemis's per-user
 application-data folder in separate scope-and-SHA-256(SID) namespaces; the Docker managed root is
 still structurally checked, but never stores those private snapshot bytes. Root and instance markers
 bind the full current SID without placing it in the folder name. Snapshot parents, instances,
@@ -281,6 +281,6 @@ rule.
 - Use **Custom Host** for narrower, honestly disclosed policy over a managed worktree.
 - Use **Custom Docker** for a tailored whole-worktree container boundary and resource policy.
 
-If a saved profile is unavailable for the selected agent, Forgeboard preserves the configured
+If a saved profile is unavailable for the selected agent, Artemis preserves the configured
 choice, explains why it cannot run, and disables **Review & run**. It does not silently substitute
 a broader or different permission profile.

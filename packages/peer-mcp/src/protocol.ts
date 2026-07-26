@@ -75,7 +75,7 @@ const TOOLS = [
   {
     name: 'list_agents',
     description:
-      'You are one agent node on a ForgeBoard canvas. List the agents connected to you by context edges — your collaborators. Messages from them arrive in your input prefixed "[from <name>]"; reply with send_message only when a reply is needed.',
+      'You are one agent node on a Artemis canvas. List the agents connected to you by context edges — your collaborators. Messages from them arrive in your input prefixed "[from <name>]"; reply with send_message only when a reply is needed.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -321,7 +321,7 @@ export async function handleMessage(message: JsonRpcMessage, hub: HubClient) {
           capabilities: { tools: {} },
           serverInfo: { name: 'forgeboard-peer-mcp', version: '1.0.0' },
           instructions:
-            'Use list_videos when the user refers to a video on the ForgeBoard canvas. Listed paths are explicit user-approved, project-relative video context.',
+            'Use list_videos when the user refers to a video on the Artemis canvas. Listed paths are explicit user-approved, project-relative video context.',
         },
       };
     case 'ping':

@@ -1,19 +1,19 @@
-# Forgeboard
+# Artemis
 
 Run Claude Code, Codex, Gemini CLI, and OpenCode side by side on a spatial canvas. Each agent works
 in its own isolated Git worktree, and nothing reaches the primary checkout without explicit human
 review and approval. Everything is local: no accounts, no API keys, and no telemetry.
 
 ```bash
-git clone https://github.com/AIAydin/AI-Agent-Orchestrator.git
-cd AI-Agent-Orchestrator
+git clone https://github.com/AIAydin/Artemis.git
+cd Artemis
 corepack pnpm start
 ```
 
 Running from source requires Node.js 22.12 or later with Corepack. Packaged installers are not
-published yet, so this source bootstrap is currently the only way to try Forgeboard.
+published yet, so this source bootstrap is currently the only way to try Artemis.
 
-Forgeboard is an MIT-licensed, local-first visual workshop for building software with locally
+Artemis is an MIT-licensed, local-first visual workshop for building software with locally
 installed coding-agent CLIs. The current desktop application combines a spatial canvas, isolated
 Git worktrees, streamed agent sessions, loopback web/mobile previews, and explicit launch and
 workflow approval gates, authoritative primary-checkout Git review, staging, and commits, plus
@@ -34,36 +34,36 @@ Data & Privacy also provides UI-configured scheduled and quit-time SQLite backup
 retention target, canvas snapshot recovery, and reviewed portable JSON export/import. Other
 unchecked surfaces in the implementation ledger are still under construction.
 
-> Forgeboard is under active construction. `IMPLEMENTATION_CHECKLIST.md` is the authoritative
+> Artemis is under active construction. `IMPLEMENTATION_CHECKLIST.md` is the authoritative
 > status ledger; unchecked items are not claimed as complete.
 
-New users can follow the consolidated [Forgeboard user guide](docs/user/USER_GUIDE.md). For
+New users can follow the consolidated [Artemis user guide](docs/user/USER_GUIDE.md). For
 problem-first recovery steps covering missing tools, moved projects, preview collisions, Git
 conflicts, offline collaboration, malformed imports, and database recovery, see
 [Troubleshooting](docs/support/TROUBLESHOOTING.md). The same common workflows and failures are
 searchable offline inside **Settings → Help & shortcuts**.
 
 The release target is download-first: finished GitHub Releases will provide native installers for
-macOS, Windows, and Linux so a user can install Forgeboard and use its safe local demo without
+macOS, Windows, and Linux so a user can install Artemis and use its safe local demo without
 developer tools. That full installer publication has not yet been verified. The implemented solo
 setup flow is completed in the UI without editing source, JSON, environment files, or hand-written
 configuration; broader unfinished product areas remain listed below and in the checklist.
 
 When a release is available, download the architecture-specific installer from
-[GitHub Releases](https://github.com/AIAydin/AI-Agent-Orchestrator/releases) and follow the
+[GitHub Releases](https://github.com/AIAydin/Artemis/releases) and follow the
 [install and checksum guide](docs/install/README.md). Release installation requires no source
 checkout or configuration-file editing.
 
 ## Local-first principles
 
-- Solo mode requires no account, cloud service, model API key, or Forgeboard server.
+- Solo mode requires no account, cloud service, model API key, or Artemis server.
 - Repository contents, paths, prompts, transcripts, terminal output, and diffs stay local by
   default.
-- Forgeboard uses its bundled Git runtime and launches the user's installed Codex, Claude Code,
+- Artemis uses its bundled Git runtime and launches the user's installed Codex, Claude Code,
   Gemini CLI, OpenCode, or custom CLI. Those tools may send selected context to their providers
   under their own terms.
 - Codex and Claude Code connections start their official CLI-owned browser OAuth flows from first-run
-  setup or **Settings → Agents & runtime**. Forgeboard does not receive or store OAuth tokens, read
+  setup or **Settings → Agents & runtime**. Artemis does not receive or store OAuth tokens, read
   provider credential stores, or proxy model traffic. This OAuth connection UI does not apply to
   Gemini, OpenCode, or custom CLIs.
 - There is no telemetry, analytics, crash upload, model proxy, or automatic log collection.
@@ -155,7 +155,7 @@ node comments work in the default solo product and autosave locally. Viewport po
 restored on relaunch. In an optional collaboration room, private comments remain on the device unless
 the user separately creates an explicitly shared, role-authorized room comment.
 
-The selected first-run CLI must have current ready evidence from the trusted process: Forgeboard
+The selected first-run CLI must have current ready evidence from the trusted process: Artemis
 resolves the exact executable and runs its bounded version/capability probe, while missing,
 mismatched, or invalid configurations keep **Continue** disabled. Checking a draft executable does
 not silently save it or approve a later launch.
@@ -187,7 +187,7 @@ Managed agent delivery has its own stricter gate in Git review. Choose the requi
 checks, run each one, and record human quality approval entirely in the UI. The evidence binds the
 clean managed-worktree HEAD and tree, ownership, resolved check configuration, executable,
 working-directory and environment identities, and exact terminal results. Re-running a check or
-changing any bound source or command evidence invalidates approval. Forgeboard revalidates that
+changing any bound source or command evidence invalidates approval. Artemis revalidates that
 evidence before the cancel-default native delivery confirmation and again before Git changes the
 primary checkout; AI or reviewer outcomes cannot replace the human decision.
 
@@ -207,26 +207,26 @@ UI can display or copy them. With an authenticated selected `gh`, explicit on-de
 also inspect the bound GitHub host and repository, require the remote head to equal the approved
 source before PR creation, send the exact natively disclosed PR body through standard input, and
 return only CI runs matching the full source SHA. Pull requests remain branch-following GitHub
-objects, so concurrent or later branch movement can change their contents even though Forgeboard
+objects, so concurrent or later branch movement can change their contents even though Artemis
 revalidates the reviewed snapshot immediately before the request. No object ID, command, force flag,
 token, or approval evidence comes from the renderer. The exact unsupported configurations and
 user-owned Git/network trust boundaries are documented in
 [Remote Git and GitHub delivery](docs/git/GITHUB_DELIVERY.md).
 
-Existing folders can be opened without Git. Forgeboard then offers an **Initialize Git** action in
-the project rail. A cancel-default native confirmation names the exact folder before Forgeboard
+Existing folders can be opened without Git. Artemis then offers an **Initialize Git** action in
+the project rail. A cancel-default native confirmation names the exact folder before Artemis
 creates Git metadata; existing files are left untouched, unstaged, and uncommitted.
 
 Repository clone and Docker image pull use a separate main-owned outbound gate. Each native dialog
 shows the exact action, transport, credential-free endpoint/resource, and destination details. Its
-short-lived approval is owner-bound and single-use; Forgeboard rebuilds the disclosure after the
+short-lived approval is owner-bound and single-use; Artemis rebuilds the disclosure after the
 dialog and refuses execution if anything changed. The low-level clone and pull executors require the
 gate-issued permit, so a renderer response alone is not authority to send data.
 
 The Data & Privacy screen can browse and create canvas snapshots, restore an exact reviewed
 snapshot after native confirmation, and import a validated portable JSON export in merge or replace
 mode. Import revalidates the selected file's exact-byte SHA-256 digest immediately before its
-transaction. Portable exports include Forgeboard settings, projects, canvases, runs, checks,
+transaction. Portable exports include Artemis settings, projects, canvases, runs, checks,
 snapshots, and audit history; they do not embed repository files, extension source folders, or the
 device-local settings-repair ledger. When an upgrade repairs settings, a startup notice links to
 **Settings → Data & privacy**, where the affected fields and preserved original can be reviewed and
@@ -243,14 +243,14 @@ database file receive a protected DACL for the current Windows SID and LocalSyst
 published, and the final hard-linked file is rechecked before success is recorded.
 
 Desktop audit metadata is redacted before storage and linked by SHA-256 previous/event hashes.
-Forgeboard verifies the chain and its required immutability triggers at startup and when validating
+Artemis verifies the chain and its required immutability triggers at startup and when validating
 a backup. Audit retention removes only a verified leading prefix and writes a chained checkpoint,
 so it never punches an unverifiable hole through later events. This is tamper-evident local storage,
 not an externally anchored signature: a privileged actor able to rewrite the whole database can
 recompute an unkeyed chain, and raw subprocess output is not made safe by audit redaction.
 
-Docker isolation is optional. Forgeboard does not bundle or silently choose an agent image: select
-the Docker executable, exact image, and in-image agent executable in the UI. Forgeboard checks that
+Docker isolation is optional. Artemis does not bundle or silently choose an agent image: select
+the Docker executable, exact image, and in-image agent executable in the UI. Artemis checks that
 combination locally and requires the exact single-use native outbound confirmation before any
 explicit image download. Agent run planning performs only bounded Docker daemon/image metadata
 preflight, pins the approved launch to an immutable image ID, and does not execute the in-image agent
@@ -261,15 +261,15 @@ the optional signing secrets documented in the release guide are configured. Suc
 trigger the operating system's standard warning.
 
 **Settings → Connectivity → Application updates** provides an explicit stable, prerelease, or
-disabled release check. Forgeboard contacts only the fixed official GitHub Releases endpoint after
+disabled release check. Artemis contacts only the fixed official GitHub Releases endpoint after
 the user selects **Check for updates** and approves the exact native outbound disclosure. It never
 polls in the background or downloads or installs an update automatically; opening a discovered
 release page requires another native confirmation. Availability depends on releases published to
 the official repository at the time of the check.
 
-If Forgeboard cannot safely open its local database, startup offers a cancel-default native chooser
-for a verified Forgeboard SQLite backup before creating the application window. The selected source
-is never edited: Forgeboard copies it into private staging, verifies exact Forgeboard provenance and
+If Artemis cannot safely open its local database, startup offers a cancel-default native chooser
+for a verified Artemis SQLite backup before creating the application window. The selected source
+is never edited: Artemis copies it into private staging, verifies exact Artemis provenance and
 SHA-256 identity, then uses a durable quarantine-and-rollback journal for installation. Newer-version
 or unavailable-storage failures remain quit-only, and recovery never falls through to an empty
 replacement database.
@@ -287,7 +287,7 @@ for review instead of silently overwriting either side. Solo mode never starts o
 collaboration service.
 
 Git review is opened from the command bar for the primary checkout or from a completed run's entry
-in **Changes** for that run's managed worktree. Forgeboard resolves the worktree from its persisted
+in **Changes** for that run's managed worktree. Artemis resolves the worktree from its persisted
 run and ownership records; the UI never asks for or accepts a worktree path. The review header and
 every commit/discard disclosure identify the active target, and agent-worktree actions leave the
 primary checkout untouched.
@@ -312,22 +312,22 @@ Docker runs receive the same bytes through one separate read-only `/forgeboard-c
 changing the approved worktree mount or its access policy. Randomized snapshot paths never enter the
 renderer disclosure, and main removes the snapshot after the session ends or a launch fails. If the
 desktop process crashes, the next single-instance owner scavenges only marker-validated, owner-only
-dead or expired instances inside Forgeboard's dedicated snapshot store. It preserves recent live
+dead or expired instances inside Artemis's dedicated snapshot store. It preserves recent live
 instances, ignores unknown and symlink entries, resumes validated interrupted quarantine cleanup,
 and performs managed-Docker-root cleanup lazily without scanning project checkouts. Ownership markers
 are read through stable, no-follow file handles and are rejected above 4 KiB.
 
 Normal desktop startup only warms this context store. If that warm-up cannot establish the protected
-storage boundary, Forgeboard still opens so non-context work and recovery UI remain available;
+storage boundary, Artemis still opens so non-context work and recovery UI remain available;
 context-bearing runs retry the checks and remain blocked while the failure persists. On Windows,
-both Host and Docker context snapshots live under Forgeboard's per-user application-data directory in
+both Host and Docker context snapshots live under Artemis's per-user application-data directory in
 separate scope-and-SID-hash namespaces, not inside a shared managed-worktree root. The root and
 instance markers bind the current SID, private directories and files allow only that SID plus
 LocalSystem, and their identities and DACLs are revalidated immediately before each launch bind.
 
 ## Development
 
-Prerequisites: Node.js 22.12 or later with Corepack. Forgeboard supplies its own Git runtime.
+Prerequisites: Node.js 22.12 or later with Corepack. Artemis supplies its own Git runtime.
 
 For a developer source checkout, the one-command bootstrap is:
 
@@ -342,7 +342,7 @@ No external credentials are required for the deterministic demo flow. Real agent
 are detected locally and remain optional.
 
 For Codex or Claude Code, choose **Connect with OpenAI** or **Connect with Anthropic** in first-run
-setup or **Settings → Agents & runtime**. Forgeboard prepares the exact CLI action, shows a native
+setup or **Settings → Agents & runtime**. Artemis prepares the exact CLI action, shows a native
 confirmation, then lets that provider's CLI open its official browser sign-in. The card changes to
 **Connected** only after normalized CLI status evidence. **Refresh**, **Cancel sign-in**,
 **Disconnect**, and **Reconnect** remain explicit UI actions. An unsaved executable override in the
