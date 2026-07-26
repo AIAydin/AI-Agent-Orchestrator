@@ -153,8 +153,10 @@ webview.preview-face-webview {
   gap: 4px;
   color: var(--text-soft);
 }
-.preview-face-row select {
+.preview-face-row select,
+.preview-face-row input {
   font-size: var(--text-xs);
+  min-width: 0;
 }
 .preview-face-orient,
 .preview-face-settings-link {
@@ -178,6 +180,10 @@ webview.preview-face-webview {
   margin-top: 2px;
   border-top: 1px solid var(--line);
   border-radius: 0 0 5px 5px;
+}
+.preview-face-note {
+  margin: 0;
+  color: var(--text-faint);
 }
 .preview-face-check {
   display: inline-flex;

@@ -6,6 +6,7 @@ import type {
   PermissionProfile,
 } from '../../../../../shared/application/contracts.js';
 import type { RunHistoryTokenUsage } from '../../../../../shared/runs/contracts.js';
+import type { PreviewTarget } from '../../../../../shared/preview/targets.js';
 import { minimumNodeDimensionsForKind } from '../../../../../shared/canvas/node-dimensions.js';
 import type { ExtensionNodeAvailability } from '../../extensions/extension-nodes.js';
 import { permissionProfileLabel } from '../../permissions/permission-profile-ui.js';
@@ -153,6 +154,13 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   transcriptUpdatedAt?: string;
   lastRunSummary?: string;
   changedFiles?: string[];
+  /**
+   * Literal dev-server command typed on the preview node itself. Clearing it
+   * means sending an explicit `undefined`, which the canvas adapter reads as
+   * "drop the stored command" rather than "keep the previous one".
+   */
+  previewCommand?: WorkshopCommandConfiguration | undefined;
+  previewTarget?: PreviewTarget;
   previewCwdRelative?: string;
   previewPackageScript?: string;
   previewReadinessPath?: string;

@@ -6,7 +6,7 @@ import { useCanvasNodeInteractions } from '../../canvas/interactions/CanvasNodeI
 import { useAgentSession } from '../../runs/agent-session/AgentSessionContext.js';
 import { normalizedCommandFor } from '../workflow-node-config.js';
 import { useWorkflowRuntime } from '../WorkflowRuntimeContext.js';
-import { formatCommandLine, parseCommandLine } from './command-line.js';
+import { formatCommandLine, parseCommandLine } from '../../../configuration/command-line.js';
 import { latestTestAttempt, testStatusLabel, type TestNodeAttemptView } from './view-model.js';
 
 /**

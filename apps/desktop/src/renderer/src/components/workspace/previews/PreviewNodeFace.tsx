@@ -17,9 +17,10 @@ import {
   detectedPreviewScripts,
   preferredPreviewScript,
 } from '../../../../../shared/preview/command.js';
-import type { PreviewCommand, PreviewTarget } from '../../../../../shared/preview/targets.js';
+import type { PreviewCommand } from '../../../../../shared/preview/targets.js';
 import { previewWebviewPartition } from '../../../../../shared/preview/webview-partition.js';
 import { unwrap } from '../../../lib/ipc.js';
+import { formatCommandLine, parseCommandLine } from '../../configuration/command-line.js';
 import {
   PREVIEW_DEVICE_PRESETS,
   orientedViewport,
@@ -42,11 +43,14 @@ import './preview-node-face.css';
  * Preview face: one compact port input plus an in-DOM webview that fills the
  * node body ("literally just inputting a port and it showing up"). Beyond that
  * default, a node-anchored config popover carries the controls that used to be
- * inspector-only — dev-server start/stop, device preset, orientation, and
- * side-by-side comparison — wired to the same `window.forgeboard.previews` IPC
- * and `updateNodeData`/`openSettings` callbacks the inspector used. The mobile
- * variant (and any side-by-side comparison) renders the webview inside a
- * CSS-scaled device frame at the stored preset.
+ * inspector- or Settings-only — the dev-server start command, device preset,
+ * orientation, and side-by-side comparison — wired to the same
+ * `window.forgeboard.previews` IPC and `updateNodeData`/`openSettings`
+ * callbacks the inspector used. The start command lives here, on the node,
+ * because each preview node runs its own server; main still resolves and
+ * natively confirms the exact executable before anything is spawned. The
+ * mobile variant (and any side-by-side comparison) renders the webview inside
+ * a CSS-scaled device frame at the stored preset.
  */
 export function PreviewNodeFace({
   id,
@@ -188,9 +192,7 @@ export function PreviewNodeFace({
     [project.health],
   );
   const preferredScript = useMemo(() => preferredPreviewScript(detectedScripts), [detectedScripts]);
-  const persistedCommand = rendererCommand(
-    (data as { previewCommand?: RendererCommandShape }).previewCommand,
-  );
+  const persistedCommand = rendererCommand(data.previewCommand);
   const settingsCommand = settings?.developmentCommand?.executable?.trim()
     ? {
         executable: settings.developmentCommand.executable,
@@ -198,9 +200,7 @@ export function PreviewNodeFace({
       }
     : undefined;
   const command = persistedCommand ?? settingsCommand;
-  const target: PreviewTarget = (data as { previewTarget?: PreviewTarget }).previewTarget ?? {
-    kind: 'primary',
-  };
+  const target = data.previewTarget ?? { kind: 'primary' };
   const selectedPackageScript =
     data.previewPackageScript === undefined
       ? command
@@ -212,6 +212,11 @@ export function PreviewNodeFace({
   const stalePackageScript = selectedPackageScript !== '' && !selectedScript;
   const launchConfigured = Boolean(selectedScript || command);
   const running = preview ? ['starting', 'ready', 'stopping'].includes(preview.status) : false;
+  const commandLine = command
+    ? formatCommandLine({ executable: command.executable, arguments: command.args })
+    : '';
+  const [commandDraft, setCommandDraft] = useState(commandLine);
+  useEffect(() => setCommandDraft(commandLine), [commandLine]);
 
   const commit = (): void => {
     const classification = classifiedAddress(draft);
@@ -237,6 +242,21 @@ export function PreviewNodeFace({
   const updateConfig = (patch: Partial<WorkshopNodeData>): void => {
     session.recordHistory();
     session.updateNodeData(id, patch);
+  };
+
+  // The typed line is split here into an explicit executable plus arguments.
+  // Main resolves that pair, hashes the executable, and shows it in the native
+  // confirmation — nothing typed here ever reaches a shell.
+  const editCommandLine = (value: string): void => {
+    setCommandDraft(value);
+    const parsed = parseCommandLine(value);
+    session.updateNodeData(id, {
+      previewPackageScript: '',
+      previewCommand:
+        parsed.executable === ''
+          ? undefined
+          : { executable: parsed.executable, arguments: parsed.arguments },
+    });
   };
 
   const perform = async (action: 'start' | 'stop'): Promise<void> => {
@@ -444,6 +464,84 @@ export function PreviewNodeFace({
 
         {configuring ? (
           <div className="preview-face-popover nowheel nodrag" aria-label="Preview settings">
+            {hasConfiguredUrl ? null : (
+              <>
+                {detectedScripts.length > 0 ? (
+                  <label className="preview-face-row">
+                    Start with
+                    <select
+                      aria-label="Start with"
+                      name={`node-${id}-preview-launch-source`}
+                      value={selectedPackageScript}
+                      disabled={readOnly || busy}
+                      onChange={(event) =>
+                        updateConfig(
+                          event.target.value === ''
+                            ? { previewPackageScript: '' }
+                            : {
+                                previewPackageScript: event.target.value,
+                                previewCommand: undefined,
+                              },
+                        )
+                      }
+                    >
+                      {stalePackageScript ? (
+                        <option value={selectedPackageScript}>
+                          {selectedPackageScript} — gone
+                        </option>
+                      ) : null}
+                      {detectedScripts.map((script) => (
+                        <option key={script.name} value={script.name}>
+                          {script.name}
+                        </option>
+                      ))}
+                      <option value="">A command I type</option>
+                    </select>
+                  </label>
+                ) : null}
+                {stalePackageScript ? (
+                  <p className="preview-face-note" role="status">
+                    That script is gone. Pick another, or type a command.
+                  </p>
+                ) : null}
+                {selectedPackageScript === '' ? (
+                  <>
+                    <label className="preview-face-row">
+                      Start command
+                      <input
+                        aria-label="Start command"
+                        name={`node-${id}-preview-command`}
+                        value={commandDraft}
+                        placeholder="pnpm run dev"
+                        disabled={readOnly || busy}
+                        onFocus={() => {
+                          session.recordHistory();
+                        }}
+                        onChange={(event) => editCommandLine(event.target.value)}
+                      />
+                    </label>
+                    <label className="preview-face-row">
+                      Folder
+                      <input
+                        aria-label="Start folder"
+                        name={`node-${id}-preview-folder`}
+                        value={data.previewCwdRelative ?? ''}
+                        placeholder="."
+                        disabled={readOnly || busy}
+                        onFocus={() => {
+                          session.recordHistory();
+                        }}
+                        onChange={(event) =>
+                          session.updateNodeData(id, {
+                            previewCwdRelative: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  </>
+                ) : null}
+              </>
+            )}
             {!isExternalUrl ? (
               <label className="preview-face-row">
                 Device
