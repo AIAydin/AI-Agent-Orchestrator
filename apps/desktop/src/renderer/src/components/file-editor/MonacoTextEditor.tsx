@@ -3,6 +3,7 @@ import type { editor as MonacoEditor } from 'monaco-editor';
 
 import { diagnosticsFromMonacoMarkers, type FileDiagnosticsState } from './diagnostics/model.js';
 import { loadMonacoEditor, type MonacoLoader } from './monaco-loader.js';
+import './MonacoTextEditor.css';
 
 export interface MonacoTextEditorProps {
   readonly value: string;
@@ -111,10 +112,10 @@ export function MonacoTextEditor({
           if (!suppressChangeRef.current) onChangeRef.current(editor.getValue());
         });
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => onSaveRef.current());
-        editor.layout();
+        layoutEditor(editor, container);
         navigateEditor(editor, positionRef.current);
         if (typeof ResizeObserver !== 'undefined') {
-          resizeObserver = new ResizeObserver(() => editor.layout());
+          resizeObserver = new ResizeObserver(() => layoutEditor(editor, container));
           resizeObserver.observe(container);
         }
       })
@@ -171,6 +172,19 @@ export function MonacoTextEditor({
       ) : null}
     </div>
   );
+}
+
+/**
+ * Lays Monaco out against the container's LAYOUT box. A bare `editor.layout()`
+ * self-measures with `getBoundingClientRect()`, which on the canvas is scaled by
+ * React Flow's zoom transform — Monaco then sizes its viewport in the wrong
+ * pixel space and paints nothing at any zoom below 1.
+ */
+function layoutEditor(editor: MonacoEditor.IStandaloneCodeEditor, container: HTMLElement): void {
+  const width = container.offsetWidth;
+  const height = container.offsetHeight;
+  if (width === 0 || height === 0) return;
+  editor.layout({ width, height });
 }
 
 function navigateEditor(

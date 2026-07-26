@@ -1,0 +1,29 @@
+/* Layout the editor owns, so every consumer gets a sized Monaco. Without this
+   the mount point has no intrinsic height, collapses to a few pixels, and the
+   editor's overflow guard clips the code out of sight. */
+.file-editor-monaco-shell,
+.file-editor-monaco {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.file-editor-monaco-shell {
+  position: relative;
+  flex: 1;
+}
+
+.file-editor-monaco-error {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: var(--red);
+  background: var(--surface);
+}
+
+.file-editor-monaco-error p {
+  margin: 0;
+}
