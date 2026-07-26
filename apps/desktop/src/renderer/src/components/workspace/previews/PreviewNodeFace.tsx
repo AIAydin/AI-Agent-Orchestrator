@@ -500,7 +500,7 @@ export function PreviewNodeFace({
                   </label>
                 ) : null}
                 {stalePackageScript ? (
-                  <p className="preview-face-security-note" role="status">
+                  <p className="preview-face-note" role="status">
                     That script is gone. Pick another, or type a command.
                   </p>
                 ) : null}

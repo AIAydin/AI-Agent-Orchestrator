@@ -181,6 +181,10 @@ webview.preview-face-webview {
   border-top: 1px solid var(--line);
   border-radius: 0 0 5px 5px;
 }
+.preview-face-note {
+  margin: 0;
+  color: var(--text-faint);
+}
 .preview-face-check {
   display: inline-flex;
   align-items: center;
