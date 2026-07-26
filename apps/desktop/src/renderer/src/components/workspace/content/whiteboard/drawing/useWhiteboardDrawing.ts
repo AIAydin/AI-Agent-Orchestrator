@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import {
   createArrowElement,
@@ -114,6 +114,11 @@ export function useWhiteboardDrawing({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<WhiteboardDraft | null>(null);
   const [textDraft, setTextDraft] = useState<WhiteboardTextDraft | null>(null);
+  // `endGesture` reads the draft through this ref, not the render closure: a tap
+  // fast enough that pointerup lands before React re-renders would otherwise see
+  // the pre-press value and silently drop the gesture.
+  const draftRef = useRef<WhiteboardDraft | null>(draft);
+  draftRef.current = draft;
 
   const elements = document.elements;
   const activeElements = useMemo(
@@ -180,6 +185,8 @@ export function useWhiteboardDrawing({
   }, []);
 
   const endGesture = useCallback(() => {
+    const draft = draftRef.current;
+    draftRef.current = null;
     setDraft(null);
     if (draft === null || readOnly) return;
     if (draft.kind === 'text') {
