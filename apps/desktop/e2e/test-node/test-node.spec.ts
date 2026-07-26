@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../support/electron.js';
 import {
   ARTIFACT_PATH,
   LIVE_MARKER,
@@ -64,10 +68,8 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
         marker: LIVE_MARKER,
       });
 
-      await expect(panel.locator('.test-node-state')).toHaveText('Running');
-      await expect(
-        panel.locator('.test-node-result').first().getByLabel('Test output'),
-      ).toContainText(LIVE_MARKER);
+      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Running');
+      await expect(panel.getByLabel('Test output').first()).toContainText(LIVE_MARKER);
       await expectParsedSummary(panel, {
         passed: 1,
         failed: 0,
@@ -78,7 +80,7 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
       await queueWorkflowNativeResponse(electronApp!, 1);
       await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
       expectExactNodeCancelConfirmation(await waitForWorkflowNativeDialog(electronApp!, 1));
-      await expect(panel.locator('.test-node-state')).toHaveText('Cancelled');
+      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Cancelled');
       await expect.poll(async () => await panel.textContent()).toContain(LIVE_MARKER);
       await expectParsedSummary(panel, {
         passed: 1,
@@ -90,7 +92,7 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
 
     await test.step('reconfigure, rerun, parse the passing summary, and expose a verified artifact', async () => {
       await configureTestNode(panel, PASSING_SCRIPT);
-      await panel.getByRole('button', { name: 'Run again' }).click();
+      await panel.getByRole('button', { name: 'Review and run' }).click();
       const launch = await openLaunchDecision(page);
       await expect(launch).toContainText(PASS_MARKER);
       await queueWorkflowNativeResponse(electronApp!, 1);
@@ -100,20 +102,24 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
         marker: PASS_MARKER,
       });
 
-      await expect(panel.locator('.test-node-state')).toHaveText('Passed');
-      await expect(
-        panel.locator('.test-node-result').first().getByLabel('Test output'),
-      ).toContainText(PASS_MARKER);
+      await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Passed');
+      await expect(panel.getByLabel('Test output').first()).toContainText(PASS_MARKER);
       await expectParsedSummary(panel, {
         passed: 4,
         failed: 0,
         skipped: 1,
         total: 5,
       });
-      const artifacts = panel.getByRole('region', {
-        name: 'Verified test artifacts',
-      });
-      await expect(artifacts).toContainText(ARTIFACT_PATH);
+      const workflows = page
+        .locator('.activity-drawer')
+        .getByRole('tabpanel', { name: 'Workflows' });
+      const refresh = workflows.getByRole('button', { name: 'Refresh' });
+      const artifacts = panel.getByLabel('Verified test artifacts');
+      await expect(async () => {
+        await refresh.click();
+        await expect(refresh).toBeEnabled();
+        await expect(artifacts).toContainText(ARTIFACT_PATH, { timeout: 1_000 });
+      }).toPass({ timeout: 30_000 });
       await expect(
         artifacts.getByRole('button', { name: 'Reveal test-node-result.json' }),
       ).toBeVisible();
@@ -137,19 +143,19 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
     const restoredPanel = await selectRestoredTestNode(page);
 
     await test.step('restart restores the prior output, summary, artifact, and cancelled attempt', async () => {
-      await expect(restoredPanel.locator('.test-node-state')).toHaveText('Passed');
-      await expect(
-        restoredPanel.locator('.test-node-result').first().getByLabel('Test output'),
-      ).toContainText(PASS_MARKER);
+      await expect(restoredPanel.locator('.node-face-strip .node-face-status')).toHaveText(
+        'Passed',
+      );
+      await expect(restoredPanel.getByLabel('Test output').first()).toContainText(PASS_MARKER);
       await expectParsedSummary(restoredPanel, {
         passed: 4,
         failed: 0,
         skipped: 1,
         total: 5,
       });
-      await expect(
-        restoredPanel.getByRole('region', { name: 'Verified test artifacts' }),
-      ).toContainText(ARTIFACT_PATH);
+      await expect(restoredPanel.getByLabel('Verified test artifacts')).toContainText(
+        ARTIFACT_PATH,
+      );
       await expect(
         restoredPanel.getByRole('region', { name: 'Previous test attempts' }),
       ).toContainText('Cancelled');
@@ -157,7 +163,7 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
 
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

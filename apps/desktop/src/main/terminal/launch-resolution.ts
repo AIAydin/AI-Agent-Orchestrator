@@ -214,14 +214,9 @@ export async function resolveTerminalExecutable(
       const details = await stat(canonical);
       if (!details.isFile()) continue;
       await access(canonical, process.platform === 'win32' ? constants.F_OK : constants.X_OK);
-      if (process.platform === 'win32' && /\.(?:bat|cmd)$/iu.test(canonical)) {
-        throw new Error(
-          'Windows batch files cannot be used as terminal programs. Choose PowerShell, cmd.exe, or another program file.',
-        );
-      }
       return canonical;
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith('Windows batch files')) throw error;
+    } catch {
+      continue;
     }
   }
   throw new Error('The configured terminal program was not found or cannot be run.');

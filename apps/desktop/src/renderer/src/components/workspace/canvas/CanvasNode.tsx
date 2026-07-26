@@ -1,24 +1,32 @@
-import { ChevronDown, Lock, Play } from 'lucide-react';
-import { Handle, NodeResizer, Position, type Node, type NodeProps } from '@xyflow/react';
+import { ChevronDown, Lock, Play } from "lucide-react";
+import {
+  Handle,
+  NodeResizer,
+  Position,
+  type Node,
+  type NodeProps,
+} from "@xyflow/react";
 
 import type {
   ExtensionCanvasNodeTypeView,
   PermissionProfile,
-} from '../../../../../shared/application/contracts.js';
-import type { RunHistoryTokenUsage } from '../../../../../shared/runs/contracts.js';
-import { minimumNodeDimensionsForKind } from '../../../../../shared/canvas/node-dimensions.js';
-import type { ExtensionNodeAvailability } from '../../extensions/extension-nodes.js';
-import { permissionProfileLabel } from '../../permissions/permission-profile-ui.js';
-import { useCanvasNodeInteractions } from './interactions/CanvasNodeInteractionContext.js';
-import { CanvasNodeHeaderTitle } from './node-details/CanvasNodeHeaderTitle.js';
-import { CanvasNodeDetailsPopover } from './node-details/CanvasNodeDetailsPopover.js';
-import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
-import { GROUP_FRAME_MINIMUM } from './interactions/groups/group-dimensions.js';
-import { useNodeTypeRegistry } from '../node-registry/NodeRegistryContext.js';
-import { providerTheme } from '../node-registry/provider-themes.js';
-import { nodeFaceForKind } from './faces/node-face-registry.js';
-import type { NodeKind } from '../node-registry/registry.js';
-import type { RunStatus } from '@forgeboard/core/domain';
+} from "../../../../../shared/application/contracts.js";
+import type { RunHistoryTokenUsage } from "../../../../../shared/runs/contracts.js";
+import { minimumNodeDimensionsForKind } from "../../../../../shared/canvas/node-dimensions.js";
+import type { ExtensionNodeAvailability } from "../../extensions/extension-nodes.js";
+import { permissionProfileLabel } from "../../permissions/permission-profile-ui.js";
+import { useCanvasNodeInteractions } from "./interactions/CanvasNodeInteractionContext.js";
+import { CanvasNodeHeaderTitle } from "./node-details/CanvasNodeHeaderTitle.js";
+import { CanvasNodeDetailsPopover } from "./node-details/CanvasNodeDetailsPopover.js";
+import { TextRotateHandle } from "../content/text/TextRotateHandle.js";
+import { TextSizeControls } from "../content/text/TextSizeControls.js";
+import { WorkspaceTooltip } from "../shell/tooltips/WorkspaceTooltip.js";
+import { GROUP_FRAME_MINIMUM } from "./interactions/groups/group-dimensions.js";
+import { useNodeTypeRegistry } from "../node-registry/NodeRegistryContext.js";
+import { providerTheme } from "../node-registry/provider-themes.js";
+import { nodeFaceForKind } from "./faces/node-face-registry.js";
+import type { NodeKind } from "../node-registry/registry.js";
+import type { RunStatus } from "@forgeboard/core/domain";
 
 export {
   NODE_DEFINITIONS,
@@ -26,13 +34,13 @@ export {
   TEMPLATE_NODE_KINDS,
   type BuiltInNodeKind,
   type NodeKind,
-} from '../node-registry/registry.js';
+} from "../node-registry/registry.js";
 
 export interface WorkshopNodeData extends Record<string, unknown> {
   kind: NodeKind;
   title: string;
   description: string;
-  status: 'idle' | RunStatus;
+  status: "idle" | RunStatus;
   locked: boolean;
   collapsed: boolean;
   color: string;
@@ -43,6 +51,9 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   model?: string | undefined;
   contextAttachmentIds?: string[];
   markdown?: string;
+  text?: string;
+  fontSize?: "s" | "m" | "l";
+  rotationDeg?: number;
   checklist?: Array<{
     id: string;
     label: string;
@@ -56,7 +67,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
     authorId: string;
   }>;
   variables?: Record<string, string>;
-  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  priority?: "low" | "normal" | "high" | "urgent";
   assigneeId?: string;
   acceptanceCriteria?: Array<{
     id: string;
@@ -67,19 +78,19 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   relatedFiles?: Array<{
     projectId: string;
     relativePath: string;
-    kind: 'file' | 'directory' | 'image' | 'artifact';
+    kind: "file" | "directory" | "image" | "artifact";
     missing: boolean;
     lastKnownHash?: string;
   }>;
   file?: {
     projectId: string;
     relativePath: string;
-    kind: 'file' | 'directory' | 'image' | 'artifact';
+    kind: "file" | "directory" | "image" | "artifact";
     missing: boolean;
     lastKnownHash?: string;
   };
-  reviewTarget?: { kind: 'primary' } | { kind: 'agent-run'; runId: string };
-  deliveryTarget?: { kind: 'agent-run'; runId: string } | undefined;
+  reviewTarget?: { kind: "primary" } | { kind: "agent-run"; runId: string };
+  deliveryTarget?: { kind: "agent-run"; runId: string } | undefined;
   worktreeId?: string | undefined;
   worktreeRecordedActive?: boolean | undefined;
   branch?: string | undefined;
@@ -100,20 +111,20 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   commitIds?: string[];
   ahead?: number;
   behind?: number;
-  mergeReadiness?: 'unknown' | 'ready' | 'conflicts' | 'checks-failing';
+  mergeReadiness?: "unknown" | "ready" | "conflicts" | "checks-failing";
   checkIds?: string[];
   files?: string[];
-  viewMode?: 'split' | 'unified';
+  viewMode?: "split" | "unified";
   showWhitespace?: boolean;
   ignoreWhitespace?: boolean;
-  hunkDecisions?: Record<string, 'pending' | 'accepted' | 'rejected'>;
+  hunkDecisions?: Record<string, "pending" | "accepted" | "rejected">;
   lineCommentIds?: string[];
   revisionRequest?: string;
-  approval?: 'pending' | 'approved' | 'changes-requested';
+  approval?: "pending" | "approved" | "changes-requested";
   images?: Array<{
     projectId: string;
     relativePath: string;
-    kind: 'file' | 'directory' | 'image' | 'artifact';
+    kind: "file" | "directory" | "image" | "artifact";
     missing: boolean;
     lastKnownHash?: string;
   }>;
@@ -124,9 +135,15 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   annotationIds?: string[];
   exportArtifactIds?: string[];
   contextSpecificationArtifactId?: string;
-  taskStatus?: 'backlog' | 'ready' | 'in-progress' | 'review' | 'done' | 'cancelled';
+  taskStatus?:
+    | "backlog"
+    | "ready"
+    | "in-progress"
+    | "review"
+    | "done"
+    | "cancelled";
   command?: WorkshopCommandConfiguration;
-  checkKind?: 'lint' | 'typecheck' | 'test' | 'build' | 'custom';
+  checkKind?: "lint" | "typecheck" | "test" | "build" | "custom";
   runIds?: string[];
   artifactPaths?: string[];
   humanApprovalRequired?: boolean;
@@ -138,10 +155,10 @@ export interface WorkshopNodeData extends Record<string, unknown> {
     maximumIterations: number;
     backoffMs: number;
   };
-  gateState?: 'pending' | 'passed' | 'failed' | 'waiting-for-human';
+  gateState?: "pending" | "passed" | "failed" | "waiting-for-human";
   childNodeIds?: string[];
-  purpose?: 'product-surface' | 'workflow-stage' | 'feature-area' | 'custom';
-  layout?: 'freeform' | 'horizontal' | 'vertical' | 'grid';
+  purpose?: "product-surface" | "workflow-stage" | "feature-area" | "custom";
+  layout?: "freeform" | "horizontal" | "vertical" | "grid";
   autoFit?: boolean;
   runId?: string;
   transcript?: string;
@@ -155,18 +172,18 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   previewPort?: number | undefined;
   /** A configured external web URL (origin-pinned); mutually exclusive with `previewPort`. */
   url?: string | undefined;
-  previewPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
-  previewSecondaryPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
-  previewOrientation?: 'portrait' | 'landscape';
+  previewPreset?: "desktop" | "laptop" | "iphone" | "pixel" | "tablet";
+  previewSecondaryPreset?: "desktop" | "laptop" | "iphone" | "pixel" | "tablet";
+  previewOrientation?: "portrait" | "landscape";
   previewSideBySide?: boolean;
   browserAuthenticationEnabled?: boolean;
   agentBrowserAccess?: boolean;
   agentBrowserInteraction?: boolean;
   previewComparison?: {
-    leftTarget?: { kind: 'agent-run'; runId: string };
-    rightTarget?: { kind: 'agent-run'; runId: string };
-    leftPreset: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
-    rightPreset: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
+    leftTarget?: { kind: "agent-run"; runId: string };
+    rightTarget?: { kind: "agent-run"; runId: string };
+    leftPreset: "desktop" | "laptop" | "iphone" | "pixel" | "tablet";
+    rightPreset: "desktop" | "laptop" | "iphone" | "pixel" | "tablet";
   };
   extensionId?: string;
   extensionVersion?: string;
@@ -183,22 +200,29 @@ export interface WorkshopCommandConfiguration {
   environmentNames?: string[];
 }
 
-export type WorkshopNode = Node<WorkshopNodeData, 'workshop'>;
+export type WorkshopNode = Node<WorkshopNodeData, "workshop">;
 
 export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
   const interactions = useCanvasNodeInteractions();
   const registry = useNodeTypeRegistry();
   const definition = registry.resolve(data);
   const Icon = definition.icon;
-  const inputPorts = definition.ports?.filter((port) => port.direction === 'input') ?? [];
-  const outputPorts = definition.ports?.filter((port) => port.direction === 'output') ?? [];
-  const targetHandles = data.kind === 'extension' ? inputPorts : [{ id: 'input' }];
-  const sourceHandles = data.kind === 'extension' ? outputPorts : [{ id: 'output' }];
-  const groupFrame = data.kind === 'group-frame';
-  const minimum = groupFrame ? GROUP_FRAME_MINIMUM : minimumNodeDimensionsForKind(data.kind);
+  const inputPorts =
+    definition.ports?.filter((port) => port.direction === "input") ?? [];
+  const outputPorts =
+    definition.ports?.filter((port) => port.direction === "output") ?? [];
+  const targetHandles =
+    data.kind === "extension" ? inputPorts : [{ id: "input" }];
+  const sourceHandles =
+    data.kind === "extension" ? outputPorts : [{ id: "output" }];
+  const groupFrame = data.kind === "group-frame";
+  const minimum = groupFrame
+    ? GROUP_FRAME_MINIMUM
+    : minimumNodeDimensionsForKind(data.kind);
   const canChangePresentation = !interactions.readOnly && !data.locked;
   const automaticallySized = groupFrame && data.autoFit === true;
-  const isAgent = data.kind === 'agent';
+  const isAgent = data.kind === "agent";
+  const isText = data.kind === "text";
   const Face = data.collapsed ? null : nodeFaceForKind(data.kind);
   const theme = isAgent ? providerTheme(data.adapterId) : null;
   /* Connection handles are siblings of the node surface, not children of it.
@@ -209,52 +233,60 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
      surface renders each one whole while keeping edge geometry intact. */
   return (
     <>
-      {targetHandles.map((port, index) => (
-        <Handle
-          key={port.id}
-          id={port.id}
-          type="target"
-          position={Position.Left}
-          className="node-handle"
-          style={{
-            top: `${((index + 1) / (targetHandles.length + 1)) * 100}%`,
-          }}
-        />
-      ))}
-      {sourceHandles.map((port, index) => (
-        <Handle
-          key={port.id}
-          id={port.id}
-          type="source"
-          position={Position.Right}
-          className="node-handle"
-          style={{
-            top: `${((index + 1) / (sourceHandles.length + 1)) * 100}%`,
-          }}
-        />
-      ))}
+      {!isText && (
+        <>
+          {targetHandles.map((port, index) => (
+            <Handle
+              key={port.id}
+              id={port.id}
+              type="target"
+              position={Position.Left}
+              className="node-handle"
+              style={{
+                top: `${((index + 1) / (targetHandles.length + 1)) * 100}%`,
+              }}
+            />
+          ))}
+          {sourceHandles.map((port, index) => (
+            <Handle
+              key={port.id}
+              id={port.id}
+              type="source"
+              position={Position.Right}
+              className="node-handle"
+              style={{
+                top: `${((index + 1) / (sourceHandles.length + 1)) * 100}%`,
+              }}
+            />
+          ))}
+        </>
+      )}
       <article
         className={[
-          'canvas-node',
-          selected ? 'selected' : '',
-          data.collapsed ? 'collapsed' : '',
-          groupFrame ? 'group-frame' : '',
-          isAgent ? 'agent-window' : '',
-          isAgent && data.collapsed ? 'agent-drag-handle' : '',
+          "canvas-node",
+          selected ? "selected" : "",
+          data.collapsed ? "collapsed" : "",
+          groupFrame ? "group-frame" : "",
+          isAgent ? "agent-window" : "",
+          isAgent && data.collapsed ? "agent-drag-handle" : "",
+          isText ? "text-node" : "",
         ]
           .filter(Boolean)
-          .join(' ')}
+          .join(" ")}
         style={
           {
-            '--node-accent': theme?.accent ?? data.color,
-            '--provider-tint': theme?.titleBarTint ?? 'transparent',
+            "--node-accent": theme?.accent ?? data.color,
+            "--provider-tint": theme?.titleBarTint ?? "transparent",
+            ...(isText
+              ? { "--text-rotation": `${data.rotationDeg ?? 0}deg` }
+              : {}),
           } as React.CSSProperties
         }
-        role={groupFrame ? 'group' : undefined}
-        aria-roledescription={groupFrame ? 'group' : 'canvas node'}
+        role={groupFrame ? "group" : undefined}
+        aria-roledescription={groupFrame ? "group" : "canvas node"}
         aria-label={`${definition.label}: ${data.title}`}
         data-node-kind={data.kind}
-        data-provider={isAgent ? (theme?.id ?? 'generic') : undefined}
+        data-provider={isAgent ? (theme?.id ?? "generic") : undefined}
       >
         <NodeResizer
           nodeId={id}
@@ -271,102 +303,156 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
           lineClassName="canvas-node-resize-line"
           color={data.color}
           onResizeStart={() => {
-            if (selected && canChangePresentation && !data.collapsed && !automaticallySized) {
+            if (
+              selected &&
+              canChangePresentation &&
+              !data.collapsed &&
+              !automaticallySized
+            ) {
               interactions.onResizeStart?.(id);
             }
           }}
         />
         <header>
-          <span
-            className="node-kind-icon"
-            role="img"
-            aria-label={definition.label}
-            title={definition.label}
-          >
-            <Icon size={15} aria-hidden="true" />
-          </span>
-          {/* Agent nodes keep their own inline rename (in AgentSessionNode's title bar), so the
-            generic header only shows their collapsed title as static text. Every other kind gets
-            the double-click-to-rename header title — the node name is the header's primary text,
-            with the kind conveyed by the icon beside it. */}
-          {isAgent ? (
-            data.collapsed && (
-              <strong className="collapsed-node-title" title={data.title}>
-                {data.title}
-              </strong>
-            )
+          {isText ? (
+            <>
+              <TextSizeControls
+                id={id}
+                fontSize={data.fontSize ?? "m"}
+                disabled={!canChangePresentation}
+              />
+              {data.locked && <Lock size={12} aria-label="Locked" />}
+              <CanvasNodeDetailsPopover
+                id={id}
+                data={data}
+                readOnly={!canChangePresentation}
+              />
+            </>
           ) : (
-            <CanvasNodeHeaderTitle id={id} title={data.title} readOnly={!canChangePresentation} />
-          )}
-          {data.collapsed && data.status !== 'idle' && (
-            <span className={`node-status-label ${data.status}`}>{data.status}</span>
-          )}
-          <span
-            className={`run-status ${data.status}`}
-            role="status"
-            aria-label={`Status: ${data.status}`}
-          />
-          {data.locked && <Lock size={12} aria-label="Locked" />}
-          {/* Agent nodes surface their settings/comments/history through their own window, so the
-            generic details popover is only mounted for the other node kinds. */}
-          {!isAgent && (
-            <CanvasNodeDetailsPopover id={id} data={data} readOnly={!canChangePresentation} />
-          )}
-          <WorkspaceTooltip
-            content={
-              interactions.readOnly
-                ? 'Your collaboration role cannot change this node.'
-                : data.locked
-                  ? 'Unlock this node before changing how it looks.'
-                  : data.collapsed
-                    ? 'Expand node'
-                    : 'Collapse node'
-            }
-          >
-            <button
-              className="node-collapse-button nodrag"
-              type="button"
-              aria-label={`${data.collapsed ? 'Expand' : 'Collapse'} ${data.title}`}
-              aria-expanded={!data.collapsed}
-              disabled={!canChangePresentation}
-              onClick={(event) => {
-                event.stopPropagation();
-                interactions.setCollapsed(id, !data.collapsed);
-              }}
-            >
-              <ChevronDown className="collapse-glyph" size={13} aria-hidden="true" />
-            </button>
-          </WorkspaceTooltip>
-        </header>
-        {Face !== null && <Face id={id} data={data} />}
-        {Face === null && definition.behaviors.collapsible && !data.collapsed && (
-          <div className="node-body">
-            <p>{data.description || definition.description}</p>
-            {data.status !== 'idle' && (
-              <span className={`node-status-label ${data.status}`}>
-                <Play size={10} aria-hidden="true" />
-                {data.status}
+            <>
+              <span
+                className="node-kind-icon"
+                role="img"
+                aria-label={definition.label}
+                title={definition.label}
+              >
+                <Icon size={15} aria-hidden="true" />
               </span>
-            )}
-            {data.kind === 'agent' && data.permissionProfile !== undefined && (
-              <span className="node-permission-chip">
-                {permissionProfileLabel(data.permissionProfile)}
-              </span>
-            )}
-            {data.kind === 'agent' &&
-              (data.branch !== undefined || data.worktreeRecordedActive === true) && (
-                <span className="node-worktree-badges" aria-label="Agent Git workspace">
-                  {data.branch !== undefined && <span>Branch · {data.branch}</span>}
-                  {data.worktreeRecordedActive === true && <span>Worktree assigned</span>}
+              {/* Agent nodes keep their own inline rename (in AgentSessionNode's title bar), so the
+                  generic header only shows their collapsed title as static text. Every other kind gets
+                  the double-click-to-rename header title — the node name is the header's primary text,
+                  with the kind conveyed by the icon beside it. */}
+              {isAgent ? (
+                data.collapsed && (
+                  <strong className="collapsed-node-title" title={data.title}>
+                    {data.title}
+                  </strong>
+                )
+              ) : (
+                <CanvasNodeHeaderTitle
+                  id={id}
+                  title={data.title}
+                  readOnly={!canChangePresentation}
+                />
+              )}
+              {data.collapsed && data.status !== "idle" && (
+                <span className={`node-status-label ${data.status}`}>
+                  {data.status}
                 </span>
               )}
-            {data.kind === 'extension' && data.extensionAvailability !== 'active' && (
-              <span className="extension-node-state">
-                {data.extensionAvailability === 'quarantined' ? 'Quarantined' : 'Unavailable'}
-              </span>
-            )}
-          </div>
+              <span
+                className={`run-status ${data.status}`}
+                role="status"
+                aria-label={`Status: ${data.status}`}
+              />
+              {data.locked && <Lock size={12} aria-label="Locked" />}
+              {/* Agent nodes surface their settings/comments/history through their own window, so the
+                  generic details popover is only mounted for the other node kinds. */}
+              {!isAgent && (
+                <CanvasNodeDetailsPopover
+                  id={id}
+                  data={data}
+                  readOnly={!canChangePresentation}
+                />
+              )}
+              <WorkspaceTooltip
+                content={
+                  interactions.readOnly
+                    ? "Your collaboration role cannot change this node."
+                    : data.locked
+                      ? "Unlock this node before changing how it looks."
+                      : data.collapsed
+                        ? "Expand node"
+                        : "Collapse node"
+                }
+              >
+                <button
+                  className="node-collapse-button nodrag"
+                  type="button"
+                  aria-label={`${data.collapsed ? "Expand" : "Collapse"} ${data.title}`}
+                  aria-expanded={!data.collapsed}
+                  disabled={!canChangePresentation}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    interactions.setCollapsed(id, !data.collapsed);
+                  }}
+                >
+                  <ChevronDown
+                    className="collapse-glyph"
+                    size={13}
+                    aria-hidden="true"
+                  />
+                </button>
+              </WorkspaceTooltip>
+            </>
+          )}
+        </header>
+        {Face !== null && <Face id={id} data={data} />}
+        {isText && selected && canChangePresentation && (
+          <TextRotateHandle id={id} />
         )}
+        {Face === null &&
+          definition.behaviors.collapsible &&
+          !data.collapsed && (
+            <div className="node-body">
+              <p>{data.description || definition.description}</p>
+              {data.status !== "idle" && (
+                <span className={`node-status-label ${data.status}`}>
+                  <Play size={10} aria-hidden="true" />
+                  {data.status}
+                </span>
+              )}
+              {data.kind === "agent" &&
+                data.permissionProfile !== undefined && (
+                  <span className="node-permission-chip">
+                    {permissionProfileLabel(data.permissionProfile)}
+                  </span>
+                )}
+              {data.kind === "agent" &&
+                (data.branch !== undefined ||
+                  data.worktreeRecordedActive === true) && (
+                  <span
+                    className="node-worktree-badges"
+                    aria-label="Agent Git workspace"
+                  >
+                    {data.branch !== undefined && (
+                      <span>Branch · {data.branch}</span>
+                    )}
+                    {data.worktreeRecordedActive === true && (
+                      <span>Worktree assigned</span>
+                    )}
+                  </span>
+                )}
+              {data.kind === "extension" &&
+                data.extensionAvailability !== "active" && (
+                  <span className="extension-node-state">
+                    {data.extensionAvailability === "quarantined"
+                      ? "Quarantined"
+                      : "Unavailable"}
+                  </span>
+                )}
+            </div>
+          )}
       </article>
     </>
   );

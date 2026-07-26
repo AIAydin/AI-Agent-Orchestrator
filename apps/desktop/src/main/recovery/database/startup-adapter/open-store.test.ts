@@ -21,7 +21,7 @@ import type { SelectedBackupValidationOptions, StagedSelectedBackup } from '../s
 import type { ForgeboardDatabaseProvenanceResult } from '../provenance/inspect.js';
 import type { WindowsFilesystemSecurity } from '../../../security/windows/filesystem-acl.js';
 import type { LocalStore } from '../../../storage.js';
-import { openLocalStoreWithStartupDatabaseRecovery } from './open-store.js';
+import { openLocalStoreWithStartupDatabaseRecovery, sameCanonicalPath } from './open-store.js';
 import { writeInitializationMarker } from './initialization-marker.js';
 
 const roots: string[] = [];
@@ -31,6 +31,24 @@ afterEach(async () => {
 });
 
 describe('openLocalStoreWithStartupDatabaseRecovery', () => {
+  it('accepts Windows canonicalization differences after component link validation', () => {
+    expect(
+      sameCanonicalPath(
+        'C:\\Users\\RunnerAdmin\\AppData\\Local\\Temp\\Forgeboard',
+        'C:\\Users\\RUNNERADMIN\\AppData\\Local\\Temp\\Forgeboard',
+        'win32',
+      ),
+    ).toBe(true);
+    expect(
+      sameCanonicalPath(
+        'C:\\Users\\RunnerAdmin\\AppData\\Local\\Temp\\Forgeboard',
+        'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\Forgeboard',
+        'win32',
+      ),
+    ).toBe(true);
+    expect(sameCanonicalPath('/tmp/Forgeboard', '/tmp/forgeboard', 'linux')).toBe(false);
+  });
+
   it('reconciles before a healthy first open and presents no recovery UI', async () => {
     const root = await fixtureRoot();
     const events: string[] = [];
@@ -492,6 +510,26 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
         dialog: fakeDialog(),
         userDataPath: linkedUserData,
         dependencies: { createDefaultSettings: () => defaults(), createStore },
+      }),
+    ).resolves.toBeNull();
+    expect(createStore).not.toHaveBeenCalled();
+
+    const actualParent = join(parent, 'actual-parent');
+    const nestedUserData = join(actualParent, 'nested');
+    await mkdir(nestedUserData, { recursive: true });
+    const linkedParent = join(parent, 'linked-parent');
+    await symlink(actualParent, linkedParent);
+    await expect(
+      openLocalStoreWithStartupDatabaseRecovery({
+        databasePath: join(linkedParent, 'nested', 'forgeboard.sqlite'),
+        dialog: fakeDialog(),
+        userDataPath: join(linkedParent, 'nested'),
+        dependencies: {
+          platform: 'win32',
+          windowsSecurity: fakeWindowsSecurity(),
+          createDefaultSettings: () => defaults(),
+          createStore,
+        },
       }),
     ).resolves.toBeNull();
     expect(createStore).not.toHaveBeenCalled();

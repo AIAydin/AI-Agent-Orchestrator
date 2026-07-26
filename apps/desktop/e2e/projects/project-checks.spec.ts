@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../support/electron.js';
 
 test('project checks configure, approve, execute, cancel, and persist entirely through the UI', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-checks-e2e-'));
@@ -132,7 +136,7 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
     expect(await fileSize(heartbeat)).toBe(stoppedSize);
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });
@@ -143,17 +147,17 @@ async function configureChecks(page: Page): Promise<void> {
   await settings.getByRole('button', { name: 'Checks', exact: true }).click();
 
   const lint = settings.getByRole('group', { name: 'Lint command' });
-  await lint.getByLabel('Executable').fill('node');
+  await lint.getByLabel('Executable', { exact: true }).fill('node');
   await lint.getByLabel('Arguments').fill('-e\nprocess.stdout.write("FORGEBOARD_CHECK_E2E")');
 
   const tests = settings.getByRole('group', { name: 'Tests command' });
-  await tests.getByLabel('Executable').fill('node');
+  await tests.getByLabel('Executable', { exact: true }).fill('node');
   await tests
     .getByLabel('Arguments')
     .fill('-e\nprocess.stdout.write("Tests: 2 passed, 1 skipped, 3 total\\nFORGEBOARD_TEST_E2E")');
 
   const build = settings.getByRole('group', { name: 'Build command' });
-  await build.getByLabel('Executable').fill('node');
+  await build.getByLabel('Executable', { exact: true }).fill('node');
   await build
     .getByLabel('Arguments')
     .fill(

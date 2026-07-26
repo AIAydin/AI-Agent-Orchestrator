@@ -11,6 +11,7 @@ import type { WorkshopNode } from './CanvasNode.js';
 import { WorkspaceCanvas } from './WorkspaceCanvas.js';
 import { WORKSPACE_CONTEXT_DRAG_MIME } from '../context-dnd/contracts.js';
 import type { ExtensionTemplate } from '../model/types.js';
+import { onTextEditRequest } from '../content/text/text-edit-bus.js';
 
 const mocks = vi.hoisted(() => ({ reactFlowProps: null as unknown }));
 
@@ -50,18 +51,20 @@ vi.mock('@xyflow/react', () => ({
           )?.(event, renderedNodes[0]!)
         }
       >
-        {renderedNodes.map((node, index) => (
-          <div
-            className="react-flow__node"
-            data-id={node.id}
-            data-testid={index === 0 ? 'focusable-node' : `canvas-node-${node.id}`}
-            key={node.id}
-            tabIndex={0}
-          >
-            {index === 0 ? <input name="node-editor" aria-label="Node editor" /> : null}
-          </div>
-        ))}
-        {props['children'] as React.ReactNode}
+        <div className="react-flow__pane">
+          {renderedNodes.map((node, index) => (
+            <div
+              className="react-flow__node"
+              data-id={node.id}
+              data-testid={index === 0 ? 'focusable-node' : `canvas-node-${node.id}`}
+              key={node.id}
+              tabIndex={0}
+            >
+              {index === 0 ? <input name="node-editor" aria-label="Node editor" /> : null}
+            </div>
+          ))}
+          {props['children'] as React.ReactNode}
+        </div>
       </div>
     );
   },
@@ -234,6 +237,115 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
       ),
     );
     expect(mocks.reactFlowProps).not.toHaveProperty('fitView', true);
+  });
+});
+
+describe('WorkspaceCanvas pane double-click text creation', () => {
+  it('disables ReactFlow double-click-to-zoom so pane double-clicks are free to create nodes', () => {
+    render(<WorkspaceCanvas {...props(vi.fn())} />);
+    expect((mocks.reactFlowProps as { zoomOnDoubleClick: boolean }).zoomOnDoubleClick).toBe(false);
+  });
+
+  it('creates a text node when the pane is double-clicked', () => {
+    const canvasProps = props(vi.fn());
+    const { container } = render(<WorkspaceCanvas {...canvasProps} />);
+    const pane = container.querySelector('.react-flow__pane');
+    expect(pane).not.toBeNull();
+
+    fireEvent.doubleClick(pane as Element, { clientX: 400, clientY: 300 });
+
+    expect(canvasProps.onAddNode).toHaveBeenCalledWith(
+      'text',
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+    );
+  });
+
+  it('does not create a text node when a node element is double-clicked', () => {
+    const canvasProps = props(vi.fn());
+    render(<WorkspaceCanvas {...canvasProps} />);
+
+    fireEvent.doubleClick(screen.getByTestId('focusable-node'), { clientX: 400, clientY: 300 });
+
+    expect(canvasProps.onAddNode).not.toHaveBeenCalled();
+  });
+
+  it('does not create a text node from a pane double-click on a read-only canvas', () => {
+    const canvasProps = props(vi.fn());
+    canvasProps.collaborationGraphReadOnly = true;
+    const { container } = render(<WorkspaceCanvas {...canvasProps} />);
+    const pane = container.querySelector('.react-flow__pane');
+
+    fireEvent.doubleClick(pane as Element, { clientX: 400, clientY: 300 });
+
+    expect(canvasProps.onAddNode).not.toHaveBeenCalled();
+  });
+});
+
+describe('WorkspaceCanvas Enter-to-edit', () => {
+  it('opens the text editor when Enter is pressed on a focused text node', () => {
+    const canvasProps = props(vi.fn());
+    canvasProps.nodes = [node('text-1', 101, 99, 'text'), node('target', 100, 100)];
+    render(<WorkspaceCanvas {...canvasProps} />);
+    const seen = vi.fn();
+    const unsubscribe = onTextEditRequest(seen);
+
+    fireEvent.keyDown(screen.getByTestId('focusable-node'), { key: 'Enter' });
+
+    expect(seen).toHaveBeenCalledWith('text-1');
+    unsubscribe();
+  });
+
+  it('leaves non-text nodes alone when Enter is pressed', () => {
+    const onKeyboardMove = vi.fn();
+    const canvasProps = props(onKeyboardMove);
+    render(<WorkspaceCanvas {...canvasProps} />);
+    const seen = vi.fn();
+    const unsubscribe = onTextEditRequest(seen);
+
+    fireEvent.keyDown(screen.getByTestId('focusable-node'), { key: 'Enter' });
+
+    expect(seen).not.toHaveBeenCalled();
+    expect(onKeyboardMove).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it('ignores Enter typed inside an editable control on the focused node', () => {
+    const canvasProps = props(vi.fn());
+    canvasProps.nodes = [node('text-1', 101, 99, 'text'), node('target', 100, 100)];
+    render(<WorkspaceCanvas {...canvasProps} />);
+    const seen = vi.fn();
+    const unsubscribe = onTextEditRequest(seen);
+
+    fireEvent.keyDown(screen.getByLabelText('Node editor'), { key: 'Enter' });
+
+    expect(seen).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it('does not open the editor for a locked text node or a read-only canvas', () => {
+    const seen = vi.fn();
+    const unsubscribe = onTextEditRequest(seen);
+
+    const lockedNode = node('text-1', 101, 99, 'text');
+    const canvasProps = props(vi.fn());
+    canvasProps.nodes = [
+      { ...lockedNode, data: { ...lockedNode.data, locked: true } },
+      node('target', 100, 100),
+    ];
+    render(<WorkspaceCanvas {...canvasProps} />);
+    fireEvent.keyDown(screen.getByTestId('focusable-node'), { key: 'Enter' });
+    expect(seen).not.toHaveBeenCalled();
+    cleanup();
+
+    const readOnlyProps = props(vi.fn());
+    readOnlyProps.nodes = [node('text-1', 101, 99, 'text'), node('target', 100, 100)];
+    readOnlyProps.collaborationGraphReadOnly = true;
+    render(<WorkspaceCanvas {...readOnlyProps} />);
+    fireEvent.keyDown(screen.getByTestId('focusable-node'), { key: 'Enter' });
+    expect(seen).not.toHaveBeenCalled();
+
+    unsubscribe();
   });
 });
 

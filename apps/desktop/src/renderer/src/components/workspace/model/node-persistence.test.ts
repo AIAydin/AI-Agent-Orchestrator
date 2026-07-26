@@ -121,6 +121,13 @@ describe('workshop node persistence dimensions', () => {
     expect(floored('file')).toEqual({ width: 420, height: 360 });
     expect(floored('diff')).toEqual({ width: 440, height: 360 });
   });
+
+  it('uses text label dimensions', () => {
+    expect(initialWorkshopNodeDimensions('text')).toEqual({ width: 260, height: 64 });
+    expect(
+      persistedWorkshopNodeDimensions(node({ width: 10, height: 10 }, { kind: 'text' })),
+    ).toEqual({ width: 120, height: 40 });
+  });
 });
 
 function node(

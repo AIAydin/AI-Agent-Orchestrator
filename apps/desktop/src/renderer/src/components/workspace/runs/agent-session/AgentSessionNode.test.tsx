@@ -269,6 +269,25 @@ describe('AgentSessionNode', () => {
     // IPC round trip resolves — never synchronously within the render.
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
     expect(screen.queryByRole('button', { name: 'Start session' })).toBeNull();
+    expect(spies.flushCanvas).toHaveBeenCalledOnce();
+    expect(spies.flushCanvas.mock.invocationCallOrder[0]).toBeLessThan(
+      provisionMock.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('does not provision or launch when the current canvas cannot be saved', async () => {
+    spies.flushCanvas.mockResolvedValueOnce(false);
+    controller.loaded = true;
+    renderNode();
+
+    await waitFor(() =>
+      expect(spies.reportError).toHaveBeenCalledWith(
+        "The agent session didn't start because the canvas couldn't be saved.",
+      ),
+    );
+    expect(provisionMock).not.toHaveBeenCalled();
+    expect(controller.prepareLaunch).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Start session' })).toBeNull();
   });
 
   it('requests a managed worktree and records the durable run returned by main', () => {
@@ -485,6 +504,20 @@ describe('AgentSessionNode', () => {
     expect(screen.getByTestId('terminal-surface')).toBeTruthy();
     expect(screen.getByText(/Session ended · exit 127/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy();
+  });
+
+  it('labels a Forgeboard stop as SIGTERM instead of presenting signal 15 like a timeout', () => {
+    controller.session = {
+      id: 's1',
+      status: 'terminated',
+      exitCode: 0,
+      exitSignal: '15',
+    };
+    controller.active = false;
+    renderNode();
+
+    expect(screen.getByText('Session stopped · exit 0 · signal SIGTERM')).toBeTruthy();
+    expect(screen.queryByText(/· 15/u)).toBeNull();
   });
 
   it('records a permission profile change', () => {

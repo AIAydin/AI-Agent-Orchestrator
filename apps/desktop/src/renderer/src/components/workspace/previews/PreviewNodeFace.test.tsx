@@ -408,6 +408,47 @@ describe('PreviewNodeFace', () => {
     );
   });
 
+  it('navigates an already-connected Chrome tab when its address is edited', async () => {
+    chromeStatus.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        value: {
+          state: 'connected',
+          url: 'https://miro.com/',
+          title: 'Miro board',
+          chromeVersion: '150.0.0.0',
+          profilePersisted: true,
+          error: null,
+        },
+      }),
+    );
+    const view = renderFace('web-preview', { url: 'https://miro.com/' });
+    await screen.findByRole('application', {
+      name: 'Interactive Google Chrome tab',
+    });
+    chromeOpen.mockClear();
+
+    view.rerender(
+      <CanvasNodeInteractionProvider readOnly={false} setCollapsed={() => undefined}>
+        <AgentSessionProvider value={sessionValue()}>
+          <PreviewNodeFace
+            id="n1"
+            kind="web-preview"
+            data={nodeData({ url: 'https://example.com/' })}
+          />
+        </AgentSessionProvider>
+      </CanvasNodeInteractionProvider>,
+    );
+
+    await waitFor(() =>
+      expect(chromeOpen).toHaveBeenCalledWith({
+        projectId: 'p1',
+        nodeId: 'n1',
+        url: 'https://example.com/',
+      }),
+    );
+  });
+
   describe('address classification', () => {
     it('classifies a full https URL as an address, clearing previewPort', () => {
       renderFace('web-preview', { previewPort: 5173 });

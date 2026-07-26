@@ -121,4 +121,32 @@ describe('interactiveShellInvocation', () => {
     expect(file).toBe('codex.exe');
     expect(args).toEqual(['--flag']);
   });
+
+  it('starts cmd as the PTY for a validated Windows batch shim and leaves it interactive', () => {
+    expect(
+      interactiveShellInvocation(
+        'C:\\Tools\\Open Code\\opencode.cmd',
+        ['--model', 'openai/gpt-5.1'],
+        'win32',
+        undefined,
+        'C:\\Windows\\System32\\cmd.exe',
+      ),
+    ).toEqual({
+      file: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/d', '/q', '/v:off'],
+      initialInput: 'call "C:\\Tools\\Open Code\\opencode.cmd" "--model" "openai/gpt-5.1"\r',
+    });
+  });
+
+  it('rejects unsafe Windows batch arguments before starting cmd', () => {
+    expect(() =>
+      interactiveShellInvocation(
+        'C:\\Tools\\opencode.cmd',
+        ['safe & calc.exe'],
+        'win32',
+        undefined,
+        'C:\\Windows\\System32\\cmd.exe',
+      ),
+    ).toThrow(/shell metacharacters/u);
+  });
 });

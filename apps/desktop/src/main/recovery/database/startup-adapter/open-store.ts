@@ -1,4 +1,4 @@
-import { lstatSync, realpathSync, type Stats } from 'node:fs';
+import { appendFileSync, lstatSync, realpathSync, type Stats } from 'node:fs';
 import { chmod, lstat, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 
@@ -84,6 +84,7 @@ export interface StartupDatabaseRecoveryOptions {
 export async function openLocalStoreWithStartupDatabaseRecovery(
   options: StartupDatabaseRecoveryOptions,
 ): Promise<LocalStore | null> {
+  traceE2eDatabaseStartup('database-open-entered');
   const dependencies = options.dependencies ?? {};
   const cleanup = dependencies.cleanupAttemptDirectory ?? cleanupAttemptDirectory;
   const cleanupDeferred = dependencies.cleanupDeferredStaging ?? cleanupDeferredRecoveryStaging;
@@ -133,9 +134,12 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
 
   const prepareBoundary = async (): Promise<string> => {
     if (platform === 'win32' && windowsSid === undefined) {
+      traceE2eDatabaseStartup('database-windows-identity-requested');
       windowsSid = await windowsSecurity.currentUserSid();
+      traceE2eDatabaseStartup('database-windows-identity-resolved');
     }
     if (canonicalUserData === undefined) {
+      traceE2eDatabaseStartup('database-user-data-boundary-requested');
       canonicalUserData = await prepareUserDataBoundary(
         options.userDataPath,
         platform,
@@ -143,6 +147,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
         windowsSid,
         getUserId,
       );
+      traceE2eDatabaseStartup('database-user-data-boundary-prepared');
       const cleanupWindowsSid = windowsSid;
       cleanupReport = await cleanupDeferred(canonicalUserData, {
         platform,
@@ -158,9 +163,16 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
             }
           : {}),
       });
+      traceE2eDatabaseStartup('database-staging-cleanup-completed');
     }
-    databasePath ??= assertDirectDatabasePath(options.databasePath, canonicalUserData);
+    databasePath ??= assertDirectDatabasePath(
+      options.databasePath,
+      options.userDataPath,
+      canonicalUserData,
+      platform,
+    );
     await protectDatabaseBoundary(databasePath, platform, windowsSecurity, windowsSid, getUserId);
+    traceE2eDatabaseStartup('database-file-boundary-prepared');
     return databasePath;
   };
 
@@ -175,6 +187,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
         windowsDurability,
         dependencies.reconcileInterruptedRestores,
       );
+      traceE2eDatabaseStartup('database-restore-reconciliation-completed');
       reconciliationCompleted = true;
       await protectDatabaseBoundary(
         preparedDatabasePath,
@@ -196,6 +209,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
       windowsMarkerDurability,
     );
     const marker = await readInitializationMarker(preparedUserData, markerOptions);
+    traceE2eDatabaseStartup('database-initialization-marker-read');
     const exists = await databaseFileExists(preparedDatabasePath);
     if (!exists && marker === 'initialized') throw new StartupDatabaseMissingError();
     let expectedIdentity: ExpectedDatabaseIdentity | undefined;
@@ -216,6 +230,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
       expectedIdentity,
       requiresAuditDeleteTriggerUpgrade,
     );
+    traceE2eDatabaseStartup('database-store-created');
     try {
       if (cleanupReport.failedCount > 0 && !cleanupWarningRecorded) {
         opened.appendAudit('recovery', 'staging-cleanup', 'failed', {
@@ -226,6 +241,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
       if (marker === 'absent') {
         await writeInitializationMarker(preparedUserData, markerOptions);
       }
+      traceE2eDatabaseStartup('database-initialization-marker-ready');
       return opened;
     } catch (error) {
       opened.close();
@@ -448,24 +464,43 @@ async function prepareUserDataBoundary(
   windowsSid: string | undefined,
   getUserId: () => number | undefined,
 ): Promise<string> {
+  traceE2eDatabaseStartup('database-user-data-initial-lstat-requested');
   const initial = await optionalLstat(userDataPath);
+  traceE2eDatabaseStartup(
+    initial === undefined
+      ? 'database-user-data-initial-lstat-missing'
+      : 'database-user-data-initial-lstat-resolved',
+  );
   if (initial === undefined) {
+    traceE2eDatabaseStartup('database-user-data-mkdir-requested');
     await mkdir(userDataPath, { recursive: true, mode: 0o700 });
+    traceE2eDatabaseStartup('database-user-data-mkdir-completed');
   } else if (!initial.isDirectory() || initial.isSymbolicLink()) {
     throw new Error('The Forgeboard user data location must be an ordinary directory.');
   }
+  traceE2eDatabaseStartup('database-user-data-realpath-requested');
   const canonical = await realpath(userDataPath);
-  if (canonical !== resolve(userDataPath)) {
+  const resolved = resolve(userDataPath);
+  traceE2eDatabaseStartup(`database-user-data-realpath-resolved:${canonical}|${resolved}`);
+  if (platform === 'win32') {
+    await assertNoFilesystemLinkTraversal(resolved);
+  }
+  if (!sameCanonicalPath(canonical, resolved, platform)) {
     throw new Error('The Forgeboard user data location must not traverse filesystem links.');
   }
+  traceE2eDatabaseStartup('database-user-data-canonical-path-accepted');
   const current = await lstat(canonical);
+  traceE2eDatabaseStartup('database-user-data-canonical-lstat-resolved');
   if (!current.isDirectory() || current.isSymbolicLink()) {
     throw new Error('The Forgeboard user data location must be an ordinary directory.');
   }
   if (platform === 'win32') {
     if (windowsSid === undefined) throw new Error('Windows recovery identity is unavailable.');
+    traceE2eDatabaseStartup('database-user-data-protection-requested');
     await windowsSecurity.protectPrivateDirectory(canonical, windowsSid);
+    traceE2eDatabaseStartup('database-user-data-protected');
     await windowsSecurity.assertPrivateDirectory(canonical, windowsSid);
+    traceE2eDatabaseStartup('database-user-data-protection-verified');
   } else {
     assertOwnedByCurrentUser(current, 'user data directory', getUserId);
     await chmod(canonical, 0o700);
@@ -481,6 +516,42 @@ async function prepareUserDataBoundary(
     assertOwnedByCurrentUser(protectedStats, 'user data directory', getUserId);
   }
   return canonical;
+}
+
+function traceE2eDatabaseStartup(stage: string): void {
+  const tracePath = process.env['FORGEBOARD_E2E_STARTUP_TRACE_PATH'];
+  if (tracePath === undefined) return;
+  try {
+    appendFileSync(tracePath, `${stage}\n`, { encoding: 'utf8' });
+  } catch {
+    // Diagnostics must never alter product startup behavior.
+  }
+}
+
+export function sameCanonicalPath(
+  canonical: string,
+  resolved: string,
+  platform: NodeJS.Platform,
+): boolean {
+  // Windows realpath expands ordinary 8.3 path components (for example RUNNER~1) and normalizes
+  // casing. Link traversal is therefore validated component-by-component before this comparison.
+  return platform === 'win32' || canonical === resolved;
+}
+
+async function assertNoFilesystemLinkTraversal(resolvedPath: string): Promise<void> {
+  const candidates: string[] = [];
+  let candidate = resolvedPath;
+  for (;;) {
+    const parent = dirname(candidate);
+    if (parent === candidate) break;
+    candidates.push(candidate);
+    candidate = parent;
+  }
+  for (const path of candidates.reverse()) {
+    if ((await lstat(path)).isSymbolicLink()) {
+      throw new Error('The Forgeboard user data location must not traverse filesystem links.');
+    }
+  }
 }
 
 async function protectDatabaseBoundary(
@@ -558,15 +629,27 @@ async function cleanupAttemptDirectory(stagingDirectory: string): Promise<void> 
   await rm(stagingDirectory, { recursive: true, force: true });
 }
 
-function assertDirectDatabasePath(databasePath: string, canonicalUserData: string): string {
+function assertDirectDatabasePath(
+  databasePath: string,
+  requestedUserData: string,
+  canonicalUserData: string,
+  platform: NodeJS.Platform,
+): string {
   if (databasePath.includes('\0')) throw new Error('Forgeboard rejected the database path.');
   const normalized = resolve(databasePath);
-  if (dirname(normalized) !== canonicalUserData || basename(normalized) !== 'forgeboard.sqlite') {
+  if (
+    !sameRequestedPath(dirname(normalized), resolve(requestedUserData), platform) ||
+    basename(normalized) !== 'forgeboard.sqlite'
+  ) {
     throw new Error(
       'The Forgeboard database must be directly inside its canonical user data folder.',
     );
   }
-  return normalized;
+  return join(canonicalUserData, 'forgeboard.sqlite');
+}
+
+function sameRequestedPath(left: string, right: string, platform: NodeJS.Platform): boolean {
+  return platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right;
 }
 
 async function optionalLstat(path: string): Promise<Stats | undefined> {

@@ -23,7 +23,7 @@
 
 ## Global Constraints
 
-- **Execute in the sub-plan 2c worktree:** `/Users/aydin/aao-2cd` on branch `feature/content-faces-2cd` (based on `main` tip `c7cce93`, which already has 2a + 2b merged). Do NOT touch `/Users/aydin/AI Agent Orchestrator` (another session owns that checkout). Stage only the files each task names; never `git add -A`.
+- **Execute in the sub-plan 2c worktree:** use the checkout for branch `feature/content-faces-2cd` (based on `main` tip `c7cce93`, which already has 2a + 2b merged). Do not touch another session's checkout. Stage only the files each task names; never `git add -A`.
 - **Renderer-only, no new IPC:** this sub-plan adds no IPC channels, no preload surface, and no main-process code. Faces may call only preload APIs the inspectors already call (`terminal.*` via `terminalOperationsFromWindow()`, `files.*`, `git.review`). Any deviation requires explicit justification in the commit message.
 - **Panels stay functional:** do not delete or degrade any inspector panel; sidebar removal is sub-plan 2d. Update panel code only for the extractions named in Files lists. Never weaken an existing test assertion — add provider wrappers when a test newly needs context, nothing else.
 - **Faces must keep node chrome intact:** collapse (35px pill), lock, group membership, and resize continue to work for all three kinds; every face root is `.node-face` inside the existing `<article class="canvas-node">`, and scroll/drag isolation uses `nowheel nodrag` exactly like `PreviewNodeFace`.

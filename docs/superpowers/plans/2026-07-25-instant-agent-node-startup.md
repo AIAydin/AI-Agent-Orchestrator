@@ -34,6 +34,7 @@
 ### Task 1: Remove the provider-connection gate from AgentSessionNode
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/workspace/runs/agent-session/AgentSessionNode.tsx`
 - Modify: `apps/desktop/src/renderer/src/components/workspace/runs/agent-session/AgentSessionContext.tsx:67-68`
 - Modify: `apps/desktop/src/renderer/src/components/workspace/shell/runtime/useWorkspaceAgentSessionValue.ts`
@@ -42,12 +43,14 @@
 - Test: `apps/desktop/src/renderer/src/components/workspace/runs/agent-session/AgentSessionNode.test.tsx`
 
 **Interfaces:**
+
 - Consumes: existing `AgentSessionContextValue` (`AgentSessionContext.tsx`).
 - Produces: `AgentSessionContextValue` WITHOUT `gateFor` and `recheckProvider` (`openSettings` stays — `PreviewNodeFace` uses it). Task 2 relies on `canStart` in `AgentSessionNode.tsx` meaning exactly `unavailableReason === null`.
 
 - [ ] **Step 1: Rewrite the gate test as a no-gate contract test**
 
 In `AgentSessionNode.test.tsx`:
+
 - Delete the `let gate: AgentProviderGate | null = null;` variable, the `gate = null;` reset in `beforeEach`, the `gateFor`/`recheckProvider` entries in `spies`, the `gateFor`/`recheckProvider` lines in `contextValue()`, and the `AgentProviderGate` type import.
 - Replace the whole test `it('hides Start behind a provider gate warning and rechecks the provider', …)` with:
 
@@ -69,15 +72,16 @@ Expected: FAIL — `contextValue()` no longer satisfies `AgentSessionContextValu
 - [ ] **Step 3: Strip the gate from the component and context**
 
 In `AgentSessionNode.tsx`:
+
 - Remove `gateFor`, `recheckProvider`, and `openSettings` from the `useAgentSession()` destructure (lines 61-63; `openSettings` has no remaining use in this file).
 - Remove `const gate = gateFor(adapter);` (line 120) and `const blocked = gate !== null && gate.state !== 'connected';` (line 122).
 - Change line 123 to `const canStart = unavailableReason === null;`.
 - In the start card (lines 399-413), replace the three-way conditional with only the unavailable branch:
 
 ```tsx
-{unavailableReason !== null ? (
-  <p className="agent-start-reason">{unavailableReason}</p>
-) : null}
+{
+  unavailableReason !== null ? <p className="agent-start-reason">{unavailableReason}</p> : null;
+}
 ```
 
 In `AgentSessionContext.tsx`: delete the `gateFor(adapterId: string): AgentProviderGate | null;` and `recheckProvider(adapterId: string): void;` members (lines 67-68) and the now-unused `AgentProviderGate` import.
@@ -117,6 +121,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 2: Auto-start sessions for newly created agent nodes
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/workspace/canvas/CanvasNode.tsx:39` (WorkshopNodeData)
 - Create: `apps/desktop/src/renderer/src/components/workspace/runs/agent-session/creation.ts`
 - Create: `apps/desktop/src/renderer/src/components/workspace/runs/agent-session/creation.test.ts`
@@ -125,6 +130,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Test: `apps/desktop/src/renderer/src/components/workspace/runs/agent-session/AgentSessionNode.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `startSession()` and `canStart` from Task 1's `AgentSessionNode.tsx`; `providerTheme(adapterId)` from `../../node-registry/provider-themes.js`; `updateNodeData(id, change)` from `AgentSessionContextValue`.
 - Produces: `WorkshopNodeData.autoStart?: boolean | undefined`; `agentNodeCreationOverrides(adapterId: RunAdapterId): Partial<WorkshopNodeData>` returning `{ adapterId, autoStart: true, color? }`.
 
@@ -295,6 +301,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Files:** none (verification only)
 
 **Interfaces:**
+
 - Consumes: everything above.
 - Produces: green evidence for the branch.
 

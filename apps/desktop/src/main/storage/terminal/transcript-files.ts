@@ -39,7 +39,7 @@ export interface TranscriptReplayResult {
 
 /** Private, bounded, path-derived transcript files. No transcript path is persisted in SQLite. */
 export class TerminalTranscriptFiles {
-  readonly #root: string;
+  #root: string;
   readonly #maximumBytes: number;
   readonly #maximumTotalBytes: number;
   readonly #maximumFiles: number;
@@ -362,9 +362,18 @@ export class TerminalTranscriptFiles {
   async #prepareRoot(): Promise<void> {
     await mkdir(this.#root, { recursive: true, mode: 0o700 });
     const [details, canonical] = await Promise.all([lstat(this.#root), realpath(this.#root)]);
-    if (!details.isDirectory() || details.isSymbolicLink() || !pathsEqual(canonical, this.#root)) {
+    if (
+      !details.isDirectory() ||
+      details.isSymbolicLink() ||
+      (process.platform === 'win32'
+        ? !(await hasNoFilesystemLinkTraversal(this.#root))
+        : !pathsEqual(canonical, this.#root))
+    ) {
       throw new Error('The terminal transcript root must be a canonical ordinary directory.');
     }
+    // Windows realpath expands ordinary 8.3 profile aliases such as RUNNER~1. Bind every later
+    // transcript operation to that long canonical path after proving no component is a link.
+    this.#root = canonical;
     if (process.platform !== 'win32') {
       if (typeof process.getuid === 'function' && details.uid !== process.getuid()) {
         throw new Error('The terminal transcript root must be owned by the current user.');
@@ -448,6 +457,16 @@ function pathsEqual(left: string, right: string): boolean {
   return process.platform === 'win32'
     ? resolve(left).toLowerCase() === resolve(right).toLowerCase()
     : resolve(left) === resolve(right);
+}
+
+async function hasNoFilesystemLinkTraversal(path: string): Promise<boolean> {
+  let candidate = resolve(path);
+  for (;;) {
+    const parent = dirname(candidate);
+    if (parent === candidate) return true;
+    if ((await lstat(candidate)).isSymbolicLink()) return false;
+    candidate = parent;
+  }
 }
 
 function transcriptSessionId(name: string): string | null {

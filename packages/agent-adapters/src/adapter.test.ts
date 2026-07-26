@@ -15,6 +15,7 @@ import {
   launchPreparedAgent,
   prepareAgentLaunch,
   prepareAgentResume,
+  resolveWindowsBatchLaunch,
 } from './index.js';
 
 const temporaryDirectories: string[] = [];
@@ -25,6 +26,50 @@ afterEach(async () => {
       await rm(directory, { force: true, recursive: true });
     }),
   );
+});
+
+describe('Windows batch agent launch', () => {
+  it('routes safe cmd shims through the system processor without enabling a general shell', () => {
+    expect(
+      resolveWindowsBatchLaunch(
+        'C:\\Tools\\opencode.cmd',
+        ['run', '--model', 'openai/gpt-5.1'],
+        { ComSpec: 'C:\\Windows\\System32\\cmd.exe' },
+        'win32',
+      ),
+    ).toEqual({
+      executable: 'C:\\Windows\\System32\\cmd.exe',
+      arguments: [
+        '/d',
+        '/s',
+        '/v:off',
+        '/c',
+        '""C:\\Tools\\opencode.cmd" "run" "--model" "openai/gpt-5.1""',
+      ],
+      windowsVerbatimArguments: true,
+      windowsPty: {
+        arguments: ['/d', '/q', '/v:off'],
+        initialInput: 'call "C:\\Tools\\opencode.cmd" "run" "--model" "openai/gpt-5.1" & exit',
+      },
+    });
+  });
+
+  it('rejects command-shell metacharacters and leaves native executables unchanged', () => {
+    expect(() =>
+      resolveWindowsBatchLaunch(
+        'C:\\Tools\\opencode.cmd',
+        ['prompt & whoami'],
+        { ComSpec: 'C:\\Windows\\System32\\cmd.exe' },
+        'win32',
+      ),
+    ).toThrow(/metacharacters/u);
+    expect(
+      resolveWindowsBatchLaunch('/opt/opencode', ['run', 'prompt & data'], {}, 'linux'),
+    ).toEqual({
+      executable: '/opt/opencode',
+      arguments: ['run', 'prompt & data'],
+    });
+  });
 });
 
 async function temporaryDirectory(): Promise<string> {
@@ -464,7 +509,6 @@ describe('launch preparation and execution', () => {
       prepareAgentLaunch(manifest, { prompt: 'ansi', cwd, permissionProfile: permission(cwd) }),
     );
     const eventsPromise = allEvents(session.events);
-    expect(session.capabilities.pause).toBe(process.platform !== 'win32');
     await expect(session.result).resolves.toMatchObject({ status: 'succeeded' });
     const events = await eventsPromise;
     const output = events

@@ -134,5 +134,5 @@ export function expectExactTerminalNativeConfirmation(
     expect(detail).toContain(`${String(index + 1)}. ${JSON.stringify(argument)}`);
   });
   expect(detail).toContain('your user account on this computer (not sandboxed)');
-  expect(detail).toContain('You can use this approval only once, and it expires at');
+  expect(detail).toContain('This one-time launch approval expires at');
 }

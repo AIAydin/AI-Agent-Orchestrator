@@ -29,6 +29,7 @@ import {
   parseGitHubRemoteIdentity,
   type GitHubRemoteIdentity,
 } from './remote-identity.js';
+import { resolveGitHubCliProcessLaunch } from './windows-command.js';
 
 const GH_OUTPUT_LIMIT = 8 * 1024 * 1024;
 const MAX_PR_TITLE = 512;
@@ -172,16 +173,28 @@ export class GitHubCliExecutor implements GitHubCommandRunner {
     if (signalIsAborted(options.signal)) {
       throw new GitEngineError('ABORTED', 'GitHub CLI command was aborted before launch.');
     }
+    let launch;
+    try {
+      launch = resolveGitHubCliProcessLaunch(this.executable, args, this.#environment);
+    } catch (error) {
+      throw new GitEngineError(
+        'INVALID_ARGUMENT',
+        error instanceof Error ? error.message : 'The GitHub CLI command cannot be started safely.',
+        {},
+        { cause: error },
+      );
+    }
     return await new Promise<GitHubCommandResult>((resolve, reject) => {
       if (signalIsAborted(options.signal)) {
         reject(new GitEngineError('ABORTED', 'GitHub CLI command was aborted before launch.'));
         return;
       }
-      const child = spawn(this.executable, [...args], {
+      const child = spawn(launch.executable, [...launch.arguments], {
         env: this.#environment,
         shell: false,
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
+        windowsVerbatimArguments: launch.windowsVerbatimArguments,
       });
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];

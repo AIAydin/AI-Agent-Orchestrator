@@ -128,6 +128,26 @@ describe('CanvasNode details popover', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close node details' }));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('edits rotation for text nodes from the settings tab', () => {
+    const updateNodeData = vi.fn();
+    renderNode(nodeData({ kind: 'text', rotationDeg: 10 }), { updateNodeData });
+
+    fireEvent.click(screen.getByRole('button', { name: /Node details for/u }));
+    const dialog = screen.getByRole('dialog');
+    const rotation = within(dialog).getByLabelText('Rotation (degrees)');
+    fireEvent.change(rotation, { target: { value: '200' } });
+
+    // normalizeRotation wraps 200 into the -180..180 range.
+    expect(updateNodeData).toHaveBeenCalledWith('node-1', { rotationDeg: -160 });
+  });
+
+  it('does not render a rotation field for non-text nodes', () => {
+    renderNode(nodeData());
+    fireEvent.click(screen.getByRole('button', { name: /Node details for/u }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByLabelText('Rotation (degrees)')).toBeNull();
+  });
 });
 
 interface Overrides {

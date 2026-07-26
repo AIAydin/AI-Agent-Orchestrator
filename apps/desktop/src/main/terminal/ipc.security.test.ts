@@ -30,6 +30,7 @@ vi.mock('electron', () => ({
 
 import {
   TERMINAL_IPC_CHANNELS,
+  type TerminalEvent,
   type TerminalLaunchPlanView,
   type TerminalReplayView,
   type TerminalSessionView,
@@ -180,7 +181,7 @@ describe('TerminalIpcService collaboration authority routing', () => {
         }),
       );
       const ownerId = fixture.operations.prepareLaunch.mock.calls[0]?.[0];
-      expect(ownerId).toMatch(/^terminal:web-contents:42:/u);
+      expect(ownerId).toMatch(/^terminal:application:/u);
       expect(fixture.operations.confirmLaunch).toHaveBeenCalledWith(
         ownerId,
         PLAN_ID,
@@ -213,17 +214,17 @@ describe('TerminalIpcService collaboration authority routing', () => {
 
       expect(fixture.authorizeMutation).not.toHaveBeenCalled();
       expect(fixture.operations.getSession).toHaveBeenCalledWith(
-        expect.stringMatching(/^terminal:web-contents:\d+:/u),
+        expect.stringMatching(/^terminal:application:/u),
         targetInput,
       );
       expect(fixture.operations.listSessions).toHaveBeenCalledWith(
-        expect.stringMatching(/^terminal:web-contents:\d+:/u),
+        expect.stringMatching(/^terminal:application:/u),
         {
           projectId: PROJECT_ID,
         },
       );
       expect(fixture.operations.replay).toHaveBeenCalledWith(
-        expect.stringMatching(/^terminal:web-contents:\d+:/u),
+        expect.stringMatching(/^terminal:application:/u),
         targetInput,
       );
       await fixture.ipc.dispose();
@@ -249,12 +250,87 @@ describe('TerminalIpcService collaboration authority routing', () => {
       const interruptOwner = fixture.operations.interrupt.mock.calls[0]?.[0];
       const terminateOwner = fixture.operations.terminate.mock.calls[0]?.[0];
       expect(interruptOwner).toEqual(terminateOwner);
-      expect(interruptOwner).toEqual(expect.stringMatching(/^terminal:web-contents:\d+:/u));
+      expect(interruptOwner).toEqual(expect.stringMatching(/^terminal:application:/u));
       expect(fixture.operations.interrupt).toHaveBeenCalledWith(interruptOwner, targetInput);
       expect(fixture.operations.terminate).toHaveBeenCalledWith(terminateOwner, targetInput);
       await fixture.ipc.dispose();
     },
   );
+
+  it('keeps live sessions attached while the application window disconnects and reconnects', async () => {
+    const fixture = createFixture('owner');
+    const first = destroyableEvent(41);
+
+    await expect(
+      handler(TERMINAL_IPC_CHANNELS.listSessions)(first.event, { projectId: PROJECT_ID }),
+    ).resolves.toEqual({ ok: true, value: [session] });
+    const ownerId = fixture.operations.listSessions.mock.calls[0]?.[0];
+    expect(ownerId).toMatch(/^terminal:application:/u);
+
+    const event: TerminalEvent = {
+      kind: 'session',
+      projectId: PROJECT_ID,
+      nodeId: session.nodeId,
+      session,
+    };
+    const emit = fixture.operations.subscribe.mock.calls[0]?.[0];
+    if (emit === undefined || ownerId === undefined)
+      throw new Error('Missing terminal event route.');
+
+    first.destroy();
+    emit(ownerId, event);
+    expect(first.send).not.toHaveBeenCalled();
+    expect(fixture.operations.discardOwner).not.toHaveBeenCalled();
+
+    const replacement = destroyableEvent(42);
+    await expect(
+      handler(TERMINAL_IPC_CHANNELS.listSessions)(replacement.event, {
+        projectId: PROJECT_ID,
+      }),
+    ).resolves.toEqual({ ok: true, value: [session] });
+    expect(fixture.operations.listSessions.mock.calls[1]?.[0]).toBe(ownerId);
+
+    emit(ownerId, event);
+    expect(replacement.send).toHaveBeenCalledWith(TERMINAL_IPC_CHANNELS.event, event);
+    expect(fixture.operations.discardOwner).not.toHaveBeenCalled();
+    await fixture.ipc.dispose();
+  });
+
+  it('does not let a second live renderer take over the application terminal route', async () => {
+    const fixture = createFixture('owner');
+    const first = destroyableEvent(51);
+    const second = destroyableEvent(52);
+
+    await expect(
+      handler(TERMINAL_IPC_CHANNELS.listSessions)(first.event, { projectId: PROJECT_ID }),
+    ).resolves.toEqual({ ok: true, value: [session] });
+    await expect(
+      handler(TERMINAL_IPC_CHANNELS.listSessions)(second.event, { projectId: PROJECT_ID }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'OPERATION_FAILED',
+        message: 'Another live Forgeboard window is already connected to these terminals.',
+      },
+    });
+
+    const ownerId = fixture.operations.listSessions.mock.calls[0]?.[0];
+    const emit = fixture.operations.subscribe.mock.calls[0]?.[0];
+    if (emit === undefined || ownerId === undefined)
+      throw new Error('Missing terminal event route.');
+    const event: TerminalEvent = {
+      kind: 'session',
+      projectId: PROJECT_ID,
+      nodeId: session.nodeId,
+      session,
+    };
+    emit(ownerId, event);
+
+    expect(first.send).toHaveBeenCalledWith(TERMINAL_IPC_CHANNELS.event, event);
+    expect(second.send).not.toHaveBeenCalled();
+    expect(fixture.operations.listSessions).toHaveBeenCalledTimes(1);
+    await fixture.ipc.dispose();
+  });
 
   it('fails closed when an editor is downgraded during native confirmation', async () => {
     const confirmation = deferred<MessageBoxReturnValue>();
@@ -349,7 +425,9 @@ function createFixture(
 
 function createOperations(beforeSpawn?: Promise<void>) {
   return {
-    subscribe: vi.fn(() => () => undefined),
+    subscribe: vi.fn<(listener: (ownerId: string, event: TerminalEvent) => void) => () => void>(
+      () => () => undefined,
+    ),
     assertProjectAvailable: vi.fn().mockResolvedValue(undefined),
     prepareLaunch: vi
       .fn<(ownerId: string, input: typeof prepareInput) => Promise<TerminalLaunchPlanView>>()
@@ -371,7 +449,11 @@ function createOperations(beforeSpawn?: Promise<void>) {
       },
     ),
     getSession: vi.fn().mockResolvedValue(session),
-    listSessions: vi.fn().mockResolvedValue([session]),
+    listSessions: vi
+      .fn<
+        (ownerId: string, input: { projectId: string }) => Promise<readonly TerminalSessionView[]>
+      >()
+      .mockResolvedValue([session]),
     replay: vi.fn().mockResolvedValue(replay),
     sendInput: vi.fn().mockResolvedValue(session),
     resize: vi.fn().mockResolvedValue(session),
@@ -467,15 +549,36 @@ const trustedApproval: ApprovalRecord = {
 };
 
 function liveEvent(id = 7): IpcMainInvokeEvent {
+  return destroyableEvent(id).event;
+}
+
+function destroyableEvent(id: number): {
+  event: IpcMainInvokeEvent;
+  send: ReturnType<typeof vi.fn>;
+  destroy(): void;
+} {
+  let destroyed = false;
+  let onDestroyed: (() => void) | null = null;
   const frame = {};
+  const send = vi.fn();
   const sender = {
     id,
     mainFrame: frame,
-    isDestroyed: () => false,
-    once: vi.fn(),
-    send: vi.fn(),
+    isDestroyed: () => destroyed,
+    once: vi.fn((event: string, listener: () => void) => {
+      if (event === 'destroyed') onDestroyed = listener;
+    }),
+    send,
   } as unknown as WebContents;
-  return { sender, senderFrame: frame } as IpcMainInvokeEvent;
+  return {
+    event: { sender, senderFrame: frame } as IpcMainInvokeEvent,
+    send,
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      onDestroyed?.();
+    },
+  };
 }
 
 function liveParent(): BrowserWindow {

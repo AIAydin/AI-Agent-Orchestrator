@@ -56,7 +56,7 @@ unless one of these holds:
 
 The launch fires at most once per mount (ref guard; StrictMode-safe). This
 covers creation (rail/palette/drop) and workspace reopen alike — a persisted
-*ended* session from a previous app run is relaunched over, not parked behind
+_ended_ session from a previous app run is relaunched over, not parked behind
 a button. A session that ends while the node is mounted stays on the exit
 strip ("Restart"), which also bounds a crash-looping CLI to one launch per
 mount.

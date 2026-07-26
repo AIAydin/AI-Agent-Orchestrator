@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
@@ -37,6 +38,8 @@ const approvedWindowCloses = new WeakSet<BrowserWindow>();
  * same Session instance for a given partition string for the life of the app.
  */
 const attachedPreviewPartitions = new Set<string>();
+
+traceE2eStartup('main-entry');
 protocol.registerSchemesAsPrivileged([
   {
     scheme: PROJECT_VIDEO_SCHEME,
@@ -48,10 +51,15 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ]);
+traceE2eStartup('scheme-registered');
 app.setName(PRODUCT.name);
 const packagedSmokeProfile = configurePackagedSmokeProfile(app, process.argv);
 
+traceE2eStartup('single-instance-lock-requested');
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
+traceE2eStartup(
+  hasSingleInstanceLock ? 'single-instance-lock-acquired' : 'single-instance-lock-lost',
+);
 if (!hasSingleInstanceLock) app.quit();
 
 app.on('second-instance', () => {
@@ -63,12 +71,15 @@ app.on('second-instance', () => {
 void app
   .whenReady()
   .then(async () => {
+    traceE2eStartup('ready');
     // A losing second process must never inspect the winning process's live snapshot lease.
     if (!hasSingleInstanceLock) return;
     configureSessionSecurity();
+    traceE2eStartup('session-security-configured');
     const contextSnapshotStorage = await attemptContextSnapshotStorageStartup(
       process.platform === 'win32' ? app.getPath('userData') : undefined,
     );
+    traceE2eStartup('context-storage-attempted');
     if (!contextSnapshotStorage.ready) {
       process.stderr.write(
         `Forgeboard context startup deferred: ${contextSnapshotStorage.reason}\n`,
@@ -81,6 +92,7 @@ void app
       dialog: packagedSmokeProfile === null ? dialog : createNonInteractiveSmokeStartupDialog(),
       userDataPath,
     });
+    traceE2eStartup('local-store-opened');
     if (store === null) {
       // Recovery cancellation is a safe startup quit, before IPC registration or window creation.
       quitReady = true;
@@ -89,6 +101,7 @@ void app
     }
     const previewAgentBrowser = new PreviewAgentBrowser();
     services = registerIpcHandlers(store, previewAgentBrowser);
+    traceE2eStartup('ipc-registered');
     session.defaultSession.protocol.handle(PROJECT_VIDEO_SCHEME, async (request) => {
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         return new Response(null, { status: 405 });
@@ -148,6 +161,7 @@ void app
     });
     closeCoordinator = new CloseCoordinator(dialog, ipcMain);
     mainWindow = createWindow(services, closeCoordinator, packagedSmokeProfile === null);
+    traceE2eStartup('window-created');
 
     if (packagedSmokeProfile !== null) {
       const report = await runPackagedApplicationSmoke({
@@ -188,6 +202,19 @@ void app
     }
     app.quit();
   });
+
+function traceE2eStartup(stage: string): void {
+  const tracePath = process.env['FORGEBOARD_E2E_STARTUP_TRACE_PATH'];
+  if (tracePath !== undefined) {
+    try {
+      appendFileSync(tracePath, `${stage}\n`, { encoding: 'utf8' });
+    } catch {
+      // Diagnostics must never alter product startup behavior.
+    }
+  }
+  if (process.env['FORGEBOARD_E2E_STARTUP_TRACE'] !== '1') return;
+  process.stderr.write(`[forgeboard-e2e-startup] ${stage}\n`);
+}
 
 app.on('window-all-closed', () => {
   if (packagedSmokeProfile !== null) return;

@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../support/electron.js';
 import {
   FIXTURE_ACCOUNT,
   FIXTURE_EMAIL,
@@ -145,7 +149,7 @@ test('Codex connects through provider OAuth UI, refreshes after restart, and nev
     ]);
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(root, { recursive: true, force: true });
   }
 });

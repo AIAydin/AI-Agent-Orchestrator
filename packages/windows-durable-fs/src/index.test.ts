@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createWindowsDurableFilesystemAuthority } from './index.js';
+import {
+  createWindowsDurableFilesystemAuthority,
+  type WindowsDurableNativeBinding,
+} from './index.js';
 
 describe('Windows durable filesystem authority', () => {
   it('keeps replacement denied by default and forwards only normalized absolute paths', async () => {
     const move = vi.fn();
-    const authority = createWindowsDurableFilesystemAuthority('win32', () => ({
-      moveFileWriteThrough: move,
-    }));
+    const authority = createWindowsDurableFilesystemAuthority('win32', () => nativeBinding(move));
 
     await authority.moveFileWriteThrough('C:\\data\\source.sqlite', 'C:\\data\\target.sqlite');
     await authority.moveFileWriteThrough('C:\\data\\one.sqlite', 'C:\\data\\two.sqlite', {
@@ -59,11 +60,11 @@ describe('Windows durable filesystem authority', () => {
   });
 
   it('bounds native failures without exposing either path', async () => {
-    const authority = createWindowsDurableFilesystemAuthority('win32', () => ({
-      moveFileWriteThrough: () => {
+    const authority = createWindowsDurableFilesystemAuthority('win32', () =>
+      nativeBinding(() => {
         throw new Error('C:\\secret\\source.sqlite access denied');
-      },
-    }));
+      }),
+    );
 
     const error = await authority
       .moveFileWriteThrough('C:\\secret\\source.sqlite', 'C:\\private\\target.sqlite')
@@ -90,3 +91,14 @@ describe('Windows durable filesystem authority', () => {
     expect(JSON.stringify(error)).not.toContain('Users');
   });
 });
+
+function nativeBinding(
+  moveFileWriteThrough: WindowsDurableNativeBinding['moveFileWriteThrough'],
+): WindowsDurableNativeBinding {
+  return {
+    currentUserSid: () => 'S-1-5-21-111-222-333-1001',
+    inspectFilesystemAcl: () => '{}',
+    moveFileWriteThrough,
+    protectFilesystemAcl: () => undefined,
+  };
+}

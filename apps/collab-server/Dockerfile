@@ -4,6 +4,7 @@ WORKDIR /workspace
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 COPY config/tooling ./config/tooling
 COPY apps/collab-server/package.json apps/collab-server/tsconfig.json ./apps/collab-server/
 COPY packages/core/package.json packages/core/tsconfig.json ./packages/core/

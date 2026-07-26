@@ -899,9 +899,9 @@ unchecked when only a subset of their required behavior has proof.
   macOS Intel proof remains open. Forgeboard validates and uses `gh` but does not install it or
   authenticate the user. An operating-system or process interruption inside the remote config
   transaction can leave its Git lock/recovery staging artifact, and UI repair for that state is not
-  implemented. The repository remains private with no tags or GitHub Release, so there is not yet a
-  public download. Hosted Actions remain excluded because the billing/payment gate stops jobs before
-  any workflow step executes.
+  implemented. At this checkpoint the repository was private with no tags or GitHub Release, so
+  there was not yet a public download. Hosted Actions remained excluded because the billing/payment
+  gate stopped jobs before any workflow step executed.
 - 2026-07-17: Interactive Terminal nodes gained complete ordinary-user configuration in the
   inspector: native executable selection, literal argument rows, project-relative cwd, and
   Settings-allowlisted environment names. Every launch uses an expiring single-use renderer review
@@ -1755,9 +1755,9 @@ unchecked when only a subset of their required behavior has proof.
   the production marker/control audit found no required TODO, fake-success, placeholder, stub, or
   inert-button blocker. A fresh unsigned macOS arm64 ZIP, DMG, and unpacked application were built,
   and packaged first-run smoke passed. This closes checklist items 188 and 196. Items 18, 183, and
-  184 remain honestly open because the private repository still has no published GitHub Release and
-  hosted Windows/Linux installation plus signing/notarization evidence requires restored GitHub
-  Actions billing and the optional platform credentials.
+  184 remain honestly open because, at this checkpoint, the private repository had no published
+  GitHub Release and hosted Windows/Linux installation plus signing/notarization evidence required
+  restored GitHub Actions billing and the optional platform credentials.
 - 2026-07-21: Forgeboard gained an opt-in local voice-command path backed by pinned Transformers.js,
   ONNX Runtime, and the exact `onnx-community/whisper-tiny.en` revision. Settings owns model
   install/removal and safe-action auto-run; the one-time model download uses the main outbound gate
@@ -1944,10 +1944,10 @@ unchecked when only a subset of their required behavior has proof.
   `node_modules` is out of sync; package routing was therefore verified with that automatic repair
   disabled rather than presenting the local dependency installation as healthy.
 - 2026-07-23: clean-run verification no longer assumes a prebuilt peer-MCP artifact, an interactive
-  `TERM`, the host's login shell, or a specific numeric user id. Windows account identity now comes
-  from the literal system `whoami.exe` path with strict bounded CSV/SID parsing before the existing
-  fail-closed PowerShell ACL authority runs. Database swap detection also binds size and change and
-  modification times alongside device and inode identity. The isolated full unit suite passed all
+  `TERM`, the host's login shell, or a specific numeric user id. Windows account identity and
+  fail-closed ACL authority now use direct Node-API Win32 calls with exact current-user and
+  LocalSystem DACL validation. Database swap detection also binds size and change and modification
+  times alongside device and inode identity. The isolated full unit suite passed all
   3,110 tests across 455 files; all 335 integration tests, 41 release/startup tests, 3 docs tests,
   and 5 quality tests passed. Typecheck, zero-warning lint, formatting, the 1,478-file structure
   gate, the 854-file production-control audit, the collaboration artifact startup smoke, and the
@@ -1973,16 +1973,62 @@ unchecked when only a subset of their required behavior has proof.
   other profiles, and custom/extension adapters retain native confirmation. All 81 focused unit
   tests, the real-Git managed-worktree integration test, and desktop strict typecheck passed.
 - 2026-07-23: the retired bundled test agent and first-party workflow-template feature were removed
-  from packages, runtime planning, readiness, smoke/release resources, renderer controls, E2E
-  fixtures, documentation, and the lockfile. Legacy settings and saved Agent nodes now discard the
-  removed adapter identifier during repair/hydration, while user-authored saved workflows and the
-  ordinary node palette remain intact. No active package, runtime, UI, documentation, or workflow
-  template references remain. The checkpoint passed strict typecheck, docs, quality, controls,
-  production build, 3,072 unit assertions, and 324 integration assertions; its recorded full-gate
+  throughout runtime, UI, tests, docs, and the lockfile. Legacy settings and saved Agent nodes discard
+  the retired adapter while user workflows and the ordinary palette remain intact. Typecheck, docs,
+  quality, controls, build, 3,072 unit assertions, and 324 integration assertions passed; recorded
   exceptions were a partial Electron install and unrelated in-progress files.
 - 2026-07-24: the workspace project sidebar closes from an always-visible command-bar control,
-  returns its width to the canvas, and persists the choice. Ten tests and every production gate
-  passed; the Electron journey lacked an approved runtime, and E2E typecheck retains existing errors.
+  returns its width to the canvas, persists the choice, and passed ten tests and all production gates.
+- 2026-07-24: running Agent and Terminal sessions and transcript creation no longer have product
+  count caps; byte bounds remain. A 12-session regression and 3,102 unit tests passed. Of 332
+  integration tests, both load-sensitive cases passed unchanged in isolation after 330 passed
+  together. Docs, quality, typecheck, lint, formatting, structure, controls, and build passed.
+  Canvas navigation's idle-bounded lightweight paint mode and terminal/preview containment passed
+  final lint, typecheck, formatting, and 55 affected renderer tests.
+- 2026-07-24: startup recovery binds complete stable database identity, and packaged smoke defers
+  optional Agent-context storage failures while real Agent context stays fail-closed. Nineteen
+  focused unit and six integration tests passed.
+- 2026-07-24: live Agent and Terminal PTYs now survive renderer and macOS window replacement through
+  one application-scoped owner; the next window reconnects and replays persisted output. Explicit
+  Stop, node deletion, privacy reset, and application shutdown still terminate. Exit strips now
+  distinguish stopped, interrupted, and disconnected sessions and render signal 15 as `SIGTERM`.
+  All 3,108 unit and 332 integration tests, docs, quality, workspace typecheck, zero-warning lint,
+  formatting, structure and production-control gates, whitespace validation, and build passed.
+- 2026-07-24: PR #22 was reconciled with current `main` without discarding managed-worktree,
+  hosting, startup, Settings, Terminal, canvas, E2E, invite, or persistent-session behavior.
+- 2026-07-24: the post-merge repair persists Agent nodes; fixes canvas input; injects bundled Git
+  into Preview; uses native Windows ACLs; and checks Test artifacts by visible Refresh, not IPC.
+- 2026-07-25: public-repository hardening enabled GitHub secret scanning, push protection,
+  Dependabot alerts/security updates and automated fixes, and private vulnerability reporting.
+  Public documentation no longer exposes personal checkout paths or describes the repository as
+  private. The one Stripe-shaped redaction fixture now constructs its test value at runtime, and
+  GitHub has zero open secret alerts. Electron, Playwright, Vite, Vitest, Sharp, tar, and
+  brace-expansion now resolve to patched versions; a pnpm-managed compatibility patch preserves the
+  callable CommonJS API required by legacy minimatch consumers. The complete 875-package audit
+  reports zero advisories. Structure (1,473 files), controls (858 files), formatting, lint,
+  typecheck, all 3,139 unit tests, all 332 integration tests, three docs tests, seven quality tests,
+  every production build, and the Electron 39 text-node create/edit/rotate/relaunch E2E scenario
+  passed. The wider E2E suite still contains pre-existing stale readiness and canvas expectations;
+  its representative keyboard-readiness failure reproduces unchanged on pristine `main`.
+- 2026-07-25: editing an external Preview node address now navigates its already-connected managed
+  Chrome tab through the existing validated browser-companion open path instead of leaving the tab
+  on its previous page. The focused Preview node suite passed all 30 tests, followed by affected
+  formatting and zero-warning lint checks, the desktop strict typecheck, whitespace validation, and
+  the repository structure gate.
+- 2026-07-25: PR #26 was reconciled with current `main` and its runtime verification was repaired.
+  E2E cleanup supports both current and earlier Playwright process mappings, canvas multi-selection
+  holds the real platform shortcut during its display-scale-safe click, and Windows batch shims
+  retain quoted executable paths through a validated interactive `cmd.exe` PTY bootstrap in both
+  adapter and managed desktop Terminal sessions. Git remote configuration uses read/write staging
+  handles for Windows durability flushes plus the existing write-through filesystem authority with
+  bounded, identity-revalidated sharing retries for atomic commit and rollback replacement. The five
+  previously failing E2E scenarios passed locally. Reviewed Windows `.cmd`/`.bat` GitHub CLI shims
+  now launch through a metacharacter-rejecting `cmd.exe` boundary while executable identity,
+  validation auditing, and the shell-free native-executable path remain intact; the full Git
+  connections E2E flow uses a program fixture outside Forgeboard's Windows ACL-hardened user-data
+  root and passed locally. Structure (1,479 files), controls (861 files), formatting, zero-warning
+  lint, workspace typecheck, all 3,155 unit tests, all 333 integration tests, three docs tests,
+  seven quality tests, and every production build passed.
 - 2026-07-24: running Agent and Terminal sessions no longer have Forgeboard-wide or per-window
   count caps; ordinary launches are limited only by the computer's available resources. Transcript
   creation likewise has no product-level file-count ceiling while retaining per-session and global

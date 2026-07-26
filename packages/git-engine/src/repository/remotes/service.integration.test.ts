@@ -392,7 +392,7 @@ describe('GitRemoteConfigurationService', () => {
     }
   });
 
-  it('runs final authority with a staged config and lock immediately before synchronous commit', async () => {
+  it('runs final authority with a staged config and lock immediately before atomic commit', async () => {
     const fixture = await fixtureRepository(fixtures);
     const executor = new RecordingGitExecutor();
     const service = new GitRemoteConfigurationService(new RepositoryService(executor));
@@ -1076,10 +1076,12 @@ describe('GitRemoteConfigurationService', () => {
       'origin',
       'https://example.invalid/owner/origin.git',
     ]);
+    // Newer Git rejects creating this legacy/foreign configuration through `git remote add`
+    // because its tracking namespace is nested beneath origin. Write the exact config entry so
+    // removal still proves it fails closed when such a repository is encountered.
     await runGit(fixture.repository, [
-      'remote',
-      'add',
-      'origin/nested',
+      'config',
+      'remote.origin/nested.url',
       'https://example.invalid/owner/nested.git',
     ]);
     await runGit(fixture.repository, ['update-ref', 'refs/remotes/origin/nested/main', 'HEAD']);
