@@ -70,17 +70,10 @@ describe('workflow runtime composition', () => {
       canvas,
       scope: { kind: 'workflow' },
     });
-    const approval = started.approvals[0];
-    expect(approval).toMatchObject({ nodeId: TEST_NODE_ID, executorId: 'exact-check' });
-    if (approval === undefined) throw new Error('Expected an exact-check approval.');
-
-    await host.approveNode({
-      executionId: started.execution.id,
-      nodeId: TEST_NODE_ID,
-      preparationId: approval.preparationId,
-      approvalFingerprint: approval.approvalFingerprint,
-      approvedBy: 'integration-test',
-    });
+    // Run on a Test node is itself the decision: the prepared plan launches with no approval left
+    // behind for a surface that no longer exists.
+    expect(started.approvals).toEqual([]);
+    expect(started.runtime.run.nodeRuns[TEST_NODE_ID]?.status).toBe('running');
     const completed = await waitForTerminal(host, started.execution.id);
 
     expect(completed.runtime.run.status).toBe('succeeded');
@@ -139,7 +132,6 @@ describe('workflow runtime composition', () => {
         canvas,
         scope: { kind: 'workflow' },
       });
-      await approveOnlyTestNode(host, started, 1);
       const reviewedFirst = await waitForNodeStatus(
         host,
         started.execution.id,
@@ -159,11 +151,8 @@ describe('workflow runtime composition', () => {
         feedback: 'Run the exact check one more time.',
         decidedBy: 'integration-test',
       });
-      expect(revised.runtime.run.nodeRuns[TEST_NODE_ID]).toMatchObject({
-        attempt: 2,
-        status: 'queued',
-      });
-      await approveOnlyTestNode(host, revised, 2);
+      expect(revised.runtime.run.nodeRuns[TEST_NODE_ID]?.attempt).toBe(2);
+      expect(revised.approvals).toEqual([]);
       const reviewedSecond = await waitForNodeStatus(
         host,
         started.execution.id,
@@ -287,7 +276,6 @@ describe('workflow runtime composition', () => {
         canvas,
         scope: { kind: 'workflow' },
       });
-      await approveOnlyTestNode(host, started, 1);
       const running = await waitForNodeStatus(host, started.execution.id, TEST_NODE_ID, 'running');
       const cancelled = await host.cancelNode({
         executionId: started.execution.id,
@@ -397,25 +385,6 @@ async function waitForNodeStatus(
   throw new Error(
     `Timed out waiting for ${nodeId} to become ${expected}; current status is ${String(state.runtime.run.nodeRuns[nodeId]?.status)}.`,
   );
-}
-
-async function approveOnlyTestNode(
-  host: ReturnType<ReturnType<typeof createWorkflowRuntimeComposition>['createHost']>,
-  state: WorkflowHostState,
-  attempt: number,
-): Promise<void> {
-  const approval = state.approvals.find(
-    (candidate) => candidate.nodeId === TEST_NODE_ID && candidate.attempt === attempt,
-  );
-  if (approval === undefined)
-    throw new Error(`Expected Test approval for attempt ${String(attempt)}.`);
-  await host.approveNode({
-    executionId: state.execution.id,
-    nodeId: TEST_NODE_ID,
-    preparationId: approval.preparationId,
-    approvalFingerprint: approval.approvalFingerprint,
-    approvedBy: 'integration-test',
-  });
 }
 
 function workflowCanvas() {

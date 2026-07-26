@@ -137,6 +137,20 @@ describe('TestNodeFace', () => {
     expect(cancelNode).toHaveBeenCalledWith({ executionId: 'x1', nodeId: 'n1', attempt: 1 });
   });
 
+  it('reports the run status instead of parking on a review that has no surface', () => {
+    renderFace(
+      {},
+      runtimeValue([
+        execution({
+          approvals: [{ nodeId: 'n1', attempt: 1, executionId: 'x1' }],
+        }),
+      ]),
+    );
+    expect(screen.getByRole('status')).toHaveProperty('textContent', 'Running');
+    expect(screen.queryByText(/Waiting for your approval/u)).toBeNull();
+    expect(screen.queryByText(/Workflows/u)).toBeNull();
+  });
+
   it('blocks starting without a configured command or authorization', () => {
     renderFace({ command: { executable: '', arguments: [] } });
     expect(screen.getByRole('button', { name: 'Run' })).toHaveProperty('disabled', true);
