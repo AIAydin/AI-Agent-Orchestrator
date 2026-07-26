@@ -59,7 +59,7 @@ describe('CloseCoordinator', () => {
     expect(options).toMatchObject({
       defaultId: 0,
       cancelId: 0,
-      buttons: ['Keep Forgeboard open', 'Close without saving'],
+      buttons: ['Keep Artemis open', 'Close without saving'],
     });
   });
 

@@ -13,7 +13,7 @@ describe('providerConnectionConfirmation', () => {
         expiresAt: '2026-07-17T12:05:00.000Z',
       },
       providerName: 'Anthropic Claude Code',
-      providerDisclosure: 'Claude may contact Anthropic. Forgeboard stores no OAuth token.',
+      providerDisclosure: 'Claude may contact Anthropic. Artemis stores no OAuth token.',
       executable: '/usr/local/bin/claude',
       executableSha256: 'a'.repeat(64),
       validationArguments: [['--version']],

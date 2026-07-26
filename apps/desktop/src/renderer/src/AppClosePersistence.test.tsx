@@ -79,7 +79,7 @@ describe('App close persistence', () => {
     expect((await screen.findByRole('alert')).textContent).toContain(
       'The local database could not be read.',
     );
-    expect(screen.queryByText('Opening Forgeboard…')).toBeNull();
+    expect(screen.queryByText('Opening Artemis…')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(await screen.findByRole('button', { name: 'Open project' })).toBeTruthy();
@@ -124,7 +124,7 @@ describe('App close persistence', () => {
     ];
     render(<App />);
 
-    expect(await screen.findByText('Forgeboard fixed some settings for this version')).toBeTruthy();
+    expect(await screen.findByText('Artemis fixed some settings for this version')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
     expect(await screen.findByText('Settings opened on privacy')).toBeTruthy();
   });

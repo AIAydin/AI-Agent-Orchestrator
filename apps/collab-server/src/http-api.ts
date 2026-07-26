@@ -160,7 +160,7 @@ export class CollaborationHttpApi {
     }
     if (request.method === 'GET' && url.pathname === '/') {
       writeJson(response, 200, {
-        service: 'Forgeboard optional collaboration server',
+        service: 'Artemis optional collaboration server',
         health: '/healthz',
         privacy: 'Only allowlisted collaboration metadata is accepted.',
       });

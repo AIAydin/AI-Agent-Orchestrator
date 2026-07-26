@@ -35,7 +35,7 @@ describe('command readiness contracts', () => {
       ready: true,
       validationScope: 'project',
       resolvedExecutable: '/usr/local/bin/pnpm',
-      projectName: 'Forgeboard',
+      projectName: 'Artemis',
       checkedAt: '2026-07-15T18:00:00.000Z',
       reason: null,
       warning: null,

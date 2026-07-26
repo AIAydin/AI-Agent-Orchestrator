@@ -68,7 +68,7 @@ export function PreviewSurface({
             <MonitorPlay size={17} />
             <div>
               <strong id="preview-surface-title">Local preview</strong>
-              <small>Runs only on this computer · pages cannot control Forgeboard</small>
+              <small>Runs only on this computer · pages cannot control Artemis</small>
             </div>
           </div>
           <nav aria-label="Preview history">

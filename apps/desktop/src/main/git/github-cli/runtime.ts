@@ -535,10 +535,10 @@ export class GitHubCliRuntimeService {
     const runner = this.#createRunner('gh');
     if (!path.isAbsolute(runner.executable)) {
       if (runner.executableResolution === 'missing') return { runner, captured: null };
-      throw new Error('Forgeboard could not confirm whether the GitHub CLI is installed.');
+      throw new Error('Artemis could not confirm whether the GitHub CLI is installed.');
     }
     if (runner.executableResolution !== undefined && runner.executableResolution !== 'resolved') {
-      throw new Error('Forgeboard could not verify the GitHub CLI program it found automatically.');
+      throw new Error('Artemis could not verify the GitHub CLI program it found automatically.');
     }
     const captured = await captureGitHubCliExecutable(runner.executable);
     assertRunnerExecutable(runner, captured.executablePath);
@@ -929,7 +929,7 @@ function isVersionCommand(args: readonly string[]): boolean {
 
 function automaticValidationRequired(): Error {
   return new Error(
-    'Forgeboard found the GitHub CLI automatically but has not verified it yet. Use Check GitHub, or review the automatic setup in Settings, before signing in or running GitHub commands.',
+    'Artemis found the GitHub CLI automatically but has not verified it yet. Use Check GitHub, or review the automatic setup in Settings, before signing in or running GitHub commands.',
   );
 }
 

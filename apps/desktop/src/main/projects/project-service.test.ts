@@ -94,7 +94,7 @@ describe('ProjectService moved-project recovery', () => {
     });
     const service = new ProjectService({} as App, { showOpenDialog } as unknown as Dialog, store);
     const assertCurrent = vi.fn(() => {
-      throw new Error('The originating Forgeboard window changed or closed.');
+      throw new Error('The originating Artemis window changed or closed.');
     });
 
     await expect(
@@ -161,7 +161,7 @@ describe('ProjectService moved-project recovery', () => {
     });
   });
 
-  it('creates an initialized child project with Forgeboard bundled Git', async () => {
+  it('creates an initialized child project with Artemis bundled Git', async () => {
     const root = temporaryRoot();
     const parent = join(root, 'projects');
     mkdirSync(parent);

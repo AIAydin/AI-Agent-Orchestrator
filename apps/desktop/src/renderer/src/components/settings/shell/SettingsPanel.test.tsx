@@ -656,12 +656,12 @@ describe('SettingsPanel draft transactions', () => {
       <SettingsPanel
         {...props({
           info: {
-            name: 'Forgeboard',
+            name: 'Artemis',
             version: '0.1.0',
             platform: 'win32',
-            dataDirectory: 'C:\\Forgeboard',
-            databasePath: 'C:\\Forgeboard\\forgeboard.sqlite3',
-            transcriptDirectory: 'C:\\Forgeboard\\transcripts',
+            dataDirectory: 'C:\\Artemis',
+            databasePath: 'C:\\Artemis\\forgeboard.sqlite3',
+            transcriptDirectory: 'C:\\Artemis\\transcripts',
           },
         })}
       />,
@@ -682,7 +682,7 @@ describe('SettingsPanel draft transactions', () => {
     expect(screen.getByText(/no telemetry or model proxy/u)).toBeTruthy();
     expect(screen.getByText(/solo mode makes no outbound connections by default/u)).toBeTruthy();
     expect(screen.getByText(/Provider, collaboration, Git, and update actions/u)).toBeTruthy();
-    expect(document.body.textContent).not.toMatch(/Forgeboard sends nothing to the cloud/u);
+    expect(document.body.textContent).not.toMatch(/Artemis sends nothing to the cloud/u);
     expect(await screen.findByText(/1\.0 KiB/u)).toBeTruthy();
   });
 
@@ -838,7 +838,7 @@ function props(
 ): ComponentProps<typeof SettingsPanel> {
   return {
     info: {
-      name: 'Forgeboard',
+      name: 'Artemis',
       version: '0.1.0',
       platform: 'test',
       dataDirectory: '/tmp/forgeboard',

@@ -43,9 +43,9 @@ export const LOCAL_EFFECT_POLICY_REQUIREMENTS: Readonly<Record<LocalEffectPolicy
   'audited-authority':
     'The effect requires current main-owned authority and a redacted allowed audit before it runs.',
   'durable-internal-state':
-    'The capability maintains Forgeboard-owned state inside an already-authorized operation and does not create a separate external or destructive user action.',
+    'The capability maintains Artemis-owned state inside an already-authorized operation and does not create a separate external or destructive user action.',
   'journaled-startup-recovery':
-    'The capability repairs Forgeboard-owned startup data before an audit database is available; a private durable journal must precede primary-file replacement and recovery must fail closed.',
+    'The capability repairs Artemis-owned startup data before an audit database is available; a private durable journal must precede primary-file replacement and recovery must fail closed.',
   'ordinary-project-save':
     'The direct Save command writes the exact user-authored text only after canonical-path, file-identity, and expected-content-hash comparison; it is not a privileged security or outbound action.',
   'reviewed-domain-operation':
@@ -231,6 +231,7 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
   'index.ts': entry('audited-authority', [
     'electron#shell', // external-open handoff for preview webviews
     'node:fs#appendFileSync', // optional E2E startup diagnostics
+    'node:fs#renameSync', // one-time Forgeboard→Artemis userData adoption
   ]),
   'ipc.ts': entry('audited-authority', [
     '@forgeboard/git-engine#GitRemoteConfigurationService',

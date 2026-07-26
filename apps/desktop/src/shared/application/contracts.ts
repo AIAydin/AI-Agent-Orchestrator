@@ -135,7 +135,7 @@ const CustomAgentArgumentSchema = z
         '{extraArgs}',
         '{contextPath}',
       ].includes(value),
-    'Placeholders such as {prompt} are reserved for Forgeboard. Use a different argument.',
+    'Placeholders such as {prompt} are reserved for Artemis. Use a different argument.',
   );
 
 function containsControlCharacter(value: string): boolean {

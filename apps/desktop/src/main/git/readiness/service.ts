@@ -1152,12 +1152,12 @@ function orphanedCheckEvidence(
     updatedAt,
     exitCode: null,
     outputDigest: checkOutputDigest({
-      output: '[Forgeboard recovered an interrupted delivery check; its output was not kept.]',
+      output: '[Artemis recovered an interrupted delivery check; its output was not kept.]',
       outputTruncated: true,
       status: 'lost',
       exitCode: null,
     }),
-    failureReason: 'Forgeboard restarted or stopped before this delivery check completed.',
+    failureReason: 'Artemis restarted or stopped before this delivery check completed.',
   });
 }
 

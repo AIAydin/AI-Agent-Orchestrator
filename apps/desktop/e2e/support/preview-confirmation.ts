@@ -84,7 +84,7 @@ export async function approveNextNativePreviewLaunch(
           `Loopback port range: ${String(binding.portRange.start)}-${String(binding.portRange.end)}`,
           `Trusted loopback hosts: ${binding.trustedHosts.join(', ')}`,
           '',
-          'Forgeboard will start this local process without a shell. The process itself can still access resources allowed by your operating system.',
+          'Artemis will start this local process without a shell. The process itself can still access resources allowed by your operating system.',
         ] as const;
         const errors = [
           nativeOptions?.type === 'warning' ? undefined : 'type must be warning',

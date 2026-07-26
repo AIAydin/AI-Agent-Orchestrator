@@ -35,7 +35,7 @@ export async function readinessExecutableIdentity(
       details.ctimeMs !== after.ctimeMs ||
       details.mode !== after.mode
     ) {
-      throw new Error('The selected agent executable changed while Forgeboard verified it.');
+      throw new Error('The selected agent executable changed while Artemis verified it.');
     }
     return {
       device: after.dev,

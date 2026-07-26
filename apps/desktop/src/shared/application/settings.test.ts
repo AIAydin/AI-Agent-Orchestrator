@@ -29,7 +29,7 @@ describe('Git identity settings', () => {
     expect(
       AppSettingsSchema.safeParse({
         ...baseSettings,
-        gitIdentityName: 'Forgeboard User',
+        gitIdentityName: 'Artemis User',
         gitIdentityEmail: 'forgeboard@example.invalid',
       }).success,
     ).toBe(true);

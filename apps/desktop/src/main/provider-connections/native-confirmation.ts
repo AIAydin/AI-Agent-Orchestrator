@@ -38,7 +38,7 @@ export function providerConnectionConfirmation(
       `Provider: ${review.providerName}`,
       `Network disclosure: ${review.providerDisclosure}`,
       '',
-      'Forgeboard launches the installed provider CLI locally. The CLI owns browser sign-in, credentials, and logout. Forgeboard does not receive or store OAuth tokens, but the executable may perform arbitrary local or network effects.',
+      'Artemis launches the installed provider CLI locally. The CLI owns browser sign-in, credentials, and logout. Artemis does not receive or store OAuth tokens, but the executable may perform arbitrary local or network effects.',
     ].join('\n'),
     buttons: ['Cancel', actionLabel],
     defaultId: 0,

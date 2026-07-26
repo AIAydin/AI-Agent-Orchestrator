@@ -430,7 +430,7 @@ async function createRepository(root: string): Promise<string> {
   const repository = path.join(root, 'repository');
   await mkdir(repository);
   await runGit(repository, ['init', '-b', 'main']);
-  await runGit(repository, ['config', 'user.name', 'Forgeboard Exact Check Test']);
+  await runGit(repository, ['config', 'user.name', 'Artemis Exact Check Test']);
   await runGit(repository, ['config', 'user.email', 'exact-check@example.invalid']);
   await writeFile(path.join(repository, 'README.md'), '# Exact check fixture\n', 'utf8');
   await runGit(repository, ['add', '--', 'README.md']);

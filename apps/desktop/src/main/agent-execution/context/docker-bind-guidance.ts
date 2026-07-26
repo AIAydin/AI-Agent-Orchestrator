@@ -3,7 +3,7 @@ import type { AgentEvent } from '@forgeboard/agent-adapters';
 const MAX_MATCH_BUFFER = 32 * 1024;
 
 export const DOCKER_CONTEXT_BIND_FAILURE_GUIDANCE =
-  "Forgeboard: Docker Desktop could not bind the private per-user context snapshot. Allow file sharing for Forgeboard's app-data folder in Docker Desktop, then retry, or choose the Host runtime.\n";
+  "Artemis: Docker Desktop could not bind the private per-user context snapshot. Allow file sharing for Artemis's app-data folder in Docker Desktop, then retry, or choose the Host runtime.\n";
 
 /**
  * Preserves every provider event while adding one actionable line only when Docker positively

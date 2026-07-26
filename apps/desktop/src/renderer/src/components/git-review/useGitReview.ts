@@ -16,7 +16,7 @@ import type {
 import { unwrap } from '../../lib/ipc.js';
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Forgeboard couldn't complete this change.";
+  return error instanceof Error ? error.message : "Artemis couldn't complete this change.";
 }
 
 interface GitReviewController {

@@ -89,7 +89,10 @@ function boundedLabel(value: string): string {
 function stripLeadingPoliteness(value: string): string {
   let result = value.trim();
   while (true) {
-    const next = result.replace(/^(?:forgeboard|please|could you|would you)\b[\s,.:;!?-]*/iu, '');
+    const next = result.replace(
+      /^(?:artemis|forgeboard|please|could you|would you)\b[\s,.:;!?-]*/iu,
+      '',
+    );
     if (next === result) return result;
     result = next;
   }

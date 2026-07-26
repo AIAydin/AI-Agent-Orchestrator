@@ -18,8 +18,8 @@ export function cleanupConfirmation(
   }
   const recoveryDetail = plan.recovery
     ? [
-        'A previous cleanup was interrupted before Forgeboard could finish recording it. This is a fresh review of what remains.',
-        "Only the leftover workspace folder, its branch, and Forgeboard's ownership records for it will be removed.",
+        'A previous cleanup was interrupted before Artemis could finish recording it. This is a fresh review of what remains.',
+        "Only the leftover workspace folder, its branch, and Artemis's ownership records for it will be removed.",
         '',
       ]
     : [];
@@ -42,9 +42,9 @@ export function cleanupConfirmation(
       ...(paths.length === 0 ? [] : ['', ...paths]),
       '',
       plan.recovery
-        ? 'Forgeboard continues only the interrupted cleanup you just reviewed: it removes the leftover workspace folder, its branch, and its ownership records. Cleanup is refused if anything changed or if a Forgeboard-managed process could still be using a project folder.'
-        : 'Forgeboard removes only the exact agent workspace you reviewed and deletes its branch. Cleanup is refused if the workspace has unsaved changes, the branch is not fully merged, anything changed, or a Forgeboard-managed process could still be using a project folder.',
-      'This cannot be undone by Forgeboard.',
+        ? 'Artemis continues only the interrupted cleanup you just reviewed: it removes the leftover workspace folder, its branch, and its ownership records. Cleanup is refused if anything changed or if a Artemis-managed process could still be using a project folder.'
+        : 'Artemis removes only the exact agent workspace you reviewed and deletes its branch. Cleanup is refused if the workspace has unsaved changes, the branch is not fully merged, anything changed, or a Artemis-managed process could still be using a project folder.',
+      'This cannot be undone by Artemis.',
     ].join('\n'),
     buttons: ['Cancel', plan.recovery ? 'Continue cleanup' : 'Delete workspace and branch'],
     defaultId: 0,

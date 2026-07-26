@@ -7,12 +7,12 @@ describe('Git identity check contracts', () => {
     expect(
       GitIdentityCheckInputSchema.parse({
         source: 'settings',
-        name: ' Forgeboard Author ',
+        name: ' Artemis Author ',
         email: ' author@example.invalid ',
       }),
     ).toEqual({
       source: 'settings',
-      name: 'Forgeboard Author',
+      name: 'Artemis Author',
       email: 'author@example.invalid',
     });
     expect(
@@ -42,11 +42,11 @@ describe('Git identity check contracts', () => {
     const result = {
       request: {
         source: 'settings' as const,
-        name: 'Forgeboard Author',
+        name: 'Artemis Author',
         email: 'author@example.invalid',
       },
       identity: {
-        name: 'Forgeboard Author',
+        name: 'Artemis Author',
         email: 'author@example.invalid',
         nameSource: 'settings' as const,
         emailSource: 'settings' as const,

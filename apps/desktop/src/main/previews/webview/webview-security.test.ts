@@ -32,7 +32,7 @@ class FakeWebRequest {
 
 class FakeSession extends EventEmitter {
   webRequest = new FakeWebRequest();
-  userAgent = 'Mozilla/5.0 Electron/38.0.0 Forgeboard/1.0.0 Chrome/140.0.0.0';
+  userAgent = 'Mozilla/5.0 Electron/38.0.0 Artemis/1.0.0 Chrome/140.0.0.0';
   permissionCheck: (() => boolean) | null = null;
   permissionRequest:
     | ((contents: unknown, permission: string, callback: (granted: boolean) => void) => void)
@@ -223,7 +223,7 @@ describe('installPreviewWebviewSecurity', () => {
       },
     });
     expect(browserSession.userAgent).not.toContain('Electron/');
-    expect(browserSession.userAgent).not.toContain('Forgeboard/');
+    expect(browserSession.userAgent).not.toContain('Artemis/');
     expect(contents.loadURL).not.toHaveBeenCalled();
     expect(options.openExternal).not.toHaveBeenCalled();
     expect(onGuestCreated).toHaveBeenCalledWith('persist:preview:p1:n1', contents);

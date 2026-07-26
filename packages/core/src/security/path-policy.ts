@@ -352,7 +352,7 @@ export class IgnoreMatcher {
   }
 }
 
-/** Loads repository-root ignore policy in Git then Forgeboard precedence order. */
+/** Loads repository-root ignore policy in Git then Artemis precedence order. */
 export async function loadProjectIgnoreMatcher(projectRoot: string): Promise<IgnoreMatcher> {
   const sources: IgnoreSource[] = [];
   for (const name of ['.gitignore', '.forgeboardignore'] as const) {

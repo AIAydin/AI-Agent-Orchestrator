@@ -53,7 +53,7 @@ test('a malformed replace-import fails before confirmation and preserves local w
     await settings.getByRole('button', { name: 'Choose export file' }).click();
 
     await expect(page.locator('.error-toast[role="alert"]')).toContainText(
-      'The selected file is not a readable Forgeboard export. It may be damaged.',
+      'The selected file is not a readable Artemis export. It may be damaged.',
     );
     await expect(settings.getByRole('region', { name: 'Confirm local data import' })).toHaveCount(
       0,

@@ -63,7 +63,7 @@ async function openFreshDemo(
   await setup.getByRole('button', { name: 'Use safe defaults' }).click();
   await expect(setup).toBeHidden();
   await session.page.getByRole('button', { name: /Explore the safe demo/i }).click();
-  await expect(session.page.locator('.project-switcher')).toContainText('forgeboard-demo');
+  await expect(session.page.locator('.project-switcher')).toContainText('artemis-demo');
   await expect(session.page.locator('.canvas-title')).toContainText('0 nodes');
   return session;
 }
@@ -76,7 +76,7 @@ async function reopenDemo(
   watchExternalRequests(session.page, externalRequests);
   await expect(session.page.locator('.setup-shell')).toHaveCount(0);
   await session.page.locator('.recent-list button').click();
-  await expect(session.page.locator('.project-switcher')).toContainText('forgeboard-demo');
+  await expect(session.page.locator('.project-switcher')).toContainText('artemis-demo');
   return session;
 }
 

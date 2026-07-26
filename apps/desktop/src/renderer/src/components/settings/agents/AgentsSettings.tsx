@@ -29,7 +29,7 @@ export function AgentsSettings({
     <>
       <SettingsSection
         title="Coding agents"
-        description="Forgeboard runs the agent CLIs installed on this computer — sign-in, config, and history work exactly like your terminal."
+        description="Artemis runs the agent CLIs installed on this computer — sign-in, config, and history work exactly like your terminal."
       >
         <section className="agent-grid" aria-label="Detected agent CLIs">
           {codingAgents.map((agent) => (
@@ -51,7 +51,7 @@ export function AgentsSettings({
           {codingAgents.length === 0 && (
             <p className="settings-empty-state" role="status">
               No agent CLIs found yet. Install Codex, Claude Code, Gemini, or OpenCode and reopen
-              Forgeboard.
+              Artemis.
             </p>
           )}
         </section>

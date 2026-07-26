@@ -70,9 +70,7 @@ describe('Windows durable filesystem authority', () => {
       .moveFileWriteThrough('C:\\secret\\source.sqlite', 'C:\\private\\target.sqlite')
       .catch((cause: unknown) => cause);
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe(
-      'Forgeboard could not complete the durable Windows move.',
-    );
+    expect((error as Error).message).toBe('Artemis could not complete the durable Windows move.');
     expect(JSON.stringify(error)).not.toContain('secret');
   });
 
@@ -85,9 +83,7 @@ describe('Windows durable filesystem authority', () => {
       .moveFileWriteThrough('C:\\data\\source.sqlite', 'C:\\data\\target.sqlite')
       .catch((cause: unknown) => cause);
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe(
-      'Forgeboard could not complete the durable Windows move.',
-    );
+    expect((error as Error).message).toBe('Artemis could not complete the durable Windows move.');
     expect(JSON.stringify(error)).not.toContain('Users');
   });
 });

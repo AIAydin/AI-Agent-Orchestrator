@@ -102,7 +102,7 @@ function assertNoCustomMergeDrivers(
   if (input.operation !== 'history-update' || drivers.length === 0) return;
   throw new GitEngineError(
     'EXTERNAL_DRIVER_BLOCKED',
-    'Forgeboard blocked this history update because Git custom merge drivers can execute external commands. No merge driver was run.',
+    'Artemis blocked this history update because Git custom merge drivers can execute external commands. No merge driver was run.',
     {
       reason: 'custom-merge-driver',
       repositoryPath: input.repositoryPath,
@@ -130,7 +130,7 @@ async function configuredFilterDelegates(
   if (result.exitCode !== 0 && result.exitCode !== 1) {
     throw new GitEngineError(
       'EXTERNAL_DRIVER_BLOCKED',
-      "Forgeboard could not safely inspect this repository's Git filter configuration.",
+      "Artemis could not safely inspect this repository's Git filter configuration.",
       { repositoryPath },
     );
   }
@@ -157,7 +157,7 @@ function parseConfiguredDelegates(output: string): readonly GitConfiguredDelegat
     if (!SAFE_DRIVER_NAME.test(driver)) {
       throw new GitEngineError(
         'EXTERNAL_DRIVER_BLOCKED',
-        'Forgeboard blocked a Git filter with an unsupported driver name.',
+        'Artemis blocked a Git filter with an unsupported driver name.',
         { driver, origin },
       );
     }
@@ -190,7 +190,7 @@ async function configuredCustomMergeDrivers(
   if (result.exitCode !== 0 && result.exitCode !== 1) {
     throw new GitEngineError(
       'EXTERNAL_DRIVER_BLOCKED',
-      "Forgeboard could not safely inspect this repository's Git merge-driver configuration.",
+      "Artemis could not safely inspect this repository's Git merge-driver configuration.",
       { repositoryPath },
     );
   }
@@ -209,7 +209,7 @@ async function configuredCustomMergeDrivers(
     if (match?.[1] === undefined || !SAFE_DRIVER_NAME.test(match[1])) {
       throw new GitEngineError(
         'EXTERNAL_DRIVER_BLOCKED',
-        'Forgeboard blocked a Git merge driver with an unsupported name.',
+        'Artemis blocked a Git merge driver with an unsupported name.',
         { key, origin },
       );
     }
@@ -221,7 +221,7 @@ async function configuredCustomMergeDrivers(
 function malformedConfigurationError(): GitEngineError {
   return new GitEngineError(
     'EXTERNAL_DRIVER_BLOCKED',
-    'Forgeboard blocked malformed Git filter configuration before running repository content.',
+    'Artemis blocked malformed Git filter configuration before running repository content.',
   );
 }
 
@@ -274,7 +274,7 @@ function parseActiveFilters(output: string): readonly GitActiveFilter[] {
   if (fields.length % 3 !== 0) {
     throw new GitEngineError(
       'EXTERNAL_DRIVER_BLOCKED',
-      'Forgeboard blocked malformed Git attribute output before running repository content.',
+      'Artemis blocked malformed Git attribute output before running repository content.',
     );
   }
   const pathsByDriver = new Map<string, Set<string>>();
@@ -285,7 +285,7 @@ function parseActiveFilters(output: string): readonly GitActiveFilter[] {
     if (path === undefined || attribute !== 'filter' || value === undefined) {
       throw new GitEngineError(
         'EXTERNAL_DRIVER_BLOCKED',
-        'Forgeboard blocked malformed Git filter attributes before running repository content.',
+        'Artemis blocked malformed Git filter attributes before running repository content.',
       );
     }
     if (value === 'unspecified' || value === 'unset') continue;

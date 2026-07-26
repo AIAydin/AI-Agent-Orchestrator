@@ -70,7 +70,7 @@ describe('managed agent commit delivery', () => {
       commits: [first, second],
       affectedPaths: ['first.txt', 'second.txt'],
       identity: {
-        name: 'Forgeboard UI',
+        name: 'Artemis UI',
         email: 'ui@forgeboard.invalid',
         nameSource: 'settings',
         emailSource: 'settings',
@@ -111,10 +111,10 @@ describe('managed agent commit delivery', () => {
     expect(confirmation.detail).toContain(`• ${first}`);
     expect(confirmation.detail).toContain('• "first.txt"');
     expect(confirmation.detail).toContain(
-      'Git author for this delivery: "Forgeboard UI" <"ui@forgeboard.invalid">',
+      'Git author for this delivery: "Artemis UI" <"ui@forgeboard.invalid">',
     );
     expect(confirmation.detail).toContain(
-      'Author source: name from Forgeboard settings; email from Forgeboard settings',
+      'Author source: name from Artemis settings; email from Artemis settings',
     );
     expect(confirmation.detail).not.toContain(fixture.repository);
     expect(harness.appendAudit).toHaveBeenCalledWith(
@@ -191,7 +191,7 @@ describe('managed agent commit delivery', () => {
     const harness = createHarness(
       fixture,
       [1],
-      { name: 'Forgeboard UI', email: 'ui@forgeboard.invalid' },
+      { name: 'Artemis UI', email: 'ui@forgeboard.invalid' },
       shippingReadiness,
     );
     const event = liveEvent(111);
@@ -249,7 +249,7 @@ describe('managed agent commit delivery', () => {
     });
     expect(plan.commits).toEqual([first, second]);
     expect(plan.identity).toMatchObject({
-      name: 'Forgeboard UI',
+      name: 'Artemis UI',
       email: 'ui@forgeboard.invalid',
       nameSource: 'settings',
       emailSource: 'settings',
@@ -263,7 +263,7 @@ describe('managed agent commit delivery', () => {
       'Pick one\nPick two',
     );
     expect(await git(fixture.repository, ['log', '-1', '--format=%cn%x00%ce'])).toBe(
-      'Forgeboard UI\0ui@forgeboard.invalid',
+      'Artemis UI\0ui@forgeboard.invalid',
     );
     expect(await git(fixture.worktreePath, ['rev-parse', 'HEAD'])).toBe(second);
     await harness.service.dispose();
@@ -327,7 +327,7 @@ describe('managed agent commit delivery', () => {
       `${primaryHead} ${sourceHead}`,
     );
     expect(await git(fixture.repository, ['show', '-s', '--format=%an%x00%ae', mergeHead])).toBe(
-      'Forgeboard UI\0ui@forgeboard.invalid',
+      'Artemis UI\0ui@forgeboard.invalid',
     );
     expect(await readFile(path.join(fixture.repository, 'primary.txt'), 'utf8')).toBe(
       'primary advanced\n',
@@ -531,7 +531,7 @@ describe('managed agent commit delivery', () => {
     const head = await git(fixture.repository, ['rev-parse', 'HEAD']);
     expect(await git(fixture.repository, ['show', '-s', '--format=%P', head])).toBe(primaryHead);
     expect(await git(fixture.repository, ['show', '-s', '--format=%an%x00%ae', head])).toBe(
-      'Forgeboard UI\0ui@forgeboard.invalid',
+      'Artemis UI\0ui@forgeboard.invalid',
     );
     expect(await readFile(path.join(fixture.repository, 'one.txt'), 'utf8')).toBe('one\n');
     expect(await readFile(path.join(fixture.repository, 'two.txt'), 'utf8')).toBe('two\n');
@@ -866,7 +866,7 @@ function createHarness(
   fixture: Fixture,
   responses: number[],
   identity: { readonly name: string; readonly email: string } = {
-    name: 'Forgeboard UI',
+    name: 'Artemis UI',
     email: 'ui@forgeboard.invalid',
   },
   shippingReadiness = readinessAuthority(fixture),

@@ -50,7 +50,7 @@ const CWD_WARNING =
   'A process working directory is not a security sandbox. Unless a provider or Docker sandbox enforces the listed roots, the process may access anything allowed by the operating-system user.';
 
 const DIRECT_DOCKER_ERROR =
-  "docker-isolated launches require Forgeboard's Docker runner; a direct local CLI adapter cannot truthfully enforce this profile.";
+  "docker-isolated launches require Artemis's Docker runner; a direct local CLI adapter cannot truthfully enforce this profile.";
 
 const require = createRequire(import.meta.url);
 

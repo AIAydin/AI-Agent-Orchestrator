@@ -20,8 +20,8 @@ export function conflictRecoveryConfirmation(plan: PendingConflictRecoveryPlan):
       ...plan.stagedPaths.map((path) => `• ${displayLiteral(path)}`),
       '',
       continuing
-        ? 'Forgeboard will refuse to continue if the operation, commit, paths, staged resolution, or unstaged content changed after this review.'
-        : 'Aborting restores Git’s pre-operation state. Forgeboard will refuse if the operation or any reviewed conflict content changed.',
+        ? 'Artemis will refuse to continue if the operation, commit, paths, staged resolution, or unstaged content changed after this review.'
+        : 'Aborting restores Git’s pre-operation state. Artemis will refuse if the operation or any reviewed conflict content changed.',
     ].join('\n'),
     buttons: ['Cancel', continuing ? `Continue ${plan.operation}` : `Abort ${plan.operation}`],
     defaultId: 0,

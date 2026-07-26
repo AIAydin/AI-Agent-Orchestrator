@@ -31,8 +31,8 @@ describe('packaged smoke artifact discovery', () => {
   it('selects only the current platform and architecture unpacked app', async () => {
     const root = await temporaryRelease();
     await createExecutable(root, 'linux-unpacked/forgeboard');
-    const windowsExecutable = await createExecutable(root, 'win-unpacked/Forgeboard.exe');
-    await createExecutable(root, 'win-arm64-unpacked/Forgeboard.exe');
+    const windowsExecutable = await createExecutable(root, 'win-unpacked/Artemis.exe');
+    await createExecutable(root, 'win-arm64-unpacked/Artemis.exe');
 
     await expect(resolvePackagedLaunch(root, 'win32', 'x64')).resolves.toEqual({
       executable: windowsExecutable,
@@ -42,12 +42,9 @@ describe('packaged smoke artifact discovery', () => {
 
   it('selects the architecture-specific macOS bundle', async () => {
     const root = await temporaryRelease();
-    const executable = await createExecutable(
-      root,
-      'mac-arm64/Forgeboard.app/Contents/MacOS/Forgeboard',
-    );
-    await createExecutable(root, 'mac/Forgeboard.app/Contents/MacOS/Forgeboard');
-    await createExecutable(root, 'Misleading.app/Contents/MacOS/Forgeboard');
+    const executable = await createExecutable(root, 'mac-arm64/Artemis.app/Contents/MacOS/Artemis');
+    await createExecutable(root, 'mac/Artemis.app/Contents/MacOS/Artemis');
+    await createExecutable(root, 'Misleading.app/Contents/MacOS/Artemis');
 
     await expect(resolvePackagedLaunch(root, 'darwin', 'arm64')).resolves.toEqual({
       executable,
@@ -57,8 +54,8 @@ describe('packaged smoke artifact discovery', () => {
 
   it('uses a matching AppImage only when the unpacked Linux app is absent', async () => {
     const root = await temporaryRelease();
-    const executable = await createExecutable(root, 'Forgeboard-0.1.0-arm64.AppImage');
-    await createExecutable(root, 'Forgeboard-0.1.0-x64.AppImage');
+    const executable = await createExecutable(root, 'Artemis-0.1.0-arm64.AppImage');
+    await createExecutable(root, 'Artemis-0.1.0-x64.AppImage');
 
     await expect(resolvePackagedLaunch(root, 'linux', 'arm64')).resolves.toEqual({
       executable,
@@ -71,7 +68,7 @@ describe('packaged smoke artifact discovery', () => {
     await createExecutable(root, 'linux-unpacked/forgeboard');
 
     await expect(resolvePackagedLaunch(root, 'win32', 'x64')).rejects.toThrow(
-      'No packaged Forgeboard executable for win32-x64',
+      'No packaged Artemis executable for win32-x64',
     );
   });
 });

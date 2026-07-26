@@ -48,7 +48,7 @@ describe('GitHub CLI executable identity size bounds', () => {
 
     try {
       await expect(assertGitHubCliExecutableCurrent(captured)).rejects.toThrow(
-        'The selected GitHub CLI program changed on disk. Choose it again so Forgeboard can re-check it.',
+        'The selected GitHub CLI program changed on disk. Choose it again so Artemis can re-check it.',
       );
       expect(read).not.toHaveBeenCalled();
     } finally {

@@ -7,7 +7,7 @@ interface BootstrapScreenProps {
   readonly onRetry: () => void;
 }
 
-/** Honest full-window state while Forgeboard loads its local application data. */
+/** Honest full-window state while Artemis loads its local application data. */
 export function BootstrapScreen({ error, onRetry }: BootstrapScreenProps) {
   const failed = error !== null;
 
@@ -18,7 +18,7 @@ export function BootstrapScreen({ error, onRetry }: BootstrapScreenProps) {
         <>
           <TriangleAlert className="loading-screen-error-icon" aria-hidden="true" />
           <section className="loading-screen-message" role="alert" aria-labelledby="startup-error">
-            <h1 id="startup-error">Forgeboard couldn&apos;t open</h1>
+            <h1 id="startup-error">Artemis couldn&apos;t open</h1>
             <p>{error}</p>
           </section>
           <button className="button primary" type="button" onClick={onRetry}>
@@ -29,7 +29,7 @@ export function BootstrapScreen({ error, onRetry }: BootstrapScreenProps) {
       ) : (
         <>
           <LoaderCircle className="spin" aria-hidden="true" />
-          <p role="status">Opening Forgeboard…</p>
+          <p role="status">Opening Artemis…</p>
         </>
       )}
     </main>

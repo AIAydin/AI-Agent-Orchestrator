@@ -30,14 +30,14 @@ describe('GitIdentityService', () => {
 
     const result = await fixture.service.check({
       source: 'settings',
-      name: 'Forgeboard Author',
+      name: 'Artemis Author',
       email: 'author@example.invalid',
     });
 
     expect(fixture.run).toHaveBeenCalledWith(
       [
         '-c',
-        'user.name=Forgeboard Author',
+        'user.name=Artemis Author',
         '-c',
         'user.email=author@example.invalid',
         'var',
@@ -47,7 +47,7 @@ describe('GitIdentityService', () => {
     );
     expect(result).toMatchObject({
       identity: {
-        name: 'Forgeboard Author',
+        name: 'Artemis Author',
         email: 'author@example.invalid',
         nameSource: 'settings',
         emailSource: 'settings',
@@ -104,7 +104,7 @@ describe('GitIdentityService', () => {
     await expect(
       rejected.service.check({
         source: 'settings',
-        name: 'Forgeboard Author',
+        name: 'Artemis Author',
         email: 'author@example.invalid',
       }),
     ).rejects.toThrow('Git rejected');

@@ -18,7 +18,7 @@ export function commitConfirmation(plan: PendingCommitPlan): MessageBoxOptions {
       '',
       ...boundedPathDisclosure(plan.stagedPaths),
       '',
-      'Forgeboard commits only the exact staged snapshot you reviewed. If the latest commit on the branch or the staged content changed, the commit is refused.',
+      'Artemis commits only the exact staged snapshot you reviewed. If the latest commit on the branch or the staged content changed, the commit is refused.',
       'Repository hooks (custom scripts) and commit signing are skipped for this commit.',
     ].join('\n'),
     buttons: ['Cancel', 'Commit'],
@@ -40,7 +40,7 @@ export function discardConfirmation(plan: PendingDiscardPlan): MessageBoxOptions
       '',
       ...boundedPathDisclosure(plan.paths),
       '',
-      'This rewrites files in your workspace and cannot be undone by Forgeboard. It applies only to the exact change blocks you reviewed and fails if anything changed.',
+      'This rewrites files in your workspace and cannot be undone by Artemis. It applies only to the exact change blocks you reviewed and fails if anything changed.',
     ].join('\n'),
     buttons: ['Cancel', 'Discard selected changes'],
     defaultId: 0,
@@ -61,7 +61,7 @@ export function externalOpenConfirmation(
   return {
     type: 'warning',
     title: 'Open workspace in an external application?',
-    message: `Open the ${target.kind === 'primary' ? 'main project workspace' : 'agent workspace'} outside Forgeboard?`,
+    message: `Open the ${target.kind === 'primary' ? 'main project workspace' : 'agent workspace'} outside Artemis?`,
     detail: [
       `Where: ${targetDisclosure(target)}`,
       `Branch: ${branch === null ? 'no branch checked out' : displayBoundedLiteral(branch, 4_096)}`,
@@ -79,11 +79,11 @@ export function externalOpenConfirmation(
             ]),
       '',
       application === null
-        ? 'Your operating system chooses the registered application. It runs outside Forgeboard’s sandbox and may read or change any file in this workspace.'
+        ? 'Your operating system chooses the registered application. It runs outside Artemis’s sandbox and may read or change any file in this workspace.'
         : application.kind === 'macos-app-bundle'
-          ? 'macOS Launch Services opens the reviewed application bundle outside Forgeboard’s sandbox. The application may read or change any file in this workspace. The exact bundle path and workspace are passed to /usr/bin/open without a shell.'
-          : 'The selected executable runs directly, outside Forgeboard’s sandbox, and may read or change any file in this workspace. No shell or additional arguments are used.',
-      'Forgeboard passes only the main-owned workspace path after revalidating the selected project or agent run. The path is never accepted from the renderer.',
+          ? 'macOS Launch Services opens the reviewed application bundle outside Artemis’s sandbox. The application may read or change any file in this workspace. The exact bundle path and workspace are passed to /usr/bin/open without a shell.'
+          : 'The selected executable runs directly, outside Artemis’s sandbox, and may read or change any file in this workspace. No shell or additional arguments are used.',
+      'Artemis passes only the main-owned workspace path after revalidating the selected project or agent run. The path is never accepted from the renderer.',
     ].join('\n'),
     buttons: ['Cancel', 'Open externally'],
     defaultId: 0,

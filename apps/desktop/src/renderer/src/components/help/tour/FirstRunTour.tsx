@@ -22,7 +22,7 @@ const TOUR_STOPS: readonly TourStop[] = [
     steps: () => [
       '“Open local”, “Create empty”, and the demo stay entirely on this device.',
       'Only “Clone” uses the internet — and only with the Git address you type in.',
-      'Recent projects are just shortcuts. Moved a folder? Point Forgeboard to its new place.',
+      'Recent projects are just shortcuts. Moved a folder? Point Artemis to its new place.',
     ],
   },
   {

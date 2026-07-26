@@ -750,7 +750,7 @@ export class CheckRuntime {
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The project-check runtime has been disposed.');
     if (this.#privacyResetting) {
-      throw new Error('Project checks are paused while Forgeboard deletes local data.');
+      throw new Error('Project checks are paused while Artemis deletes local data.');
     }
   }
 }

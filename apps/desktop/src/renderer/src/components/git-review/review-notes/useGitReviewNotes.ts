@@ -171,9 +171,7 @@ export function useGitReviewNotes(
 }
 
 function reviewErrorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : "Forgeboard couldn't save your feedback. Try again.";
+  return error instanceof Error ? error.message : "Artemis couldn't save your feedback. Try again.";
 }
 
 function reviewTargetKey(target: GitTargetInput): string {

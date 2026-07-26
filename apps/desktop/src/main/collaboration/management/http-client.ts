@@ -373,7 +373,7 @@ export class CollaborationManagementHttpClient {
       }
       throw new CollaborationManagementHttpError(
         'network-failed',
-        `Forgeboard could not reach the collaboration server for the ${operation} request.`,
+        `Artemis could not reach the collaboration server for the ${operation} request.`,
       );
     } finally {
       clearTimeout(timeout);

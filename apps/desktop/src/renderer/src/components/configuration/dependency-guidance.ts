@@ -16,21 +16,21 @@ export function commandDependencyGuidance(executable: string, purpose: CommandPu
 
   const command = executableName(trimmed);
   if (command === 'npm' || command === 'npx' || command === 'node') {
-    return 'If this command is not available, install Node.js and reopen Forgeboard, or use Browse to point to it directly.';
+    return 'If this command is not available, install Node.js and reopen Artemis, or use Browse to point to it directly.';
   }
   if (command === 'pnpm' || command === 'yarn') {
-    return `If ${command} is not available, install Node.js and enable ${command} with Corepack, then reopen Forgeboard or use Browse.`;
+    return `If ${command} is not available, install Node.js and enable ${command} with Corepack, then reopen Artemis or use Browse.`;
   }
   if (command === 'bun') {
-    return 'If Bun is not available, install Bun and reopen Forgeboard, or use Browse to point to it directly.';
+    return 'If Bun is not available, install Bun and reopen Artemis, or use Browse to point to it directly.';
   }
   if (command === 'deno') {
-    return 'If Deno is not available, install Deno and reopen Forgeboard, or use Browse to point to it directly.';
+    return 'If Deno is not available, install Deno and reopen Artemis, or use Browse to point to it directly.';
   }
   if (isPath(trimmed)) {
-    return 'Forgeboard will check this file before running it. If it was moved or replaced, use Browse to pick it again.';
+    return 'Artemis will check this file before running it. If it was moved or replaced, use Browse to pick it again.';
   }
-  return `If ${trimmed} is not available on this computer, install it and reopen Forgeboard, or use Browse to point to it directly.`;
+  return `If ${trimmed} is not available on this computer, install it and reopen Artemis, or use Browse to point to it directly.`;
 }
 
 export function packageManagerDependencyGuidance(
@@ -67,7 +67,7 @@ export function agentDependencyGuidance(
           : id === 'opencode'
             ? 'opencode'
             : id;
-  return `Install ${provider} by following its publisher's instructions, make sure the ${expectedCommand} command works on this computer, and reopen Forgeboard. Or use Browse to point to an existing installation, then refresh.`;
+  return `Install ${provider} by following its publisher's instructions, make sure the ${expectedCommand} command works on this computer, and reopen Artemis. Or use Browse to point to an existing installation, then refresh.`;
 }
 
 function executableName(executable: string): string {

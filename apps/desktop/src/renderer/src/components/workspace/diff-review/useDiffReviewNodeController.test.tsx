@@ -131,7 +131,7 @@ function agents(): AgentDetection[] {
     {
       id: 'codex',
       label: 'Deterministic Codex',
-      executable: '/Applications/Forgeboard/CodexAgent',
+      executable: '/Applications/Artemis/CodexAgent',
       installed: true,
       version: '1.0.0',
       providerDisclosure: 'Local deterministic fixture.',

@@ -265,7 +265,7 @@ export class GitDeliveryReadinessIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid delivery-readiness request.'
+            ? 'Artemis rejected an invalid delivery-readiness request.'
             : rendererSafeErrorMessage(error),
         },
       };
@@ -279,7 +279,7 @@ export class GitDeliveryReadinessIpcService {
     this.#assertLiveMainFrame(event);
     const parent = this.resolveWindow(event);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required for delivery readiness.');
+      throw new Error('A live Artemis window is required for delivery readiness.');
     }
     return parent;
   }
@@ -288,14 +288,14 @@ export class GitDeliveryReadinessIpcService {
     this.#assertAvailable();
     this.#assertLiveMainFrame(event);
     if (expected.isDestroyed() || this.resolveWindow(event) !== expected) {
-      throw new Error('The originating Forgeboard window changed during readiness approval.');
+      throw new Error('The originating Artemis window changed during readiness approval.');
     }
   }
 
   #assertLiveMainFrame(event: IpcMainInvokeEvent): void {
-    if (event.sender.isDestroyed()) throw new Error('The originating Forgeboard window is closed.');
+    if (event.sender.isDestroyed()) throw new Error('The originating Artemis window is closed.');
     if (event.senderFrame !== event.sender.mainFrame) {
-      throw new Error('Delivery readiness is allowed only from the main Forgeboard frame.');
+      throw new Error('Delivery readiness is allowed only from the main Artemis frame.');
     }
   }
 

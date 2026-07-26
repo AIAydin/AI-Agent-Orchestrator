@@ -245,7 +245,7 @@ export class CommandReadinessService {
     return this.#result(request, missing ? 'executable-missing' : 'invalid-configuration', {
       projectName: project ? boundedProjectName(project.name) : null,
       reason: missing
-        ? `${reason} Use Browse to select the executable, or install the dependency and reopen Forgeboard.`
+        ? `${reason} Use Browse to select the executable, or install the dependency and reopen Artemis.`
         : reason,
     });
   }

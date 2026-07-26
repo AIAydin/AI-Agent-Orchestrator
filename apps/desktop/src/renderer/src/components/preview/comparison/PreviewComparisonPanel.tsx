@@ -50,7 +50,7 @@ export function PreviewComparisonPanel(props: PreviewComparisonPanelProps) {
         <span>Two real local servers</span>
       </header>
       <p>
-        Choose two agent runs to compare. Forgeboard asks for your approval before launching either
+        Choose two agent runs to compare. Artemis asks for your approval before launching either
         server.
       </p>
       <div className="preview-comparison-configurations">

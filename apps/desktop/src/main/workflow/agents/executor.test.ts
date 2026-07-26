@@ -183,7 +183,7 @@ describe('WorkflowAgentExecutor preparation', () => {
     });
     expect(backend.prepareCalls[0]?.request.prompt).toBe(
       [
-        '# Forgeboard task execution',
+        '# Artemis task execution',
         '',
         'Title: Task',
         'Priority: urgent',

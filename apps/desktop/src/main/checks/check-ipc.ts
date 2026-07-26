@@ -294,13 +294,13 @@ export class CheckIpcService {
   }
 
   #assertLiveSender(event: IpcMainInvokeEvent): void {
-    if (event.sender.isDestroyed()) throw new Error('The originating Forgeboard window is closed.');
+    if (event.sender.isDestroyed()) throw new Error('The originating Artemis window is closed.');
   }
 
   #assertLiveMainFrame(event: IpcMainInvokeEvent): void {
     this.#assertLiveSender(event);
     if (event.senderFrame !== event.sender.mainFrame) {
-      throw new Error('Project checks are allowed only from the main Forgeboard frame.');
+      throw new Error('Project checks are allowed only from the main Artemis frame.');
     }
   }
 
@@ -308,7 +308,7 @@ export class CheckIpcService {
     this.#assertLiveMainFrame(event);
     const parent = this.resolveWindow(event);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required to approve a project check.');
+      throw new Error('A live Artemis window is required to approve a project check.');
     }
     return parent;
   }
@@ -317,7 +317,7 @@ export class CheckIpcService {
     this.#assertLiveMainFrame(event);
     const current = this.resolveWindow(event);
     if (current !== expected || expected.isDestroyed()) {
-      throw new Error('The originating Forgeboard window changed or closed.');
+      throw new Error('The originating Artemis window changed or closed.');
     }
   }
 
@@ -344,7 +344,7 @@ export class CheckIpcService {
   ): Promise<IpcResult<Output>> {
     try {
       if (this.#disposed) throw new Error('The project-check service has been disposed.');
-      if (this.#paused) throw new Error('Project checks are paused while Forgeboard quits.');
+      if (this.#paused) throw new Error('Project checks are paused while Artemis quits.');
       this.#assertLiveMainFrame(event);
       const args = inputSchema.parse(rawArgs);
       const value = outputSchema.parse(await operation(event, ...args));
@@ -359,7 +359,7 @@ export class CheckIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid project-check request.'
+            ? 'Artemis rejected an invalid project-check request.'
             : error instanceof Error
               ? error.message
               : 'The project-check operation failed.',
@@ -400,7 +400,7 @@ function confirmationOptions(plan: CheckPlanView): MessageBoxOptions {
       '',
       "Project checks run code from this project on your computer, with your account's permissions. Package scripts can run other commands during install or build. Review recent project changes before running a check.",
       '',
-      'Forgeboard runs exactly the command and arguments listed above; nothing else can be substituted. Output is saved in full and can be exported unchanged, so do not run a check that prints passwords or other secrets.',
+      'Artemis runs exactly the command and arguments listed above; nothing else can be substituted. Output is saved in full and can be exported unchanged, so do not run a check that prints passwords or other secrets.',
     ].join('\n'),
     buttons: ['Cancel', 'Run check'],
     checkboxLabel: 'Remember only this exact check for this project for 30 days',

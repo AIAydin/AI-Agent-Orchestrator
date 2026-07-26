@@ -77,7 +77,7 @@ export class FileNodeWorkflowContextResolver {
               projectId: request.projectId,
               projectRoot: project.path,
               receivingAdapterId: 'forgeboard-workflow',
-              receivingProvider: 'Forgeboard local workflow verifier',
+              receivingProvider: 'Artemis local workflow verifier',
               relativePaths: request.files.map((file) => file.relativePath),
             });
       const sources = request.canvasSources.map((source) =>

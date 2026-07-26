@@ -140,13 +140,13 @@ function fallbackConfirmation(
 ): MessageBoxOptions {
   return {
     type: 'warning',
-    title: 'Unsaved work in Forgeboard',
-    message: 'Forgeboard could not confirm that your latest work was saved.',
+    title: 'Unsaved work in Artemis',
+    message: 'Artemis could not confirm that your latest work was saved.',
     detail:
       outcome === 'timed-out'
-        ? 'Saving did not finish in time. Keep Forgeboard open and try again, or close without saving your latest changes.'
-        : 'Saving your latest changes failed. Keep Forgeboard open and try again, or close without saving them.',
-    buttons: ['Keep Forgeboard open', 'Close without saving'],
+        ? 'Saving did not finish in time. Keep Artemis open and try again, or close without saving your latest changes.'
+        : 'Saving your latest changes failed. Keep Artemis open and try again, or close without saving them.',
+    buttons: ['Keep Artemis open', 'Close without saving'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,

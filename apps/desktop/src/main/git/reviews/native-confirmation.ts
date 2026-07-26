@@ -15,7 +15,7 @@ export function reviewNoteDeleteConfirmation(note: StoredGitReviewNote): Message
       `Note ID: ${displayEscapedText(note.id)}`,
       `Last updated: ${displayEscapedText(note.updatedAt)}`,
       '',
-      'This removes the note from Forgeboard. It does not change Git files, commits, or branches.',
+      'This removes the note from Artemis. It does not change Git files, commits, or branches.',
     ].join('\n'),
     buttons: ['Keep note', 'Delete note'],
     defaultId: 0,

@@ -159,8 +159,7 @@ export class VoiceIpcService {
       type: 'warning',
       title: 'Remove local voice model?',
       message: 'Voice commands will stop working until the model is installed again.',
-      detail:
-        'This deletes only Forgeboard’s downloaded speech model. It does not delete projects.',
+      detail: 'This deletes only Artemis’s downloaded speech model. It does not delete projects.',
       buttons: ['Cancel', 'Remove model'],
       defaultId: 0,
       cancelId: 0,
@@ -282,7 +281,7 @@ export class VoiceIpcService {
     assertLiveMainFrame(event, `Voice: ${action}`);
     const parent = ElectronBrowserWindow.fromWebContents(event.sender);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error(`A live Forgeboard window is required to ${action}.`);
+      throw new Error(`A live Artemis window is required to ${action}.`);
     }
     return parent;
   }
@@ -291,7 +290,7 @@ export class VoiceIpcService {
     if (this.#disposed) throw new Error('The voice service has been disposed.');
     assertLiveMainFrame(event, 'Voice operation');
     if (parent.isDestroyed() || ElectronBrowserWindow.fromWebContents(event.sender) !== parent) {
-      throw new Error('The originating Forgeboard window changed or closed.');
+      throw new Error('The originating Artemis window changed or closed.');
     }
   }
 
@@ -312,7 +311,7 @@ export class VoiceIpcService {
             code: error instanceof z.ZodError ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
             message:
               error instanceof z.ZodError
-                ? 'Forgeboard rejected invalid voice audio.'
+                ? 'Artemis rejected invalid voice audio.'
                 : error instanceof Error
                   ? error.message
                   : 'The voice operation failed.',
@@ -355,7 +354,7 @@ function modelDownloadDisclosure(): OutboundActionDisclosure {
   return {
     action: 'voice-model-download',
     title: 'Install local voice model',
-    summary: 'Allow Forgeboard to download Whisper Tiny English for offline speech recognition?',
+    summary: 'Allow Artemis to download Whisper Tiny English for offline speech recognition?',
     confirmLabel: 'Download model',
     destination: {
       kind: 'model-registry',

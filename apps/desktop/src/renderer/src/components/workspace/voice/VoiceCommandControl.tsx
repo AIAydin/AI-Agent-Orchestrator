@@ -108,7 +108,7 @@ export function VoiceCommandControl({
       stream?.getTracks().forEach((track) => track.stop());
       if (context !== null && context.state !== 'closed') await context.close();
       setState('idle');
-      onError(error instanceof Error ? error.message : 'Forgeboard could not open the microphone.');
+      onError(error instanceof Error ? error.message : 'Artemis could not open the microphone.');
     }
   }
 
@@ -128,7 +128,7 @@ export function VoiceCommandControl({
     );
     if (samples.length < 4_000) {
       setState('idle');
-      onError('Hold the recording a little longer so Forgeboard can hear the command.');
+      onError('Hold the recording a little longer so Artemis can hear the command.');
       return;
     }
     setState('transcribing');

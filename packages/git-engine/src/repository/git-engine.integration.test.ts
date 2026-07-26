@@ -27,7 +27,7 @@ import { WorktreeService } from './worktrees.js';
 import { createTemporaryRepository, runGit, type TemporaryRepository } from '../testing/helpers.js';
 
 const TEST_COMMIT_IDENTITY = {
-  authorName: 'Forgeboard Test',
+  authorName: 'Artemis Test',
   authorEmail: 'forgeboard@example.invalid',
 } as const;
 

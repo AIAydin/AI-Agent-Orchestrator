@@ -41,7 +41,7 @@ test('Codex connects through provider OAuth UI, refreshes after restart, and nev
     const setupDialog = page.getByRole('dialog', {
       name: /Ready to build without wiring config files/i,
     });
-    await setupDialog.getByRole('button', { name: 'Set up Forgeboard' }).click();
+    await setupDialog.getByRole('button', { name: 'Set up Artemis' }).click();
     const setup = page.locator('.setup-shell');
     const codexChoice = setup.getByRole('radio', { name: /OpenAI Codex CLI/ });
     await setup.getByText('OpenAI Codex CLI', { exact: true }).click();
@@ -105,7 +105,7 @@ test('Codex connects through provider OAuth UI, refreshes after restart, and nev
     await expect(
       setup.getByRole('heading', { name: /Your local workshop is ready/i }),
     ).toBeVisible();
-    await setup.getByRole('button', { name: 'Open Forgeboard' }).click();
+    await setup.getByRole('button', { name: 'Open Artemis' }).click();
     await expect(setup).toBeHidden();
 
     const beforeRestart = await readFixtureInvocations(executable);

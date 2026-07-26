@@ -16,7 +16,7 @@ const NOW = '2026-07-17T12:00:00.000Z';
 
 const project: Project = {
   id: PROJECT_ID,
-  name: 'Forgeboard',
+  name: 'Artemis',
   path: '/canonical/project',
   openedAt: NOW,
   missing: false,
@@ -118,7 +118,7 @@ describe('PreviewTargetResolver', () => {
     expect(views).toEqual([
       {
         target: { kind: 'primary' },
-        label: 'Forgeboard',
+        label: 'Artemis',
         badge: 'Primary checkout',
         available: true,
       },

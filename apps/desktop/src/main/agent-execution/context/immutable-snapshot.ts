@@ -20,7 +20,7 @@ const DOCKER_WORKTREE_ROOT = '/workspace';
 const COPY_BUFFER_BYTES = 64 * 1024;
 
 export const IMMUTABLE_CONTEXT_DISCLOSURE =
-  'Immediately before spawn, Forgeboard copies or materializes each approved context digest into a private per-run snapshot. The reviewed paths remain logical labels; only main substitutes randomized snapshot paths, and it removes them after the agent session ends.';
+  'Immediately before spawn, Artemis copies or materializes each approved context digest into a private per-run snapshot. The reviewed paths remain logical labels; only main substitutes randomized snapshot paths, and it removes them after the agent session ends.';
 
 export const IMMUTABLE_DOCKER_CONTEXT_DISCLOSURE =
   'Docker receives selected context through one additional private read-only snapshot mount at /forgeboard-context. The approved worktree bind and its read/write policy remain unchanged.';
@@ -318,11 +318,11 @@ async function openApprovedFile(
     const opened = await handle.stat();
     const after = await lstat(resolved);
     if (!opened.isFile() || after.isSymbolicLink() || !sameFileIdentity(opened, after)) {
-      throw new Error('Selected context changed while Forgeboard opened it. Review what will run.');
+      throw new Error('Selected context changed while Artemis opened it. Review what will run.');
     }
     const afterCanonical = await realpath(resolved);
     if (!pathsEqual(afterCanonical, canonicalPath)) {
-      throw new Error('Selected context changed while Forgeboard opened it. Review what will run.');
+      throw new Error('Selected context changed while Artemis opened it. Review what will run.');
     }
     return {
       canonicalPath,
@@ -368,7 +368,7 @@ async function copyExactOpenedFile(
     }
     const finalIdentity = fileIdentity(await source.stat());
     if (!sameIdentityRecord(expectedIdentity, finalIdentity)) {
-      throw new Error('Selected context changed while Forgeboard copied it. Review what will run.');
+      throw new Error('Selected context changed while Artemis copied it. Review what will run.');
     }
     if (position !== expectedIdentity.size || hash.digest('hex') !== expectedDigest) {
       throw new Error(
@@ -429,7 +429,7 @@ async function verifySnapshotFile(
   try {
     const opened = await handle.stat();
     if (!opened.isFile() || !sameFileIdentity(opened, details)) {
-      throw new Error('A private context snapshot file changed while Forgeboard opened it.');
+      throw new Error('A private context snapshot file changed while Artemis opened it.');
     }
     const digest = await digestOpenedFile(handle, opened.size);
     const finalIdentity = fileIdentity(await handle.stat());
@@ -477,7 +477,7 @@ async function writeAll(
       chunk.length - offset,
       start + offset,
     );
-    if (bytesWritten <= 0) throw new Error('Forgeboard could not finish the private context copy.');
+    if (bytesWritten <= 0) throw new Error('Artemis could not finish the private context copy.');
     offset += bytesWritten;
   }
 }
@@ -568,16 +568,16 @@ function bindDockerPlan(
           ...new Set([...plan.disclosure.permissionProfile.readRoots, DOCKER_CONTEXT_ROOT]),
         ],
         disclosure: plan.disclosure.permissionProfile.disclosure.replace(
-          'Forgeboard adds no host credential, Docker socket, SSH agent, keychain, or extra host-path mounts.',
-          'Forgeboard adds no host credential, Docker socket, SSH agent, or keychain mounts. Selected context uses one private read-only snapshot mount at /forgeboard-context; the approved worktree bind policy is unchanged.',
+          'Artemis adds no host credential, Docker socket, SSH agent, keychain, or extra host-path mounts.',
+          'Artemis adds no host credential, Docker socket, SSH agent, or keychain mounts. Selected context uses one private read-only snapshot mount at /forgeboard-context; the approved worktree bind policy is unchanged.',
         ),
       },
       warnings: [
         ...new Set([
           ...plan.disclosure.warnings.map((warning) =>
             warning.replace(
-              'Forgeboard adds no host credential, Docker socket, SSH agent, keychain, or extra host-path mounts.',
-              'Forgeboard adds no host credential, Docker socket, SSH agent, or keychain mounts. Selected context uses one private read-only snapshot mount at /forgeboard-context; the approved worktree bind policy is unchanged.',
+              'Artemis adds no host credential, Docker socket, SSH agent, keychain, or extra host-path mounts.',
+              'Artemis adds no host credential, Docker socket, SSH agent, or keychain mounts. Selected context uses one private read-only snapshot mount at /forgeboard-context; the approved worktree bind policy is unchanged.',
             ),
           ),
           IMMUTABLE_CONTEXT_DISCLOSURE,

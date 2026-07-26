@@ -217,7 +217,7 @@ describe('adapter manifests', () => {
         },
         capabilities: { ...manifest.capabilities, permissionModes: ['plan-read-only'] },
       }),
-    ).toThrow(/reserved for Forgeboard's Settings-owned custom adapter/u);
+    ).toThrow(/reserved for Artemis's Settings-owned custom adapter/u);
   });
 });
 

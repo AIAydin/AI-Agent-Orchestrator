@@ -299,7 +299,7 @@ export function WorkspaceCanvas({
           }
           const payload = readWorkspaceContextDrag(event.dataTransfer);
           if (payload === null) {
-            onContextDropError('That drop did not include a valid Forgeboard project file.');
+            onContextDropError('That drop did not include a valid Artemis project file.');
             return;
           }
           const target = contextDropTarget(event.target, nodes);

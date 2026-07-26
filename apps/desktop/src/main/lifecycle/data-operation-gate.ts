@@ -40,7 +40,7 @@ export class DataOperationGate {
     options: BeginDataMutationOptions = {},
   ): Promise<void> {
     if (this.#shuttingDown && !options.allowDuringShutdown) {
-      throw new Error('Forgeboard is closing, so this cannot start right now.');
+      throw new Error('Artemis is closing, so this cannot start right now.');
     }
     if (this.#mutationKind !== null) {
       throw new Error(
@@ -68,7 +68,7 @@ export class DataOperationGate {
 
   #assertOrdinaryAdmission(): void {
     if (this.#shuttingDown) {
-      throw new Error('Forgeboard is closing, so this cannot start right now.');
+      throw new Error('Artemis is closing, so this cannot start right now.');
     }
     if (this.#mutationKind !== null) {
       throw new Error(

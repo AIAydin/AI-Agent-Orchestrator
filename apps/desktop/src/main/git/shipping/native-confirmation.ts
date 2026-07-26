@@ -39,7 +39,7 @@ export function shippingConfirmation(plan: PendingGitShippingPlan): MessageBoxOp
       `Human quality approval: ${qualityApproval === undefined ? 'not recorded yet' : `${displayLiteral(qualityApproval.actorLabel)} at ${qualityApproval.approvedAt}`}`,
       `Check-results fingerprint (SHA-256): ${plan.readiness.evidenceFingerprint}`,
       '',
-      'Forgeboard will refuse to deliver if the check results, the agent branch, the primary branch, its latest commit, or any files changed after your review.',
+      'Artemis will refuse to deliver if the check results, the agent branch, the primary branch, its latest commit, or any files changed after your review.',
       deliveryIdentityEffect(plan),
       'Nothing is forced, reset, deleted, or pushed, and conflicts are never resolved automatically.',
     ].join('\n'),
@@ -84,7 +84,7 @@ function deliveryIdentityEffect(plan: PendingGitShippingPlan): string {
 }
 
 function identitySource(source: PendingGitShippingPlan['identity']['nameSource']): string {
-  if (source === 'settings') return 'Forgeboard settings';
+  if (source === 'settings') return 'Artemis settings';
   if (source === 'git-config') return "the primary checkout's Git settings";
   return 'an unknown source';
 }

@@ -564,7 +564,7 @@ export class TerminalService {
         errorKind: error instanceof Error ? error.name.slice(0, 128) : 'unknown-error',
       });
       throw new Error(
-        'The terminal was resized, but Forgeboard could not save its size. Refresh before resizing again.',
+        'The terminal was resized, but Artemis could not save its size. Refresh before resizing again.',
         { cause: error },
       );
     }
@@ -1233,7 +1233,7 @@ export class TerminalService {
     const active = this.#active.get(sessionId);
     if (active === undefined) throw new Error('The terminal session is no longer active.');
     if (active.ownerId !== ownerId) {
-      throw new Error('The terminal session belongs to another Forgeboard window.');
+      throw new Error('The terminal session belongs to another Artemis window.');
     }
     return active;
   }
@@ -1242,7 +1242,7 @@ export class TerminalService {
     assertOwnerId(ownerId);
     const exact = this.#exactSessions.get(sessionId);
     if (exact !== undefined && exact.ownerId !== ownerId) {
-      throw new Error('The terminal session belongs to another Forgeboard window.');
+      throw new Error('The terminal session belongs to another Artemis window.');
     }
   }
 
@@ -1259,7 +1259,7 @@ export class TerminalService {
     if (pending.input.workspace?.kind !== 'managed-agent-worktree') return pending;
     const manager = this.#workspaceManager;
     if (manager === undefined) {
-      throw new Error('Managed Agent worktrees are unavailable in this Forgeboard build.');
+      throw new Error('Managed Agent worktrees are unavailable in this Artemis build.');
     }
     const project = this.#project(pending.plan.projectId);
     const workspace = await manager.provision({
@@ -1315,7 +1315,7 @@ export class TerminalService {
       } catch (cleanupError) {
         throw new AggregateError(
           [error, cleanupError],
-          'Forgeboard could not prepare or release the Agent worktree.',
+          'Artemis could not prepare or release the Agent worktree.',
         );
       }
       throw error;
@@ -1410,7 +1410,7 @@ export class TerminalService {
   #assertProjectCurrent(resolved: ResolvedTerminalLaunch): void {
     const current = this.#project(resolved.projectId);
     if (current.path !== resolved.projectPath || current.name !== resolved.projectName) {
-      throw new Error('The selected terminal project changed while Forgeboard inspected it.');
+      throw new Error('The selected terminal project changed while Artemis inspected it.');
     }
   }
 
@@ -1465,7 +1465,7 @@ export class TerminalService {
       const candidate = this.#createId();
       if (!map.has(candidate)) return candidate;
     }
-    throw new Error('Forgeboard could not create a terminal ID. Try again.');
+    throw new Error('Artemis could not create a terminal ID. Try again.');
   }
 
   #uniqueSessionId(): string {
@@ -1475,7 +1475,7 @@ export class TerminalService {
         return candidate;
       }
     }
-    throw new Error('Forgeboard could not create a terminal session. Try again.');
+    throw new Error('Artemis could not create a terminal session. Try again.');
   }
 
   #auditTarget(active: ActiveTerminal): Record<string, unknown> {
@@ -1541,11 +1541,11 @@ export class TerminalService {
   async #assertAvailable(): Promise<void> {
     this.#assertNotDisposed();
     if (this.#paused)
-      throw new Error('The terminal service is paused while Forgeboard changes local data.');
+      throw new Error('The terminal service is paused while Artemis changes local data.');
     await this.#ready;
     this.#assertNotDisposed();
     if (this.#paused)
-      throw new Error('The terminal service is paused while Forgeboard changes local data.');
+      throw new Error('The terminal service is paused while Artemis changes local data.');
   }
 
   /**

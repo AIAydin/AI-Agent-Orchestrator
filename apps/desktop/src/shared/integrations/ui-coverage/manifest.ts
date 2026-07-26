@@ -189,7 +189,7 @@ export const INTEGRATION_UI_MANIFEST = {
       testTitle: 'exposes and invokes cancellation only while an explicit update check is active',
     },
     limitation:
-      'Results are request-bound external evidence; Forgeboard never auto-downloads updates.',
+      'Results are request-bound external evidence; Artemis never auto-downloads updates.',
   },
   localBackups: {
     route: 'Settings > Data & privacy',

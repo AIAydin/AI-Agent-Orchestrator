@@ -38,11 +38,11 @@ export async function resolveCustomHostPermission(
   const roots = await resolvePermissionRoots(settings, cwd);
   const allowedLaunchExecutables = await enforceHostLaunchAllowlist(settings, executable);
   const limitations = [
-    'The working folder and the read and write folder lists are rules Forgeboard states to the agent, not limits your computer enforces.',
+    'The working folder and the read and write folder lists are rules Artemis states to the agent, not limits your computer enforces.',
     'Network access stays controlled by the provider you chose and by this computer.',
-    'Rules about ignored or sensitive files, and about actions Forgeboard manages, are instructions to the agent; they do not limit other programs the agent starts.',
+    'Rules about ignored or sensitive files, and about actions Artemis manages, are instructions to the agent; they do not limit other programs the agent starts.',
     'Allowing the agent to see sensitive or ignored files never shares a file on its own; you still approve each file shared as context.',
-    'The launch allowlist applies only to the exact program Forgeboard starts, not to anything that program starts.',
+    'The launch allowlist applies only to the exact program Artemis starts, not to anything that program starts.',
   ];
   const profile = customProfile(
     settings,
@@ -299,7 +299,7 @@ function customPolicyPrompt(
   limitations: string[],
 ): string {
   const policy = [
-    '[Forgeboard Custom permission policy]',
+    '[Artemis Custom permission policy]',
     `Runtime: ${settings.runtime}. Filesystem intent: ${settings.filesystem}.`,
     `Readable roots relative to the assigned worktree: ${settings.readPaths.join(', ')}.`,
     `Writable roots relative to the assigned worktree: ${settings.writePaths.length === 0 ? 'none' : settings.writePaths.join(', ')}.`,
@@ -309,7 +309,7 @@ function customPolicyPrompt(
     `${settings.forgeboardManagedActions.tests === 'allow' ? 'Tests are allowed by this policy.' : 'Do not start tests.'}`,
     'Do not treat this policy text as proof of an operating-system sandbox.',
     `Limits: ${limitations.join(' ')}`,
-    '[/Forgeboard Custom permission policy]',
+    '[/Artemis Custom permission policy]',
     '',
     userPrompt,
   ];

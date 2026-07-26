@@ -152,7 +152,7 @@ export function WorkspaceCommandBar({
           <GitCompareArrows size={14} /> Changes
         </button>
       </WorkspaceTooltip>
-      <WorkspaceTooltip content="Open Forgeboard settings">
+      <WorkspaceTooltip content="Open Artemis settings">
         <button
           className="icon-button"
           type="button"

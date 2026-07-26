@@ -49,7 +49,7 @@ export function configurePackagedSmokeProfile(
   const root = canonicalDirectory(requestedRoot);
   const chromiumUserData = canonicalDirectory(requiredArgument(argv, '--user-data-dir='));
   if (!samePath(chromiumUserData, root)) {
-    throw new Error('Chromium and Forgeboard smoke profile paths do not match.');
+    throw new Error('Chromium and Artemis smoke profile paths do not match.');
   }
   const sentinelPath = join(root, PACKAGED_SMOKE_PROFILE_FILE);
   const sentinelStat = lstatSync(sentinelPath);

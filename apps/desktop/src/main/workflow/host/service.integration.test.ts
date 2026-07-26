@@ -170,7 +170,7 @@ describe('durable workflow host', () => {
             data: 'must not be delivered',
           },
           () => {
-            throw new Error('The originating Forgeboard window ownership token is stale.');
+            throw new Error('The originating Artemis window ownership token is stale.');
           },
         ),
       ).rejects.toThrow(/ownership token is stale/u);

@@ -20,7 +20,7 @@ export function GitWorktreeCleanupPanel({
         </strong>
         <small>
           {recovery
-            ? 'Forgeboard checks whether the interrupted cleanup already finished, then marks it done or prepares a fresh plan. No force option.'
+            ? 'Artemis checks whether the interrupted cleanup already finished, then marks it done or prepares a fresh plan. No force option.'
             : "Removes only this agent's workspace, and only once it has no unsaved changes and its branch is merged into the recorded base. The branch is deleted too — no force option."}
         </small>
       </span>

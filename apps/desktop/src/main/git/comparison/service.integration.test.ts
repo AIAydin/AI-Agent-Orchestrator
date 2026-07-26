@@ -111,7 +111,7 @@ async function createFixture(): Promise<Fixture> {
   await mkdir(repository);
   await mkdir(managedRoot);
   await git(repository, ['init', '-b', 'main']);
-  await git(repository, ['config', 'user.name', 'Forgeboard Comparison Test']);
+  await git(repository, ['config', 'user.name', 'Artemis Comparison Test']);
   await git(repository, ['config', 'user.email', 'comparison@example.invalid']);
   await writeFile(path.join(repository, 'README.md'), '# comparison\n');
   await git(repository, ['add', '--', 'README.md']);

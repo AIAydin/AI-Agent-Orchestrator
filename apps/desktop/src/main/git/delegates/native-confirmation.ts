@@ -67,7 +67,7 @@ export function delegateConfirmation(plan: GitDelegatePlan): MessageBoxOptions {
         : []),
       '',
       'Filter commands are tools configured by the repository. They can read or change local files and may use the network with your computer permissions.',
-      'Forgeboard re-reads the filter setup and affected files before running them; any change cancels this approval.',
+      'Artemis re-reads the filter setup and affected files before running them; any change cancels this approval.',
     ].join('\n'),
     buttons: ['Cancel', 'Run filter commands'],
     defaultId: 0,

@@ -260,7 +260,7 @@ export class CollaborationInviteSessionAuthority {
     const inviteId = CollaborationInviteIdSchema.parse(rawInviteId);
     const invite = this.#createdInvites.get(inviteId);
     if (invite === undefined) {
-      throw new Error('This invite was not created by the current Forgeboard room session.');
+      throw new Error('This invite was not created by the current Artemis room session.');
     }
     return collaborationInviteLinkWithConnection(invite.url, {
       serverUrl: binding.serverUrl,

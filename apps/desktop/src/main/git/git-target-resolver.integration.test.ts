@@ -67,7 +67,7 @@ async function createRepository(root: string, name: string): Promise<string> {
   const repository = path.join(root, name);
   await mkdir(repository);
   await runGit(repository, ['init', '-b', 'main']);
-  await runGit(repository, ['config', 'user.name', 'Forgeboard Resolver Test']);
+  await runGit(repository, ['config', 'user.name', 'Artemis Resolver Test']);
   await runGit(repository, ['config', 'user.email', 'resolver@example.invalid']);
   await writeFile(path.join(repository, 'README.md'), `# ${name}\n`, 'utf8');
   await runGit(repository, ['add', '--', 'README.md']);

@@ -41,11 +41,11 @@ export async function readInitializationMarker(
   const handle = await open(markerPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
     if ((await handle.readFile('utf8')) !== MARKER_CONTENT) {
-      throw new Error('The Forgeboard initialization marker is invalid.');
+      throw new Error('The Artemis initialization marker is invalid.');
     }
     const after = await handle.stat();
     if (!sameIdentity(stats, after)) {
-      throw new Error('The Forgeboard initialization marker changed while being read.');
+      throw new Error('The Artemis initialization marker changed while being read.');
     }
   } finally {
     await handle.close();
@@ -96,7 +96,7 @@ async function writePosixMarker(canonicalUserData: string, markerPath: string): 
       temporaryStats.isSymbolicLink() ||
       (temporaryStats.mode & 0o077) !== 0
     ) {
-      throw new Error('Forgeboard could not create a private initialization marker.');
+      throw new Error('Artemis could not create a private initialization marker.');
     }
     try {
       await link(temporaryPath, markerPath);
@@ -155,7 +155,7 @@ async function assertPrivateStableMarker(
   options: InitializationMarkerOptions,
 ): Promise<void> {
   if (!before.isFile() || before.isSymbolicLink() || (await realpath(markerPath)) !== markerPath) {
-    throw new Error('The Forgeboard initialization marker is not an ordinary private file.');
+    throw new Error('The Artemis initialization marker is not an ordinary private file.');
   }
   if ((options.platform ?? process.platform) === 'win32') {
     if (options.windowsPrivacy === undefined) {
@@ -165,15 +165,15 @@ async function assertPrivateStableMarker(
   } else {
     const userId = (options.getUserId ?? (() => process.getuid?.()))();
     if (userId !== undefined && before.uid !== userId) {
-      throw new Error('The Forgeboard initialization marker has an unexpected owner.');
+      throw new Error('The Artemis initialization marker has an unexpected owner.');
     }
     if ((before.mode & 0o077) !== 0) {
-      throw new Error('The Forgeboard initialization marker is not private.');
+      throw new Error('The Artemis initialization marker is not private.');
     }
   }
   const after = await lstat(markerPath);
   if (!after.isFile() || after.isSymbolicLink() || !sameIdentity(before, after)) {
-    throw new Error('The Forgeboard initialization marker changed during validation.');
+    throw new Error('The Artemis initialization marker changed during validation.');
   }
 }
 

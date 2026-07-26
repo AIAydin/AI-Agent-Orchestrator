@@ -138,7 +138,7 @@ export async function reconcileInterruptedDatabaseRestores(
     return await reconcile(options);
   } catch (cause) {
     throw new Error(
-      'Forgeboard cannot safely reconcile an interrupted database restore. No database was opened or created.',
+      'Artemis cannot safely reconcile an interrupted database restore. No database was opened or created.',
       { cause },
     );
   }

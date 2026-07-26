@@ -1089,7 +1089,7 @@ async function probeHttp(
         agent: false,
         headers: {
           connection: 'close',
-          'user-agent': 'Forgeboard-Preview-Readiness/1',
+          'user-agent': 'Artemis-Preview-Readiness/1',
         },
       },
       (response) => {

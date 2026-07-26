@@ -58,7 +58,7 @@ export function useSettingsFolderReadiness(
               ? ({
                   phase: 'unavailable',
                   message:
-                    'Folder checks are unavailable right now. Reopen Forgeboard before saving this path.',
+                    'Folder checks are unavailable right now. Reopen Artemis before saving this path.',
                 } satisfies FolderReadinessStatus)
               : ({ phase: 'checking' } satisfies FolderReadinessStatus),
         ]),
@@ -86,7 +86,7 @@ export function useSettingsFolderReadiness(
                 [draft.id]: {
                   phase: 'unavailable',
                   message:
-                    'That check was for an older path, so Forgeboard ignored it. Check the current path again.',
+                    'That check was for an older path, so Artemis ignored it. Check the current path again.',
                 },
               }));
               return;
@@ -105,7 +105,7 @@ export function useSettingsFolderReadiness(
                 message:
                   error instanceof Error && error.message.trim() !== ''
                     ? error.message
-                    : 'Forgeboard could not check this folder.',
+                    : 'Artemis could not check this folder.',
               },
             }));
           },

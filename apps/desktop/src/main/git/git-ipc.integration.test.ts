@@ -310,7 +310,7 @@ describe('GitIpcService with a real repository', () => {
       ok: false,
       error: { code: 'OPERATION_FAILED' },
     });
-    expect(JSON.stringify(rejectedFrame)).toMatch(/main Forgeboard frame/iu);
+    expect(JSON.stringify(rejectedFrame)).toMatch(/main Artemis frame/iu);
     await harness.service.dispose();
   });
 
@@ -494,7 +494,7 @@ describe('GitIpcService with a real repository', () => {
     expect(committed?.headAfter).not.toBe(committed?.headBefore);
     expect(committed?.review.dirty).toBe(false);
     expect(await runGit(fixture.repository, ['log', '-1', '--format=%an%x00%ae%x00%s'])).toBe(
-      'Forgeboard UI Author\0ui-author@forgeboard.invalid\0Use reviewed identity',
+      'Artemis UI Author\0ui-author@forgeboard.invalid\0Use reviewed identity',
     );
     expect(harness.showMessageBox).toHaveBeenCalledTimes(2);
     expect(harness.appendAudit).toHaveBeenCalledWith(
@@ -908,7 +908,7 @@ function createHarness(
   };
   const window = { isDestroyed: () => false } as BrowserWindow;
   const settings = {
-    gitIdentityName: 'Forgeboard UI Author',
+    gitIdentityName: 'Artemis UI Author',
     gitIdentityEmail: 'ui-author@forgeboard.invalid',
     externalEditorExecutable: options.externalEditorExecutable ?? '',
   } as AppSettings;

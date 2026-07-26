@@ -938,7 +938,7 @@ export class GitRemoteDeliveryService {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         if (error instanceof Error && /pre-push hook/iu.test(error.message)) throw error;
-        throw new Error("Forgeboard could not check the repository's pre-push hook state.");
+        throw new Error("Artemis could not check the repository's pre-push hook state.");
       }
     }
     const configured = await this.repositories.git.run(
@@ -946,7 +946,7 @@ export class GitRemoteDeliveryService {
       { allowNonZeroExit: true, maxOutputBytes: 16 * 1_024 },
     );
     if (configured.exitCode !== 0 && configured.exitCode !== 1) {
-      throw new Error('Forgeboard could not check where this repository stores hook scripts.');
+      throw new Error('Artemis could not check where this repository stores hook scripts.');
     }
     const nonNeutralPaths = configured.stdout
       .split(/\r?\n/u)
@@ -954,7 +954,7 @@ export class GitRemoteDeliveryService {
       .filter((value) => value !== '' && value !== '/dev/null');
     if (nonNeutralPaths.length > 0) {
       throw new Error(
-        'This repository points hook scripts to a custom folder, which Forgeboard push does not support. Disable that setting first.',
+        'This repository points hook scripts to a custom folder, which Artemis push does not support. Disable that setting first.',
       );
     }
   }
@@ -1364,7 +1364,7 @@ async function assertNoLegacyGrafts(commonDirectory: string): Promise<void> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
     if (error instanceof Error && /legacy graft configuration/u.test(error.message)) throw error;
-    throw new Error("Forgeboard could not confirm the repository's legacy grafts file is removed.");
+    throw new Error("Artemis could not confirm the repository's legacy grafts file is removed.");
   }
 }
 
@@ -1462,7 +1462,7 @@ function assertActionableChanges(
     pathCharacters > GIT_REMOTE_MAX_PATH_CHARACTERS ||
     new Set(commits).size !== commits.length
   ) {
-    throw new Error('This push is too large or invalid for Forgeboard to approve safely.');
+    throw new Error('This push is too large or invalid for Artemis to approve safely.');
   }
 }
 

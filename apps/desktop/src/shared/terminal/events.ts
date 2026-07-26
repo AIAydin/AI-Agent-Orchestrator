@@ -26,7 +26,7 @@ const TerminalSessionEventSchema = z
   })
   .strict();
 
-/** Path-free event sent only to Forgeboard's currently connected application window. */
+/** Path-free event sent only to Artemis's currently connected application window. */
 export const TerminalEventSchema = z
   .discriminatedUnion('kind', [TerminalOutputEventSchema, TerminalSessionEventSchema])
   .superRefine((event, context) => {

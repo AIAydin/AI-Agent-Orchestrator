@@ -622,7 +622,7 @@ export function useGitPrNodeController({
       (cause: unknown) => {
         const message = errorMessage(
           cause,
-          "The action was closed here, but Forgeboard couldn't release its saved approval. Nothing was sent.",
+          "The action was closed here, but Artemis couldn't release its saved approval. Nothing was sent.",
         );
         setNotice(null);
         setActionError(message);
@@ -689,7 +689,7 @@ export function useGitPrNodeController({
         }
         onPullRequestCreatedRef.current(result.url);
         setNotice(
-          `Pull request created after Forgeboard rechecked the reviewed commit ${result.sourceOid}. The remote branch can still change afterwards.`,
+          `Pull request created after Artemis rechecked the reviewed commit ${result.sourceOid}. The remote branch can still change afterwards.`,
         );
       },
       isCurrent,

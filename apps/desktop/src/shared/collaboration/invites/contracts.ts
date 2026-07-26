@@ -93,7 +93,7 @@ export interface CollaborationInviteConnection {
   readonly managementBaseUrl: string;
 }
 
-/** Reads the credential-free connection bundle added by Forgeboard when an invite is copied. */
+/** Reads the credential-free connection bundle added by Artemis when an invite is copied. */
 export function collaborationInviteConnectionFromLink(
   rawLink: string,
 ): CollaborationInviteConnection | null {

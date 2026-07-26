@@ -37,7 +37,7 @@ export function GitShippingPanel({
         ? 'No committed changes to deliver yet.'
         : !deliveryReady
           ? 'Run every required check and approve the quality of the current changes first.'
-          : "Forgeboard will double-check the agent's work and the primary branch before delivering.";
+          : "Artemis will double-check the agent's work and the primary branch before delivering.";
 
   return (
     <section className="git-shipping-panel" aria-labelledby="git-shipping-title">

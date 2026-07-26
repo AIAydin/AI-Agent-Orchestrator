@@ -241,7 +241,7 @@ export class GitRemoteDeliveryIpcService {
         parent.isDestroyed() ||
         this.resolveWindow(event) !== parent
       ) {
-        throw new Error('The originating Forgeboard window changed during remote approval.');
+        throw new Error('The originating Artemis window changed during remote approval.');
       }
     };
     return createNativeOutboundConfirmation({
@@ -321,7 +321,7 @@ export class GitRemoteDeliveryIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid remote-delivery request.'
+            ? 'Artemis rejected an invalid remote-delivery request.'
             : rendererSafeErrorMessage(error),
         },
       };
@@ -335,7 +335,7 @@ export class GitRemoteDeliveryIpcService {
     this.#assertLiveMainFrame(event);
     const parent = this.resolveWindow(event);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required for remote delivery.');
+      throw new Error('A live Artemis window is required for remote delivery.');
     }
     return parent;
   }

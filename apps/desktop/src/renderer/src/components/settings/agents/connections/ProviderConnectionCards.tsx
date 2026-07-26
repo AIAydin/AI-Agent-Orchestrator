@@ -88,7 +88,7 @@ export function ProviderConnectionCards({
                   : (status?.reason ?? `Connect to use your ${provider.name} account.`)}
             </p>
             <small className="provider-privacy-note">
-              {provider.name} owns sign-in. Forgeboard never sees or stores OAuth tokens.
+              {provider.name} owns sign-in. Artemis never sees or stores OAuth tokens.
             </small>
             {view?.error && (
               <p className="provider-connection-error" role="alert">

@@ -343,7 +343,7 @@ export const AgentCapabilitiesSchema = z
     terminate: z.boolean(),
     /**
      * True only when the adapter runtime can suspend and continue the same local process on every
-     * supported Forgeboard platform. API version 1 intentionally has no such runtime primitive.
+     * supported Artemis platform. API version 1 intentionally has no such runtime primitive.
      */
     pause: z.literal(false).default(false),
     resume: z.boolean(),
@@ -525,7 +525,7 @@ export const AgentAdapterManifestSchema = z
         code: z.ZodIssueCode.custom,
         path: ['invocation', 'permissionArgumentPolicy'],
         message:
-          "Disclosure-only permission arguments are reserved for Forgeboard's Settings-owned custom adapter.",
+          "Disclosure-only permission arguments are reserved for Artemis's Settings-owned custom adapter.",
       });
     }
     for (const mode of manifest.capabilities.permissionModes) {

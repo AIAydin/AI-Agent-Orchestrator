@@ -13,7 +13,7 @@ import { workingTreeDiffStats } from './git-review-model.js';
 
 function identitySource(source: GitReviewView['identity']['nameSource']): string {
   if (source === 'git-config') return 'Git config';
-  if (source === 'settings') return 'Forgeboard settings';
+  if (source === 'settings') return 'Artemis settings';
   return 'not set up';
 }
 

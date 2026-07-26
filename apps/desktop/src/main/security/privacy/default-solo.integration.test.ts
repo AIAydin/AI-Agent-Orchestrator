@@ -352,7 +352,7 @@ function contextRecorderPermission(cwd: string): PermissionProfile {
     network: 'provider-controlled',
     approvalPolicy: 'The exact context manifest and child process require approval before launch.',
     disclosure:
-      'Forgeboard controls the selected context; a third-party provider process would control its own network behavior.',
+      'Artemis controls the selected context; a third-party provider process would control its own network behavior.',
   };
 }
 
@@ -480,7 +480,7 @@ async function createRepositoryFixture(): Promise<RepositoryFixture> {
   );
   await writeFile(path.join(state, 'context-recorder.cjs'), recorderSource());
   await runGit(repository, ['init', '-b', 'main']);
-  await runGit(repository, ['config', 'user.name', 'Forgeboard Privacy Test']);
+  await runGit(repository, ['config', 'user.name', 'Artemis Privacy Test']);
   await runGit(repository, ['config', 'user.email', 'privacy@example.invalid']);
   await runGit(repository, ['add', '--', 'src/allowed.txt', '.gitignore', '.forgeboardignore']);
   await runGit(repository, ['commit', '-m', 'Initial privacy fixture']);
@@ -608,7 +608,7 @@ function blockCallable(
     ...descriptor,
     value: function blockedForgeboardNetworkCall(): never {
       attempts.push(label);
-      throw new Error(`Unexpected Forgeboard-owned network attempt through ${label}.`);
+      throw new Error(`Unexpected Artemis-owned network attempt through ${label}.`);
     },
   });
   restore.push(() => Object.defineProperty(target, property, descriptor));

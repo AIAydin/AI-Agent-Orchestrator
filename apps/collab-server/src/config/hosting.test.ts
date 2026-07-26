@@ -9,7 +9,7 @@ const PRODUCTION_SECRETS = {
 } as const;
 
 describe('collaboration hosting configuration', () => {
-  it('uses the hosting platform PORT while preserving an explicit Forgeboard override', () => {
+  it('uses the hosting platform PORT while preserving an explicit Artemis override', () => {
     expect(loadCollaborationConfig({ ...PRODUCTION_SECRETS, PORT: '10000' }).port).toBe(10_000);
     expect(
       loadCollaborationConfig({

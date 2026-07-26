@@ -82,7 +82,7 @@ export function App() {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Forgeboard couldn't start. Try closing and reopening the app.",
+          : "Artemis couldn't start. Try closing and reopening the app.",
       );
     }
   }, [loadBootstrap]);
@@ -135,9 +135,6 @@ export function App() {
           settings={bootstrap.settings}
           agents={bootstrap.agents}
           projects={bootstrap.recent}
-          checkAgentReadiness={async (input) =>
-            unwrap(await window.forgeboard.agents.checkReadiness(input))
-          }
           checkCommandReadiness={async (input) =>
             unwrap(await window.forgeboard.commands.checkReadiness(input))
           }

@@ -644,7 +644,7 @@ function reviewerAgentPrompt(
       reviewedOutputDigest: output.contentDigest,
       reviewedArtifactLabel: `Reviewed output for ${edge.sourceNodeId}`,
       reviewedArtifactFormat:
-        'Forgeboard JSON snapshot; each file entry contains its relative path, status, and exact UTF-8 content',
+        'Artemis JSON snapshot; each file entry contains its relative path, status, and exact UTF-8 content',
       structuredFindingsRequired: edge.config.structuredFindings,
       checks,
     };
@@ -668,12 +668,12 @@ function reviewerAgentPrompt(
   return [
     authoredPrompt,
     '',
-    'Forgeboard reviewer protocol (authoritative):',
+    'Artemis reviewer protocol (authoritative):',
     'Assess the exact reviewed outputs and check evidence below. Blocking problems require changes-requested and actionable findings.',
     JSON.stringify(assessments, null, 2),
     'Your final response must be one dedicated structured message payload matching this exact record shape and bound values:',
     JSON.stringify(finalRecord, null, 2),
-    'Do not wrap the record in Markdown, a string, prose, or a provider-specific envelope. Forgeboard ignores prose and accepts only the dedicated final structured payload.',
+    'Do not wrap the record in Markdown, a string, prose, or a provider-specific envelope. Artemis ignores prose and accepts only the dedicated final structured payload.',
   ].join('\n');
 }
 

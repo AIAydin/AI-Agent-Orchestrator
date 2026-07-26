@@ -6,7 +6,7 @@
   "desktopName": "forgeboard.desktop",
   "homepage": "https://github.com/AIAydin/AI-Agent-Orchestrator",
   "author": {
-    "name": "Forgeboard contributors",
+    "name": "Artemis contributors",
     "email": "AIAydin@users.noreply.github.com"
   },
   "license": "MIT",
@@ -68,7 +68,7 @@
   },
   "build": {
     "appId": "dev.forgeboard.desktop",
-    "productName": "Forgeboard",
+    "productName": "Artemis",
     "directories": {
       "output": "release"
     },

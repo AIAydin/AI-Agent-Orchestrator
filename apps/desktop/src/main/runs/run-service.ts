@@ -304,7 +304,7 @@ export class RunService {
             );
     try {
       if (owner.isDestroyed() || this.#owners.get(ownerId) !== owner) {
-        throw new Error('The originating Forgeboard window closed while preparing the agent run.');
+        throw new Error('The originating Artemis window closed while preparing the agent run.');
       }
       assertCurrent?.();
       assertPreparedContextDisclosure(contextResolution, prepared.disclosure);
@@ -471,7 +471,7 @@ export class RunService {
     const approval = this.#approvals.get(runId);
     if (approval === undefined) throw new Error('The prepared run no longer exists.');
     if (approval.ownerId !== ownerId || approval.owner !== owner) {
-      throw new Error('The prepared run belongs to another Forgeboard window.');
+      throw new Error('The prepared run belongs to another Artemis window.');
     }
     const parent = this.#requireLiveParent(event);
     if (this.dialog === undefined) {
@@ -543,7 +543,7 @@ export class RunService {
   public pause(owner: WebContents, runId: string): boolean {
     this.#assertAvailable();
     if (this.#runtime.pause === undefined) {
-      throw new Error('This Forgeboard runtime does not support Agent process pause.');
+      throw new Error('This Artemis runtime does not support Agent process pause.');
     }
     return this.#runtime.pause(this.#ownerId(owner), runId);
   }
@@ -551,7 +551,7 @@ export class RunService {
   public continue(owner: WebContents, runId: string): boolean {
     this.#assertAvailable();
     if (this.#runtime.continue === undefined) {
-      throw new Error('This Forgeboard runtime does not support Agent process continue.');
+      throw new Error('This Artemis runtime does not support Agent process continue.');
     }
     return this.#runtime.continue(this.#ownerId(owner), runId);
   }
@@ -639,7 +639,7 @@ export class RunService {
   }
 
   #ownerId(owner: WebContents): string {
-    if (owner.isDestroyed()) throw new Error('The originating Forgeboard window is closed.');
+    if (owner.isDestroyed()) throw new Error('The originating Artemis window is closed.');
     const existing = this.#ownerIds.get(owner);
     if (existing !== undefined) return existing;
     const ownerId = `web-contents:${String(owner.id)}:${randomUUID()}`;
@@ -658,9 +658,9 @@ export class RunService {
 
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The agent service is shutting down.');
-    if (this.#shutdownPaused) throw new Error('Agent runs are paused while Forgeboard shuts down.');
+    if (this.#shutdownPaused) throw new Error('Agent runs are paused while Artemis shuts down.');
     if (this.#privacyResetting) {
-      throw new Error('Agent runs are paused while Forgeboard resets local data.');
+      throw new Error('Agent runs are paused while Artemis resets local data.');
     }
   }
 
@@ -671,7 +671,7 @@ export class RunService {
     this.#assertLiveMainFrame(event);
     const parent = BrowserWindow.fromWebContents(event.sender);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error(`${operation} requires a live Forgeboard window.`);
+      throw new Error(`${operation} requires a live Artemis window.`);
     }
     return parent;
   }
@@ -680,7 +680,7 @@ export class RunService {
     this.#assertAvailable();
     this.#assertLiveMainFrame(event);
     if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
-      throw new Error('The originating Forgeboard window changed or closed.');
+      throw new Error('The originating Artemis window changed or closed.');
     }
   }
 
@@ -688,7 +688,7 @@ export class RunService {
     this.#assertCurrentWindow(event, parent);
     this.authorizeMutation(event.sender);
     if (this.#owners.get(ownerId) !== event.sender) {
-      throw new Error('The originating Forgeboard window changed or closed.');
+      throw new Error('The originating Artemis window changed or closed.');
     }
   }
 
@@ -749,9 +749,9 @@ export class RunService {
   }
 
   #assertLiveMainFrame(event: IpcMainInvokeEvent): void {
-    if (event.sender.isDestroyed()) throw new Error('The originating Forgeboard window is closed.');
+    if (event.sender.isDestroyed()) throw new Error('The originating Artemis window is closed.');
     if (event.senderFrame !== event.sender.mainFrame) {
-      throw new Error('Agent run controls are allowed only from the main Forgeboard frame.');
+      throw new Error('Agent run controls are allowed only from the main Artemis frame.');
     }
   }
 
@@ -832,7 +832,7 @@ export class RunService {
           error: {
             code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
             message: validation
-              ? 'Forgeboard rejected an invalid run request.'
+              ? 'Artemis rejected an invalid run request.'
               : error instanceof Error
                 ? error.message
                 : 'The agent operation failed.',
@@ -917,7 +917,7 @@ function dockerPreparationConfirmation(approval: DockerPreparationApproval): Mes
   return {
     type: 'warning',
     title: 'Check Docker before this run',
-    message: `Forgeboard needs to check Docker and the ${approval.image} image before this run. Allow this?`,
+    message: `Artemis needs to check Docker and the ${approval.image} image before this run. Allow this?`,
     detail: [
       `Docker program: ${literal(approval.executable)}`,
       `Program checksum (SHA-256): ${approval.executableIdentity.digest}`,

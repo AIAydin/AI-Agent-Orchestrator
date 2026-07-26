@@ -153,7 +153,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
 function project(overrides: Partial<Project> = {}): Project {
   return {
     id: PROJECT_ID,
-    name: 'Forgeboard',
+    name: 'Artemis',
     path: '/tmp/forgeboard-project',
     openedAt: NOW,
     missing: false,

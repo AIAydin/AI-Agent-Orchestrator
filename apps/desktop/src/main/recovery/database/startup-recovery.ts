@@ -116,11 +116,11 @@ function recoveryChoice(previousAttemptFailed: boolean): MessageBoxOptions {
   return {
     type: 'error',
     title: 'Local data needs recovery',
-    message: 'Forgeboard could not safely open your local database.',
+    message: 'Artemis could not safely open your local database.',
     detail: previousAttemptFailed
-      ? 'The previous recovery attempt did not complete safely. Forgeboard did not install a backup or create an empty replacement. Quit Forgeboard, or choose another verified backup. Canceling the backup picker will quit Forgeboard.'
-      : 'Forgeboard did not install a backup or create an empty replacement. Quit Forgeboard, or choose a verified Forgeboard backup to restore before startup continues. Canceling the backup picker will quit Forgeboard.',
-    buttons: ['Quit Forgeboard', 'Choose verified backup'],
+      ? 'The previous recovery attempt did not complete safely. Artemis did not install a backup or create an empty replacement. Quit Artemis, or choose another verified backup. Canceling the backup picker will quit Artemis.'
+      : 'Artemis did not install a backup or create an empty replacement. Quit Artemis, or choose a verified Artemis backup to restore before startup continues. Canceling the backup picker will quit Artemis.',
+    buttons: ['Quit Artemis', 'Choose verified backup'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
@@ -132,26 +132,26 @@ function nonRecoverableOpenFailure(
 ): MessageBoxOptions {
   if (failure.kind === 'newer-schema') {
     return quitOnlyMessage({
-      title: 'A newer Forgeboard version is required',
-      message: 'This local database was created by a newer version of Forgeboard.',
+      title: 'A newer Artemis version is required',
+      message: 'This local database was created by a newer version of Artemis.',
       detail:
-        'Forgeboard did not install a backup or create an empty replacement. Install a compatible newer release, then try again.',
+        'Artemis did not install a backup or create an empty replacement. Install a compatible newer release, then try again.',
     });
   }
   return quitOnlyMessage({
     title: 'Local data is unavailable',
-    message: 'Forgeboard could not safely access your local database.',
+    message: 'Artemis could not safely access your local database.',
     detail:
-      'Forgeboard did not install a backup or create an empty replacement. Check storage availability and permissions, then try again.',
+      'Artemis did not install a backup or create an empty replacement. Check storage availability and permissions, then try again.',
   });
 }
 
 function recoveryAuditFailure(): MessageBoxOptions {
   return quitOnlyMessage({
     title: 'Recovery record could not be saved',
-    message: 'Forgeboard restored the database but could not record verified recovery evidence.',
+    message: 'Artemis restored the database but could not record verified recovery evidence.',
     detail:
-      'Forgeboard will quit without offering another restore. Your restored database was not replaced.',
+      'Artemis will quit without offering another restore. Your restored database was not replaced.',
   });
 }
 
@@ -163,7 +163,7 @@ function quitOnlyMessage(input: {
   return {
     type: 'error',
     ...input,
-    buttons: ['Quit Forgeboard'],
+    buttons: ['Quit Artemis'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
@@ -174,10 +174,10 @@ function recoveryLimitReached(): MessageBoxOptions {
   return {
     type: 'error',
     title: 'Recovery could not complete',
-    message: 'Forgeboard could not safely restore local data.',
+    message: 'Artemis could not safely restore local data.',
     detail:
-      'No local data was replaced with an empty database. Forgeboard will quit so you can check the backup and try again.',
-    buttons: ['Quit Forgeboard'],
+      'No local data was replaced with an empty database. Artemis will quit so you can check the backup and try again.',
+    buttons: ['Quit Artemis'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,

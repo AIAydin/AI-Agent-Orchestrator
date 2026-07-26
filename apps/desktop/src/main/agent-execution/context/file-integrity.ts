@@ -77,7 +77,7 @@ export async function stableFileDigest(filePath: string): Promise<string> {
     before.size !== after.size ||
     before.mtimeMs !== after.mtimeMs
   ) {
-    throw new Error('Selected context changed while Forgeboard verified it. Review what will run.');
+    throw new Error('Selected context changed while Artemis verified it. Review what will run.');
   }
   return digest;
 }

@@ -13,7 +13,7 @@ const AgentRunReferenceSchema = z
  * Resolves an exact-check target from verified, required agent output edges.
  *
  * A Test node without such an edge intentionally targets the primary checkout. Once a required
- * branch/diff edge is present, Forgeboard fails closed unless its current verified publication
+ * branch/diff edge is present, Artemis fails closed unless its current verified publication
  * identifies one unambiguous managed agent run.
  */
 export function workflowCheckTarget(context: WorkflowExecutorContext): ExactCheckTarget {

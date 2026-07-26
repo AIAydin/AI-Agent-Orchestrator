@@ -116,7 +116,7 @@ export class AgentReadinessIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid readiness request.'
+            ? 'Artemis rejected an invalid readiness request.'
             : error instanceof Error
               ? error.message
               : 'The agent readiness check failed.',
@@ -135,7 +135,7 @@ export class AgentReadinessIpcService {
       this.#assertAvailable();
       this.#assertLiveMainFrame(event);
       if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
-        throw new Error('The originating Forgeboard window changed or closed.');
+        throw new Error('The originating Artemis window changed or closed.');
       }
     };
     const decision = await this.dialog.showMessageBox(parent, confirmationOptions(plan));
@@ -204,17 +204,17 @@ export class AgentReadinessIpcService {
     this.#assertLiveMainFrame(event);
     const parent = BrowserWindow.fromWebContents(event.sender);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required to check agent readiness.');
+      throw new Error('A live Artemis window is required to check agent readiness.');
     }
     return parent;
   }
 
   #assertLiveMainFrame(event: IpcMainInvokeEvent): void {
     if (event.sender.isDestroyed()) {
-      throw new Error('The originating Forgeboard window is closed.');
+      throw new Error('The originating Artemis window is closed.');
     }
     if (event.senderFrame !== event.sender.mainFrame) {
-      throw new Error('Agent readiness checks are allowed only from the main Forgeboard frame.');
+      throw new Error('Agent readiness checks are allowed only from the main Artemis frame.');
     }
   }
 
@@ -225,7 +225,7 @@ export class AgentReadinessIpcService {
   #assertAvailable(): void {
     this.#assertNotDisposed();
     if (this.#paused) {
-      throw new Error('Agent readiness checks are paused while Forgeboard shuts down.');
+      throw new Error('Agent readiness checks are paused while Artemis shuts down.');
     }
   }
 

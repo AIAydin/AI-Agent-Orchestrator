@@ -257,7 +257,7 @@ function requireFileInvocationAuthority(
 function invalidFileInvocation(): FileDomainError {
   return new FileDomainError(
     'INVALID_REQUEST',
-    'Forgeboard rejected a file request outside the active window.',
+    'Artemis rejected a file request outside the active window.',
   );
 }
 
@@ -267,10 +267,7 @@ function fileIpcFailure(cause: unknown): FileIpcResult<never> {
       ? cause
       : cause instanceof z.ZodError
         ? new FileDomainError('INVALID_REQUEST', 'The requested local file operation is invalid.')
-        : new FileDomainError(
-            'IO_ERROR',
-            'Forgeboard could not complete the local file operation.',
-          );
+        : new FileDomainError('IO_ERROR', 'Artemis could not complete the local file operation.');
   return {
     ok: false,
     error: {

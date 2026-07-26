@@ -25,7 +25,7 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
 
     const setup = page.getByRole('dialog');
     await expect(setup).toHaveAccessibleName('Ready to build without wiring config files?');
-    await setup.getByRole('button', { name: /Set up Forgeboard/ }).click();
+    await setup.getByRole('button', { name: /Set up Artemis/ }).click();
     const customCli = setup.getByRole('radio', { name: /Custom agent/ });
     await setup.getByText('Custom agent', { exact: true }).click();
     await expect(customCli).toBeChecked();
@@ -100,7 +100,7 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
     await tour.getByRole('tab', { name: /Get help and control your data/u }).click();
     await expect(tour).toContainText('Settings → Data & privacy');
     await expect(tour).toContainText('built-in guides');
-    await setup.getByRole('button', { name: /Open Forgeboard/ }).click();
+    await setup.getByRole('button', { name: /Open Artemis/ }).click();
 
     await page.getByRole('button', { name: 'Settings' }).click();
     const settings = page.locator('.settings-modal');

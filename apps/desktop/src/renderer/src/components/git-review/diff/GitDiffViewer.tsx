@@ -164,7 +164,7 @@ export function GitDiffViewer({
             : "This file isn't text, so it can't be shown in sections. Use the whole-file button in the file list instead."}
         </GitDiffNotice>
       ) : diff === undefined || diff.hunks.length === 0 ? (
-        <GitDiffNotice>Forgeboard can't show the changed lines for this file.</GitDiffNotice>
+        <GitDiffNotice>Artemis can't show the changed lines for this file.</GitDiffNotice>
       ) : (
         <div className="git-hunk-list">
           {diff.hunks.map((hunk) => (

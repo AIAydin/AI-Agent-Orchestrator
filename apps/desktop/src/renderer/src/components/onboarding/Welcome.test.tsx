@@ -71,7 +71,7 @@ describe('Welcome moved-project recovery', () => {
 
     const settings = screen.getByRole('button', { name: 'Settings' });
     const tooltip = screen.getByRole('tooltip', {
-      name: 'Open Forgeboard settings',
+      name: 'Open Artemis settings',
     });
     expect(settings.getAttribute('aria-describedby')).toBe(tooltip.id);
     expect(screen.getByRole('status').textContent).toContain('No recent projects yet');

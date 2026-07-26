@@ -112,7 +112,7 @@ export class NativeWindowsFilesystemSecurity implements WindowsFilesystemSecurit
       if (error instanceof WindowsAclBoundaryError) throw error;
       throw new WindowsAclBoundaryError(
         'inspection-unavailable',
-        'Forgeboard could not verify Windows folder permissions. Choose a private folder inside your Windows profile or repair Windows access-control services.',
+        'Artemis could not verify Windows folder permissions. Choose a private folder inside your Windows profile or repair Windows access-control services.',
       );
     }
     assertSafeWindowsParentAcl(report, currentUserSid);
@@ -142,7 +142,7 @@ export class NativeWindowsFilesystemSecurity implements WindowsFilesystemSecurit
     } catch {
       throw new WindowsAclBoundaryError(
         'protection-failed',
-        'Forgeboard could not make its Windows data folder private. No private data was used; repair the folder permissions and try again.',
+        'Artemis could not make its Windows data folder private. No private data was used; repair the folder permissions and try again.',
       );
     }
     await this.assertPrivateDirectory(directoryPath, currentUserSid);
@@ -159,7 +159,7 @@ export class NativeWindowsFilesystemSecurity implements WindowsFilesystemSecurit
       if (error instanceof WindowsAclBoundaryError) throw error;
       throw new WindowsAclBoundaryError(
         'inspection-unavailable',
-        'Forgeboard could not recheck its private Windows data-folder permissions. No private data was used.',
+        'Artemis could not recheck its private Windows data-folder permissions. No private data was used.',
       );
     }
     assertPrivateWindowsDirectoryAcl(report, currentUserSid);
@@ -172,7 +172,7 @@ export class NativeWindowsFilesystemSecurity implements WindowsFilesystemSecurit
     } catch {
       throw new WindowsAclBoundaryError(
         'protection-failed',
-        'Forgeboard could not make its Windows data file private. The operation stopped before publication; repair the folder permissions and try again.',
+        'Artemis could not make its Windows data file private. The operation stopped before publication; repair the folder permissions and try again.',
       );
     }
     await this.assertPrivateFile(filePath, currentUserSid);
@@ -186,7 +186,7 @@ export class NativeWindowsFilesystemSecurity implements WindowsFilesystemSecurit
       if (error instanceof WindowsAclBoundaryError) throw error;
       throw new WindowsAclBoundaryError(
         'inspection-unavailable',
-        'Forgeboard could not recheck its private Windows data-file permissions. The operation stopped before publication.',
+        'Artemis could not recheck its private Windows data-file permissions. The operation stopped before publication.',
       );
     }
     assertPrivateWindowsFileAcl(report, currentUserSid);
@@ -198,7 +198,7 @@ export class NativeWindowsFilesystemSecurity implements WindowsFilesystemSecurit
     } catch {
       throw new WindowsAclBoundaryError(
         'identity-unavailable',
-        'Forgeboard could not verify the current Windows account SID. Reopen Forgeboard or repair Windows identity services before running an agent with context.',
+        'Artemis could not verify the current Windows account SID. Reopen Artemis or repair Windows identity services before running an agent with context.',
       );
     }
   }
@@ -335,7 +335,7 @@ export function parseWindowsDirectoryAcl(serialized: string): WindowsDirectoryAc
   } catch {
     throw new WindowsAclBoundaryError(
       'inspection-unavailable',
-      'Forgeboard received an invalid Windows folder-permission report. No agent context was launched.',
+      'Artemis received an invalid Windows folder-permission report. No agent context was launched.',
     );
   }
   if (
@@ -430,7 +430,7 @@ function assertWindowsSid(value: string): string {
   if (!/^S-\d(?:-\d+){1,15}$/u.test(normalized) || normalized.length > 184) {
     throw new WindowsAclBoundaryError(
       'identity-unavailable',
-      'Forgeboard received an invalid Windows account identity. No agent context was launched.',
+      'Artemis received an invalid Windows account identity. No agent context was launched.',
     );
   }
   return normalized;
@@ -439,28 +439,28 @@ function assertWindowsSid(value: string): string {
 function unsafePrivateDirectory(): WindowsAclBoundaryError {
   return new WindowsAclBoundaryError(
     'unsafe-private-directory',
-    'Forgeboard Windows data-folder permissions are no longer private to this account. The operation stopped before using private data.',
+    'Artemis Windows data-folder permissions are no longer private to this account. The operation stopped before using private data.',
   );
 }
 
 function unsafePrivateFile(): WindowsAclBoundaryError {
   return new WindowsAclBoundaryError(
     'unsafe-private-file',
-    'Forgeboard Windows data-file permissions are no longer private to this account. The operation stopped before publication.',
+    'Artemis Windows data-file permissions are no longer private to this account. The operation stopped before publication.',
   );
 }
 
 function inspectionUnavailable(): WindowsAclBoundaryError {
   return new WindowsAclBoundaryError(
     'inspection-unavailable',
-    'Forgeboard could not verify Windows folder permissions. Choose a private folder inside your Windows profile or repair Windows access-control services.',
+    'Artemis could not verify Windows folder permissions. Choose a private folder inside your Windows profile or repair Windows access-control services.',
   );
 }
 
 function invalidAclReport(): WindowsAclBoundaryError {
   return new WindowsAclBoundaryError(
     'inspection-unavailable',
-    'Forgeboard received an invalid Windows folder-permission report. No agent context was launched.',
+    'Artemis received an invalid Windows folder-permission report. No agent context was launched.',
   );
 }
 

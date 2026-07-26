@@ -1,8 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
-  Bot,
   Check,
   FolderGit2,
   FolderOpen,
@@ -19,32 +18,16 @@ import type {
   Project,
 } from '../../../../shared/application/contracts.js';
 import type { CheckCommandReadiness } from '../../../../shared/command-readiness/contracts.js';
-import type {
-  AgentReadinessResult,
-  CheckAgentReadiness,
-} from '../../../../shared/readiness/contracts.js';
-import type {
-  ProviderConnectionId,
-  ProviderConnectionStatus,
-} from '../../../../shared/provider-connections/index.js';
 import { unwrap } from '../../lib/ipc.js';
 import { DockerLogo } from '../workspace/node-registry/brand-logos.js';
 import { CommandBuilder } from '../configuration/CommandBuilder.js';
 import { FirstRunTour } from '../help/tour/FirstRunTour.js';
 import { BrandMark } from '../shell/BrandMark.js';
-import { ProviderConnectionCards } from '../settings/agents/connections/index.js';
-import { AgentDefaultModelField } from '../settings/fields/AgentDefaultModelField.js';
 import {
   EnvironmentAllowlistEditor,
   environmentAllowlistIssues,
 } from '../configuration/EnvironmentAllowlistEditor.js';
 import { useCommandReadiness } from '../configuration/useCommandReadiness.js';
-import { AgentReadinessPanel } from '../readiness/AgentReadinessPanel.js';
-import {
-  currentReadinessResult,
-  launchDetectionIsReady,
-  readinessDraftForAgent,
-} from '../readiness/readiness-ui.js';
 import { DockerConfiguration } from '../docker/DockerConfiguration.js';
 import type { DockerReadinessEvidence } from '../docker/readiness-evidence.js';
 import {
@@ -63,25 +46,19 @@ interface SetupWizardProps {
   settings: AppSettings;
   agents: AgentDetection[];
   projects?: Project[];
-  checkAgentReadiness?: CheckAgentReadiness;
   checkCommandReadiness?: CheckCommandReadiness;
   onComplete: (settings: AppSettings) => Promise<void>;
   onSkip: () => Promise<void>;
   onError: (message: string) => void;
 }
 
-const STEPS = ['Welcome', 'Agent', 'Safety', 'Project defaults', 'Ready'] as const;
+const STEPS = ['Welcome', 'Safety', 'Project defaults', 'Ready'] as const;
 
 export function SetupWizard(props: SetupWizardProps) {
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState(props.settings);
   const [busy, setBusy] = useState(false);
-  const [checkingAgent, setCheckingAgent] = useState(false);
-  const [agentReadiness, setAgentReadiness] = useState<Record<string, AgentReadinessResult>>({});
   const [dockerReadiness, setDockerReadiness] = useState<DockerReadinessEvidence | null>(null);
-  const [providerStatuses, setProviderStatuses] = useState<
-    Partial<Record<ProviderConnectionId, ProviderConnectionStatus>>
-  >({});
   const [commandProjectId, setCommandProjectId] = useState<string | null>(() =>
     initialCommandSuggestionProjectId(props.projects ?? []),
   );
@@ -89,8 +66,6 @@ export function SetupWizard(props: SetupWizardProps) {
     () => props.agents.filter((agent) => isCodingAgent(agent.id)),
     [props.agents],
   );
-  const customAgentIncomplete =
-    draft.defaultAgent === 'custom' && draft.customAgent.executable.trim() === '';
   const environmentIssues = environmentAllowlistIssues(draft.envAllowlist);
   const customPermissionIssues = customPermissionConfigurationIssues(draft);
   const selectedPermissionNeedsDocker = permissionProfileNeedsDocker(
@@ -101,16 +76,6 @@ export function SetupWizard(props: SetupWizardProps) {
     draft.defaultPermissionProfile,
     draft,
   );
-  const readinessAgentId = draft.defaultAgent;
-  const selectedAgent = availableAgents.find((agent) => agent.id === readinessAgentId);
-  const selectedReadinessDraft = readinessDraftForAgent(draft, readinessAgentId);
-  const selectedReadiness = currentReadinessResult(agentReadiness, selectedReadinessDraft);
-  const selectedAgentReady =
-    draft.defaultAgent === 'codex' || draft.defaultAgent === 'claude'
-      ? providerStatuses[draft.defaultAgent]?.state === 'connected'
-      : selectedReadiness?.ready === true ||
-        (selectedReadiness === null &&
-          launchDetectionIsReady(selectedAgent, selectedReadinessDraft));
   const setupCommands = useMemo(
     () => [
       {
@@ -133,30 +98,6 @@ export function SetupWizard(props: SetupWizardProps) {
     commandProjectId,
     props.checkCommandReadiness ?? checkConfiguredCommand,
   );
-  const rememberProviderStatus = useCallback(
-    (providerId: ProviderConnectionId, status: ProviderConnectionStatus) => {
-      setProviderStatuses((current) =>
-        current[providerId]?.state === status.state &&
-        current[providerId]?.checkedAt === status.checkedAt &&
-        current[providerId]?.reason === status.reason
-          ? current
-          : { ...current, [providerId]: status },
-      );
-    },
-    [],
-  );
-
-  const checkCurrentAgent: CheckAgentReadiness | undefined = props.checkAgentReadiness
-    ? async (request) => {
-        setCheckingAgent(true);
-        try {
-          return await props.checkAgentReadiness!(request);
-        } finally {
-          setCheckingAgent(false);
-        }
-      }
-    : undefined;
-
   async function perform(operation: () => Promise<void>) {
     setBusy(true);
     try {
@@ -166,22 +107,6 @@ export function SetupWizard(props: SetupWizardProps) {
     } finally {
       setBusy(false);
     }
-  }
-
-  async function chooseExecutable(agentId?: string) {
-    await perform(async () => {
-      const selected = unwrap(await window.forgeboard.projects.pickExecutable());
-      if (!selected) return;
-      if (agentId) {
-        setDraft((current) => ({
-          ...current,
-          agentExecutableOverrides: {
-            ...current.agentExecutableOverrides,
-            [agentId]: selected,
-          },
-        }));
-      }
-    });
   }
 
   async function chooseWorktreeRoot() {
@@ -209,7 +134,7 @@ export function SetupWizard(props: SetupWizardProps) {
           <div className="setup-brand">
             <BrandMark />
             <span>
-              <strong>Forgeboard</strong>
+              <strong>Artemis</strong>
               <small>Local setup</small>
             </span>
           </div>
@@ -238,13 +163,13 @@ export function SetupWizard(props: SetupWizardProps) {
               <h1 id="setup-title">Ready to build without wiring config files?</h1>
               <p>
                 The built-in demo works right away, entirely on this computer. This short setup
-                connects a coding agent, picks safe defaults, and prepares your app preview.
+                picks safe defaults and prepares your app preview.
               </p>
               <div className="setup-assurances">
                 <div>
                   <ShieldCheck size={18} />
                   <span>
-                    <strong>No Forgeboard cloud</strong>
+                    <strong>No Artemis cloud</strong>
                     <small>No account, no tracking, nothing sent off this device.</small>
                   </span>
                 </div>
@@ -269,312 +194,6 @@ export function SetupWizard(props: SetupWizardProps) {
           )}
 
           {step === 1 && (
-            <div className="setup-page">
-              <span className="eyebrow">
-                <Bot size={14} /> Agent
-              </span>
-              <h1 id="setup-title">Choose your starting agent</h1>
-              <p>Agents run on this computer with the sign-in they already have.</p>
-              <div className="setup-agent-list" role="radiogroup" aria-label="Default agent">
-                {availableAgents.map((agent) => {
-                  const selected = draft.defaultAgent === agent.id;
-                  const validated = selected && selectedReadiness?.ready === true;
-                  return (
-                    <label key={agent.id} className={selected ? 'selected' : ''}>
-                      <input
-                        type="radio"
-                        name="default-agent"
-                        checked={selected}
-                        onChange={() =>
-                          setDraft({
-                            ...draft,
-                            defaultAgent: agent.id as AppSettings['defaultAgent'],
-                            ...(agent.id === 'custom'
-                              ? {
-                                  customAgent: {
-                                    ...draft.customAgent,
-                                    enabled: true,
-                                  },
-                                }
-                              : {}),
-                          })
-                        }
-                      />
-                      <span
-                        className={
-                          agent.installed || validated ? 'agent-light online' : 'agent-light'
-                        }
-                      />
-                      <span>
-                        <strong>{agent.label}</strong>
-                        <small>
-                          {validated
-                            ? `${selectedReadiness.version} · checked just now`
-                            : agent.installed
-                              ? (agent.version ?? 'Found on this device')
-                              : 'Not installed — optional'}
-                        </small>
-                      </span>
-                      <span
-                        className={
-                          validated || (agent.installed && agent.version)
-                            ? 'status-chip ok'
-                            : 'status-chip'
-                        }
-                      >
-                        {validated
-                          ? 'Ready'
-                          : agent.installed && agent.version
-                            ? 'Found'
-                            : agent.installed
-                              ? 'Not checked'
-                              : 'Not found'}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-              {(draft.defaultAgent === 'codex' || draft.defaultAgent === 'claude') && (
-                <div className="setup-provider-connection">
-                  <p className="setup-connection-guidance" role="status">
-                    {providerStatuses[draft.defaultAgent]?.state === 'connected'
-                      ? `${draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} is connected and ready.`
-                      : `Connect ${draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} here. You can change agents later in Settings.`}
-                  </p>
-                  <ProviderConnectionCards
-                    compact
-                    providerIds={[draft.defaultAgent]}
-                    executableOverrides={{
-                      [draft.defaultAgent]:
-                        draft.agentExecutableOverrides[draft.defaultAgent] ?? '',
-                    }}
-                    onStatus={rememberProviderStatus}
-                    advanced={{
-                      [draft.defaultAgent]: (
-                        <div className="agent-overrides">
-                          <div className="setup-path-field">
-                            <label htmlFor={`setup-agent-${draft.defaultAgent}-executable`}>
-                              Executable override{' '}
-                              <small>Optional — leave blank to use the one Forgeboard finds.</small>
-                            </label>
-                            <span className="path-picker">
-                              <input
-                                id={`setup-agent-${draft.defaultAgent}-executable`}
-                                name={`setup-agent-${draft.defaultAgent}-executable`}
-                                value={draft.agentExecutableOverrides[draft.defaultAgent] ?? ''}
-                                placeholder="Use the one Forgeboard finds"
-                                onChange={(event) =>
-                                  setDraft({
-                                    ...draft,
-                                    agentExecutableOverrides: {
-                                      ...draft.agentExecutableOverrides,
-                                      [draft.defaultAgent]: event.target.value,
-                                    },
-                                  })
-                                }
-                              />
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => void chooseExecutable(draft.defaultAgent)}
-                              >
-                                Browse
-                              </button>
-                            </span>
-                          </div>
-                          <AgentDefaultModelField
-                            key={draft.defaultAgent}
-                            agentId={draft.defaultAgent}
-                            name={`setup-agent-${draft.defaultAgent}-default-model`}
-                            value={draft.agentDefaultModels[draft.defaultAgent] ?? ''}
-                            onChange={(model) =>
-                              setDraft({
-                                ...draft,
-                                agentDefaultModels: {
-                                  ...draft.agentDefaultModels,
-                                  [draft.defaultAgent]: model,
-                                },
-                              })
-                            }
-                          />
-                          <AgentReadinessPanel
-                            agent={selectedAgent}
-                            draft={selectedReadinessDraft}
-                            result={selectedReadiness}
-                            checking={checkingAgent}
-                            checkReadiness={checkCurrentAgent}
-                            onResult={(result) =>
-                              setAgentReadiness((current) => ({
-                                ...current,
-                                [selectedReadinessDraft.fingerprint]: result,
-                              }))
-                            }
-                            onError={props.onError}
-                          />
-                        </div>
-                      ),
-                    }}
-                  />
-                </div>
-              )}
-              {draft.defaultAgent !== 'custom' &&
-                draft.defaultAgent !== 'codex' &&
-                draft.defaultAgent !== 'claude' && (
-                  <div className="setup-path-field">
-                    <label htmlFor={`setup-agent-${draft.defaultAgent}-executable`}>
-                      Executable override{' '}
-                      <small>Optional — leave blank to use the one Forgeboard finds.</small>
-                    </label>
-                    <span className="path-picker">
-                      <input
-                        id={`setup-agent-${draft.defaultAgent}-executable`}
-                        name={`setup-agent-${draft.defaultAgent}-executable`}
-                        value={draft.agentExecutableOverrides[draft.defaultAgent] ?? ''}
-                        placeholder="Use the one Forgeboard finds"
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            agentExecutableOverrides: {
-                              ...draft.agentExecutableOverrides,
-                              [draft.defaultAgent]: event.target.value,
-                            },
-                          })
-                        }
-                      />
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void chooseExecutable(draft.defaultAgent)}
-                      >
-                        Browse
-                      </button>
-                    </span>
-                  </div>
-                )}
-              {draft.defaultAgent === 'custom' && (
-                <div className="setup-custom-agent">
-                  <div className="two-column">
-                    <label>
-                      Display name
-                      <input
-                        name="setup-custom-agent-display-name"
-                        value={draft.customAgent.name}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            customAgent: {
-                              ...draft.customAgent,
-                              name: event.target.value,
-                            },
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Provider name
-                      <input
-                        name="setup-custom-agent-provider-name"
-                        value={draft.customAgent.providerName}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            customAgent: {
-                              ...draft.customAgent,
-                              providerName: event.target.value,
-                            },
-                          })
-                        }
-                      />
-                    </label>
-                  </div>
-                  <div className="setup-path-field">
-                    <label htmlFor="setup-custom-agent-executable">
-                      Executable <small>Required — the program that runs your agent.</small>
-                    </label>
-                    <span className="path-picker">
-                      <input
-                        id="setup-custom-agent-executable"
-                        name="setup-custom-agent-executable"
-                        value={draft.customAgent.executable}
-                        placeholder="Choose the program that runs your agent"
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            customAgent: {
-                              ...draft.customAgent,
-                              executable: event.target.value,
-                            },
-                          })
-                        }
-                      />
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          void perform(async () => {
-                            const selected = unwrap(
-                              await window.forgeboard.projects.pickExecutable(),
-                            );
-                            if (selected)
-                              setDraft((current) => ({
-                                ...current,
-                                customAgent: {
-                                  ...current.customAgent,
-                                  executable: selected,
-                                },
-                              }));
-                          })
-                        }
-                      >
-                        Browse
-                      </button>
-                    </span>
-                  </div>
-                  <label>
-                    Notes about the provider
-                    <textarea
-                      name="setup-custom-agent-provider-disclosure"
-                      rows={3}
-                      value={draft.customAgent.providerDisclosure}
-                      onChange={(event) =>
-                        setDraft({
-                          ...draft,
-                          customAgent: {
-                            ...draft.customAgent,
-                            providerDisclosure: event.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </label>
-                  <small>You can fine-tune this agent later in Settings.</small>
-                  {customAgentIncomplete && (
-                    <span className="setup-validation" role="status">
-                      Choose the program that runs your custom agent to continue.
-                    </span>
-                  )}
-                </div>
-              )}
-              {draft.defaultAgent !== 'codex' && draft.defaultAgent !== 'claude' && (
-                <AgentReadinessPanel
-                  agent={selectedAgent}
-                  draft={selectedReadinessDraft}
-                  result={selectedReadiness}
-                  checking={checkingAgent}
-                  checkReadiness={checkCurrentAgent}
-                  onResult={(result) =>
-                    setAgentReadiness((current) => ({
-                      ...current,
-                      [selectedReadinessDraft.fingerprint]: result,
-                    }))
-                  }
-                  onError={props.onError}
-                />
-              )}
-            </div>
-          )}
-
-          {step === 2 && (
             <div className="setup-page">
               <span className="eyebrow">
                 <ShieldCheck size={14} /> Safety
@@ -686,7 +305,7 @@ export function SetupWizard(props: SetupWizardProps) {
             </div>
           )}
 
-          {step === 3 && (
+          {step === 2 && (
             <div className="setup-page">
               <span className="eyebrow">
                 <TerminalSquare size={14} /> Project defaults
@@ -775,7 +394,7 @@ export function SetupWizard(props: SetupWizardProps) {
             </div>
           )}
 
-          {step === 4 && (
+          {step === 3 && (
             <div className="setup-page setup-ready">
               <div className="setup-hero-icon success">
                 <Check size={30} />
@@ -787,14 +406,6 @@ export function SetupWizard(props: SetupWizardProps) {
                 <div>
                   <dt>Default agent</dt>
                   <dd>{agentLabel(availableAgents, draft.defaultAgent)}</dd>
-                </div>
-                <div>
-                  <dt>Agent status</dt>
-                  <dd>
-                    {selectedAgentReady
-                      ? (selectedReadiness?.version ?? selectedAgent?.version ?? 'Ready')
-                      : 'Needs attention'}
-                  </dd>
                 </div>
                 <div>
                   <dt>Permissions</dt>
@@ -844,19 +455,18 @@ export function SetupWizard(props: SetupWizardProps) {
                 className="button primary"
                 disabled={
                   busy ||
-                  (step === 1 && (customAgentIncomplete || !selectedAgentReady)) ||
-                  (step === 2 &&
+                  (step === 1 &&
                     (selectedPermissionUnavailable !== null ||
                       (draft.defaultPermissionProfile === 'custom' &&
                         customPermissionIssues.length > 0) ||
                       (selectedPermissionNeedsDocker &&
                         dockerReadiness?.readiness.available !== true))) ||
-                  (step === 3 &&
+                  (step === 2 &&
                     (environmentIssues.length > 0 || commandReadiness.blockingIssues.length > 0))
                 }
                 onClick={() => setStep((current) => current + 1)}
               >
-                {step === 0 ? 'Set up Forgeboard' : 'Continue'} <ArrowRight size={15} />
+                {step === 0 ? 'Set up Artemis' : 'Continue'} <ArrowRight size={15} />
               </button>
             ) : (
               <button
@@ -865,7 +475,7 @@ export function SetupWizard(props: SetupWizardProps) {
                 disabled={busy}
                 onClick={() => void perform(() => props.onComplete(draft))}
               >
-                Open Forgeboard <ArrowRight size={15} />
+                Open Artemis <ArrowRight size={15} />
               </button>
             )}
           </footer>

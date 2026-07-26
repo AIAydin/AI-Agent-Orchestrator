@@ -382,7 +382,7 @@ export function registerIpcHandlers(
       },
       onBackgroundError: (error) => {
         process.stderr.write(
-          `Forgeboard automatic backup failed: ${error instanceof Error ? error.message : 'unknown error'}\n`,
+          `Artemis automatic backup failed: ${error instanceof Error ? error.message : 'unknown error'}\n`,
         );
       },
       onAttempt: (attempt) => store.recordBackupAttempt(attempt),
@@ -1009,7 +1009,7 @@ export function registerIpcHandlers(
             backups.markDataChanged();
             const outcome = await backups.flush();
             if (outcome.status !== 'created') {
-              throw new Error('Forgeboard could not create the requested backup.');
+              throw new Error('Artemis could not create the requested backup.');
             }
             return outcome.backup;
           },
@@ -1056,7 +1056,7 @@ export function registerIpcHandlers(
               title: 'Some backup files are missing',
               message: `${count} recorded backup ${count === 1 ? 'file is' : 'files are'} missing.`,
               detail:
-                'Forgeboard cannot confirm these backup copies were deleted. Cancel and reconnect their folders to check them, or forget the missing copies and continue. Forgotten copies may still exist outside Forgeboard — for example on a disconnected drive — and will no longer be tracked.',
+                'Artemis cannot confirm these backup copies were deleted. Cancel and reconnect their folders to check them, or forget the missing copies and continue. Forgotten copies may still exist outside Artemis — for example on a disconnected drive — and will no longer be tracked.',
               buttons: ['Cancel deletion', 'Forget missing backups and continue'],
               defaultId: 0,
               cancelId: 0,
@@ -1193,7 +1193,7 @@ export function registerIpcHandlers(
           await pauseForShutdown(false);
         } catch (error) {
           process.stderr.write(
-            `Forgeboard could not fully pause services before shutdown: ${error instanceof Error ? error.message : 'unknown error'}\n`,
+            `Artemis could not fully pause services before shutdown: ${error instanceof Error ? error.message : 'unknown error'}\n`,
           );
         }
       }
@@ -1219,7 +1219,7 @@ export function registerIpcHandlers(
       for (const result of [...workflowStopped, ...stopped]) {
         if (result.status !== 'rejected') continue;
         process.stderr.write(
-          `Forgeboard service shutdown failed: ${result.reason instanceof Error ? result.reason.message : 'unknown error'}\n`,
+          `Artemis service shutdown failed: ${result.reason instanceof Error ? result.reason.message : 'unknown error'}\n`,
         );
       }
       unsubscribeBackupChanges();
@@ -1227,7 +1227,7 @@ export function registerIpcHandlers(
         await backups.shutdown();
       } catch (error) {
         process.stderr.write(
-          `Forgeboard shutdown backup failed: ${error instanceof Error ? error.message : 'unknown error'}\n`,
+          `Artemis shutdown backup failed: ${error instanceof Error ? error.message : 'unknown error'}\n`,
         );
       }
     },
@@ -1241,7 +1241,7 @@ function handle<Args extends unknown[], Output>(
 ): void {
   ipcMain.handle(channel, async (event, ...rawArgs: unknown[]): Promise<IpcResult<Output>> => {
     try {
-      const authority = requireIpcWindowAuthority(event, 'Forgeboard request');
+      const authority = requireIpcWindowAuthority(event, 'Artemis request');
       const args = schema.parse(rawArgs);
       const value = await operation(...args);
       authority.assertCurrent();
@@ -1253,7 +1253,7 @@ function handle<Args extends unknown[], Output>(
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid request.'
+            ? 'Artemis rejected an invalid request.'
             : error instanceof Error
               ? error.message
               : 'The operation failed.',
@@ -1270,7 +1270,7 @@ function handleWithEvent<Args extends unknown[], Output>(
 ): void {
   ipcMain.handle(channel, async (event, ...rawArgs: unknown[]): Promise<IpcResult<Output>> => {
     try {
-      const authority = requireIpcWindowAuthority(event, 'Forgeboard request');
+      const authority = requireIpcWindowAuthority(event, 'Artemis request');
       const args = schema.parse(rawArgs);
       const value = await operation(event, ...args);
       authority.assertCurrent();
@@ -1282,7 +1282,7 @@ function handleWithEvent<Args extends unknown[], Output>(
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid request.'
+            ? 'Artemis rejected an invalid request.'
             : error instanceof Error
               ? error.message
               : 'The operation failed.',
@@ -1302,12 +1302,12 @@ function requireIpcWindowAuthority(
   assertLiveMainFrame(event, operation);
   const parent = BrowserWindow.fromWebContents(event.sender);
   if (parent === null || parent.isDestroyed()) {
-    throw new Error(`${operation} requires a live Forgeboard window.`);
+    throw new Error(`${operation} requires a live Artemis window.`);
   }
   const assertCurrent = (): void => {
     assertLiveMainFrame(event, operation);
     if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
-      throw new Error('The originating Forgeboard window changed or closed.');
+      throw new Error('The originating Artemis window changed or closed.');
     }
   };
   return { parent, assertCurrent };

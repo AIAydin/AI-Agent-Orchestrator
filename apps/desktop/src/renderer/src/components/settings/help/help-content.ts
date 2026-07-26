@@ -40,7 +40,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
   {
     id: 'provider-connection',
     title: 'Agents work out of the box',
-    summary: 'No connection setup — Forgeboard launches the CLIs you already use.',
+    summary: 'No connection setup — Artemis launches the CLIs you already use.',
     keywords: [
       'openai',
       'anthropic',
@@ -56,20 +56,20 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     icon: Bot,
     steps: [
       'Install the CLI you want — Codex, Claude Code, Gemini, or OpenCode — and sign in from any terminal.',
-      'Forgeboard finds installed CLIs automatically. Settings → Agents & runtime shows what was found.',
+      'Artemis finds installed CLIs automatically. Settings → Agents & runtime shows what was found.',
       'Agent sessions run with your real environment, so sign-in, resume, and MCP servers work exactly as in a normal terminal.',
-      'Forgeboard never sees or stores provider credentials and does not proxy model traffic.',
+      'Artemis never sees or stores provider credentials and does not proxy model traffic.',
     ],
   },
   {
     id: 'agent-not-detected',
-    title: 'Forgeboard cannot find your agent program',
+    title: 'Artemis cannot find your agent program',
     summary: 'Get the agent CLI installed and visible on this computer.',
     keywords: ['missing', 'cli', 'codex', 'claude', 'gemini', 'opencode', 'executable', 'path'],
     icon: Bot,
     steps: [
-      'Open Settings → Agents & runtime to see which agent CLIs Forgeboard found.',
-      'If yours is missing, install it from its provider or make sure its command is on your PATH, then reopen Forgeboard.',
+      'Open Settings → Agents & runtime to see which agent CLIs Artemis found.',
+      'If yours is missing, install it from its provider or make sure its command is on your PATH, then reopen Artemis.',
       'Sign-in happens in the CLI itself — run it once in any terminal if it asks for an account.',
     ],
   },
@@ -80,10 +80,10 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     keywords: ['moved', 'renamed', 'missing', 'repository', 'repo', 'folder', 'recovery', 'locate'],
     icon: FolderSearch,
     steps: [
-      'Open the missing project from your recent projects, and Forgeboard will offer to help you find it.',
+      'Open the missing project from your recent projects, and Artemis will offer to help you find it.',
       'Choose Locate project and pick the project folder in its new place.',
-      'Check that the folder Forgeboard found really is your project, and read any warnings, before you confirm the new location.',
-      'Forgeboard keeps your project history and canvases — your visual workspaces. It will never quietly swap in a different folder.',
+      'Check that the folder Artemis found really is your project, and read any warnings, before you confirm the new location.',
+      'Artemis keeps your project history and canvases — your visual workspaces. It will never quietly swap in a different folder.',
     ],
   },
   {
@@ -95,9 +95,9 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     steps: [
       'When a run that may change files finishes, open the activity drawer and choose Review this agent’s changes. The agent worked in a private copy of your project, so your main copy stays untouched.',
       'Use Uncommitted changes to look through the current edits, and mark only the changes you want to save into Git (a saved change is called a "commit").',
-      'Use Committed changes for a read-only comparison of everything the run saved to Git, measured from the exact starting point Forgeboard recorded for it.',
-      'To share the work, use the PR action on the agent node to turn its branch into a GitHub pull request. Read the exact plan Forgeboard shows — it describes one specific, current state — then confirm in the system dialog, where Cancel is the default. Forgeboard never force-pushes; it will not overwrite other people’s work.',
-      'Forgeboard only checks your GitHub sign-in, repository details, and automated checks (CI) when you ask it to, through the optional GitHub gh program on your computer. Forgeboard never stores your GitHub token or password.',
+      'Use Committed changes for a read-only comparison of everything the run saved to Git, measured from the exact starting point Artemis recorded for it.',
+      'To share the work, use the PR action on the agent node to turn its branch into a GitHub pull request. Read the exact plan Artemis shows — it describes one specific, current state — then confirm in the system dialog, where Cancel is the default. Artemis never force-pushes; it will not overwrite other people’s work.',
+      'Artemis only checks your GitHub sign-in, repository details, and automated checks (CI) when you ask it to, through the optional GitHub gh program on your computer. Artemis never stores your GitHub token or password.',
     ],
   },
   {
@@ -120,10 +120,10 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     ],
     icon: GitBranch,
     steps: [
-      'Select the finished agent run and choose Check changes to see where the work could go. Look at the names listed next to the Remote field — a project Forgeboard cloned for you normally has one called origin. If nothing is listed, this project has no shared copy to send work to, so keep reviewing it locally or clone the project from its online source using Forgeboard’s welcome screen.',
+      'Select the finished agent run and choose Check changes to see where the work could go. Look at the names listed next to the Remote field — a project Artemis cloned for you normally has one called origin. If nothing is listed, this project has no shared copy to send work to, so keep reviewing it locally or clone the project from its online source using Artemis’s welcome screen.',
       'If the optional GitHub program gh is missing or signed out, only the GitHub extras — repository details, pull requests, and automated checks — are unavailable. Sending work with a normal Git push still works through the sign-in your computer already has. To use the extras, install gh or sign in to it (GitHub manages that sign-in), then choose Check GitHub sign-in and repository again.',
-      'If GitHub reports a head mismatch — the shared copy’s latest state differs from yours — or a shown plan expires, check the changes again, review and push the current approved state if needed, then run the GitHub check again. Forgeboard never assumes an earlier result is still current.',
-      'If the shared copy has changes yours does not, the push is rejected without force — Forgeboard never overwrites shared work (Git calls this "non-fast-forward"). Start a new run that can write files, let the agent merge in the shared changes, review and approve the new state, then prepare another normal push.',
+      'If GitHub reports a head mismatch — the shared copy’s latest state differs from yours — or a shown plan expires, check the changes again, review and push the current approved state if needed, then run the GitHub check again. Artemis never assumes an earlier result is still current.',
+      'If the shared copy has changes yours does not, the push is rejected without force — Artemis never overwrites shared work (Git calls this "non-fast-forward"). Start a new run that can write files, let the agent merge in the shared changes, review and approve the new state, then prepare another normal push.',
     ],
   },
   {
@@ -137,50 +137,50 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
       'Open Settings → Agents & runtime → Docker.',
       'Choose the Docker program, the image (a ready-made environment the agent runs in), and the full path to the agent program inside that image.',
       'Select Check Docker and fix every problem it reports before saving.',
-      'Forgeboard never shares your computer’s credentials (sign-ins and keys) with the Docker environment. If settings you imported ask for that, turn that option off, then sign in separately inside the environment if you need to.',
+      'Artemis never shares your computer’s credentials (sign-ins and keys) with the Docker environment. If settings you imported ask for that, turn that option off, then sign in separately inside the environment if you need to.',
     ],
   },
   {
     id: 'preview-not-ready',
     title: 'A website preview never becomes ready',
     summary:
-      'Check the start command, the folder it runs in, the page Forgeboard waits for, and the server’s logs.',
+      'Check the start command, the folder it runs in, the page Artemis waits for, and the server’s logs.',
     keywords: ['preview', 'port', 'server', 'command', 'readiness', 'localhost', 'logs', 'browser'],
     icon: Eye,
     steps: [
       'In the Preview node, pick the folder your app runs from and the package script or command that starts it.',
-      'Pick the page Forgeboard should wait for — for example / for the home page.',
+      'Pick the page Artemis should wait for — for example / for the home page.',
       'Start the preview and read its logs to see what the server says.',
-      'If the server listens on a different port than Forgeboard expects, change the preview port range in Settings → Git & previews.',
+      'If the server listens on a different port than Artemis expects, change the preview port range in Settings → Git & previews.',
     ],
   },
   {
     id: 'preview-port-collision',
     title: 'A preview port is already in use',
     summary:
-      'Release a stale Forgeboard preview or choose a safe loopback range without stopping an unknown process.',
+      'Release a stale Artemis preview or choose a safe loopback range without stopping an unknown process.',
     keywords: ['preview', 'port', 'collision', 'occupied', 'address in use', 'loopback', 'retry'],
     icon: Eye,
     steps: [
       'Stop stale Preview nodes from the app. Do not kill an unrelated process unless you recognize it.',
       'Open Settings → Git & previews and expand or move the preview port range if another local tool owns it.',
       'Check that the preview command uses the displayed host and port arguments instead of a different hard-coded port.',
-      'Request a fresh reviewed start. Forgeboard does not reuse a failed reservation as a live preview session.',
+      'Request a fresh reviewed start. Artemis does not reuse a failed reservation as a live preview session.',
     ],
   },
   {
     id: 'git-delivery-conflict',
     title: 'Git delivery stopped on a conflict',
     summary:
-      'Inspect the real conflicted files; Forgeboard does not choose a side or report a completed merge.',
+      'Inspect the real conflicted files; Artemis does not choose a side or report a completed merge.',
     keywords: ['git', 'merge', 'cherry-pick', 'conflict', 'diverged', 'delivery', 'resolution'],
     icon: GitMerge,
     steps: [
-      'Open Changes and inspect every path Forgeboard reports as conflicted. Merge, squash, and cherry-pick conflicts remain in the primary checkout; rebase conflicts remain in the managed agent workspace.',
+      'Open Changes and inspect every path Artemis reports as conflicted. Merge, squash, and cherry-pick conflicts remain in the primary checkout; rebase conflicts remain in the managed agent workspace.',
       'Resolve the files deliberately in the project editor or an explicitly opened external application, then stage every resolution.',
       'Use Review Continue to bind the current operation, commit, paths, staged resolution, and unstaged content to a cancel-default system confirmation. Use Review Abort to restore the pre-operation Git state.',
       'Run the required delivery checks and record human quality approval again because changed source invalidates the earlier evidence.',
-      'Forgeboard supports reviewed fast-forward, merge-commit, squash, rebase, and cherry-pick delivery. For bounded text conflicts, compare Git base, ours, and theirs inline, edit the merged result, then review a separate apply-and-stage confirmation. Resolve binary, oversized, ignored, or sensitive files in a trusted external editor.',
+      'Artemis supports reviewed fast-forward, merge-commit, squash, rebase, and cherry-pick delivery. For bounded text conflicts, compare Git base, ours, and theirs inline, edit the merged result, then review a separate apply-and-stage confirmation. Resolve binary, oversized, ignored, or sensitive files in a trusted external editor.',
     ],
   },
   {
@@ -202,7 +202,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
       'Continue local work and confirm the top bar returns to Saved locally. Solo persistence does not depend on the collaboration server.',
       'Check the server addresses under Advanced in Settings → Connectivity and, if you operate the server, verify its health and TLS proxy.',
       'Wait for automatic reconnect or explicitly leave and rejoin after correcting configuration.',
-      'A same-field conflict can pause for review; Forgeboard does not silently declare the local or remote version the winner.',
+      'A same-field conflict can pause for review; Artemis does not silently declare the local or remote version the winner.',
     ],
   },
   {
@@ -223,7 +223,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     id: 'import-database-recovery',
     title: 'An import or database recovery was rejected',
     summary:
-      'Preserve current files and use only an exact, validated Forgeboard export or SQLite backup.',
+      'Preserve current files and use only an exact, validated Artemis export or SQLite backup.',
     keywords: [
       'malformed',
       'import',
@@ -237,23 +237,23 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     icon: HardDrive,
     steps: [
       'A malformed, oversized, structurally invalid, or newer-version portable export is rejected before confirmation and does not partially replace local data.',
-      'If startup cannot open the database, do not edit it. Choose a known Forgeboard SQLite backup from the native recovery dialog.',
-      'Review the backup identity, schema compatibility, size, and digest. Forgeboard copies and verifies the source; it never edits the backup in place.',
-      'If no verified backup is available, cancel and preserve the files for diagnosis. Forgeboard will not silently create an empty replacement database.',
+      'If startup cannot open the database, do not edit it. Choose a known Artemis SQLite backup from the native recovery dialog.',
+      'Review the backup identity, schema compatibility, size, and digest. Artemis copies and verifies the source; it never edits the backup in place.',
+      'If no verified backup is available, cancel and preserve the files for diagnosis. Artemis will not silently create an empty replacement database.',
     ],
   },
   {
     id: 'privacy-boundary',
     title: 'Understand what can leave this device',
     summary:
-      'Forgeboard has no account and no usage tracking, and it makes no hidden connections — nothing leaves your computer unless you set it up.',
+      'Artemis has no account and no usage tracking, and it makes no hidden connections — nothing leaves your computer unless you set it up.',
     keywords: ['privacy', 'telemetry', 'network', 'provider', 'outbound', 'data', 'collaboration'],
     icon: ShieldCheck,
     steps: [
       'Open Settings → Data & privacy to see where your data lives on this computer and how long it is kept.',
-      'Before every run, Forgeboard shows you exactly which agent provider is used, which files the agent may see, which setting names it receives, and what network access it has.',
-      'The agent programs you approve may send your prompt and the files you shared to their own servers under their own terms. Forgeboard always tells you when that can happen.',
-      'Collaboration remains inactive until you explicitly configure and approve a connection. Application update checks run only when you select Check for updates and approve the exact GitHub request; Forgeboard never downloads or installs updates automatically.',
+      'Before every run, Artemis shows you exactly which agent provider is used, which files the agent may see, which setting names it receives, and what network access it has.',
+      'The agent programs you approve may send your prompt and the files you shared to their own servers under their own terms. Artemis always tells you when that can happen.',
+      'Collaboration remains inactive until you explicitly configure and approve a connection. Application update checks run only when you select Check for updates and approve the exact GitHub request; Artemis never downloads or installs updates automatically.',
     ],
   },
   {
@@ -310,10 +310,10 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     ],
     icon: Wrench,
     steps: [
-      'Read the status on the node and the message in the activity panel. Forgeboard tells you plainly what is missing, such as an installed CLI or a permission.',
-      'Make sure the project folder still exists where it was, and that Forgeboard can create a private working copy (a worktree) for a run that changes files.',
+      'Read the status on the node and the message in the activity panel. Artemis tells you plainly what is missing, such as an installed CLI or a permission.',
+      'Make sure the project folder still exists where it was, and that Artemis can create a private working copy (a worktree) for a run that changes files.',
       'If the maximum number of runs is already in progress, stop one or wait for it to finish, then try again.',
-      'After you change anything, prepare the launch again. Your approval always applies to one exact, current plan, and Forgeboard never quietly reuses an old approval.',
+      'After you change anything, prepare the launch again. Your approval always applies to one exact, current plan, and Artemis never quietly reuses an old approval.',
     ],
   },
 ] as const;

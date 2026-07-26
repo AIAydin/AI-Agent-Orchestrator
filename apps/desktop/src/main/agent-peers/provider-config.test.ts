@@ -379,9 +379,9 @@ describe('writeProviderPeerMaterial', () => {
         await expect(stat(settingsPath)).resolves.toBeDefined();
 
         // Cleaning up the SECOND provision removes its key too, and now that nothing but
-        // Forgeboard residue is left the file goes with it: A created it in this same app
-        // instance, so B knows the file is Forgeboard's own and that deleting it restores the
-        // project to its pre-Forgeboard state.
+        // Artemis residue is left the file goes with it: A created it in this same app
+        // instance, so B knows the file is Artemis's own and that deleting it restores the
+        // project to its pre-Artemis state.
         await materialB.cleanup();
         await expect(stat(settingsPath)).rejects.toMatchObject({ code: 'ENOENT' });
       } finally {
@@ -492,9 +492,9 @@ describe('writeProviderPeerMaterial', () => {
         await expect(stat(configPath)).resolves.toBeDefined();
 
         // Cleaning up the SECOND provision removes its key too, and now that nothing but
-        // Forgeboard residue is left the file goes with it: A created it in this same app
-        // instance, so B knows the file is Forgeboard's own and that deleting it restores the
-        // project to its pre-Forgeboard state.
+        // Artemis residue is left the file goes with it: A created it in this same app
+        // instance, so B knows the file is Artemis's own and that deleting it restores the
+        // project to its pre-Artemis state.
         await materialB.cleanup();
         await expect(stat(configPath)).rejects.toMatchObject({ code: 'ENOENT' });
       } finally {
@@ -617,7 +617,7 @@ describe('writeProviderPeerMaterial', () => {
         await material.cleanup();
 
         // The file pre-existed this app instance, so it is never deleted -- but every entry the
-        // `mcp` map held was Forgeboard's, so the emptied map goes with them.
+        // `mcp` map held was Artemis's, so the emptied map goes with them.
         const afterCleanup = (await readJson(configPath)) as Record<string, unknown>;
         expect(afterCleanup).toEqual({ $schema: 'https://opencode.ai/config.json' });
       });

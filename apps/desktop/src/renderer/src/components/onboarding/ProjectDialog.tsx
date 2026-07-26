@@ -83,7 +83,7 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
             <p>
               {mode === 'create'
                 ? 'Set everything up here — no files to edit.'
-                : 'Forgeboard contacts this address to download the project.'}
+                : 'Artemis contacts this address to download the project.'}
             </p>
           </div>
           <WorkspaceTooltip content="Close without creating or cloning a project">
@@ -151,7 +151,7 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
           </label>
         ) : (
           <div className="impact-box">
-            <strong>Before Forgeboard connects</strong>
+            <strong>Before Artemis connects</strong>
             <span>Download from: {remote || 'not entered yet'}</span>
             <span>Save to: {cloneDestination || 'not chosen yet'}</span>
             <span>Your passwords and sign-in details are never stored.</span>

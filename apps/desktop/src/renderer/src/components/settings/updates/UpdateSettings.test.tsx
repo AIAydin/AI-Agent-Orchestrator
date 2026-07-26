@@ -39,7 +39,7 @@ describe('UpdateSettings', () => {
           id: 10,
           version: '0.2.0',
           tagName: 'v0.2.0',
-          name: 'Forgeboard 0.2.0',
+          name: 'Artemis 0.2.0',
           url: 'https://github.com/AIAydin/AI-Agent-Orchestrator/releases/tag/v0.2.0',
           publishedAt: '2026-07-17T12:00:00.000Z',
           prerelease: true,
@@ -49,7 +49,7 @@ describe('UpdateSettings', () => {
     render(<Harness />);
     expect(check).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
-    await screen.findByText(/Forgeboard 0.2.0 is available/u);
+    await screen.findByText(/Artemis 0.2.0 is available/u);
     expect(check).toHaveBeenCalledWith({ channel: 'prerelease' });
     fireEvent.click(screen.getByRole('button', { name: 'Review release on GitHub' }));
     await waitFor(() => expect(openRelease).toHaveBeenCalledWith({ releaseId: 10 }));

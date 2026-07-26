@@ -94,7 +94,7 @@ test('room creation, owner administration, audit, and renewal work through the U
     await settings.getByRole('button', { name: /Save settings/u }).click();
     await expect(settings).toBeHidden();
     await owner.page.getByRole('button', { name: /Explore the safe demo/i }).click();
-    await expect(owner.page.locator('.project-switcher')).toContainText('forgeboard-demo');
+    await expect(owner.page.locator('.project-switcher')).toContainText('artemis-demo');
     await owner.page
       .locator('.template-section')
       .getByRole('button', { name: /Product brief/u })

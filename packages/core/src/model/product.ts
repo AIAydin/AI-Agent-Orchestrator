@@ -1,5 +1,7 @@
 export const PRODUCT = Object.freeze({
-  name: 'Forgeboard',
+  name: 'Artemis',
+  // Technical identity stays 'forgeboard' so existing installs keep their
+  // protocol handler, OS app id, and on-disk data directories.
   slug: 'forgeboard',
   protocol: 'forgeboard',
   appId: 'dev.forgeboard.desktop',

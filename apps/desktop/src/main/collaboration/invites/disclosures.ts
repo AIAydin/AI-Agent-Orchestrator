@@ -20,7 +20,7 @@ export function inviteCreateDisclosure(
   return {
     action: 'collaboration-invite-create',
     title: 'Create collaboration invite?',
-    summary: `Forgeboard will create a ${input.role} invite for room ${JSON.stringify(lease.binding.roomId)}.`,
+    summary: `Artemis will create a ${input.role} invite for room ${JSON.stringify(lease.binding.roomId)}.`,
     confirmLabel: 'Create invite',
     destination: destination(lease.binding.managementBaseUrl, lease.binding.roomId),
     details: [
@@ -29,7 +29,7 @@ export function inviteCreateDisclosure(
       { label: 'Maximum uses', value: String(input.maxUses) },
     ],
     warning:
-      'The generated invite is a credential. Forgeboard retains its link only in volatile memory for this connected owner session.',
+      'The generated invite is a credential. Artemis retains its link only in volatile memory for this connected owner session.',
   };
 }
 
@@ -41,7 +41,7 @@ export function inviteListDisclosure(
   return {
     action: 'collaboration-invite-list',
     title: 'Load collaboration invite history?',
-    summary: `Forgeboard will load token-free invite history for room ${JSON.stringify(lease.binding.roomId)}.`,
+    summary: `Artemis will load token-free invite history for room ${JSON.stringify(lease.binding.roomId)}.`,
     confirmLabel: 'Load invites',
     destination: destination(lease.binding.managementBaseUrl, lease.binding.roomId),
     details: [
@@ -63,7 +63,7 @@ export function inviteRedeemDisclosure(
   return {
     action: 'collaboration-invite-redeem',
     title: 'Redeem invite and join collaboration?',
-    summary: `Forgeboard will redeem the selected invite for ${JSON.stringify(input.displayName)} and join its authorized room.`,
+    summary: `Artemis will redeem the selected invite for ${JSON.stringify(input.displayName)} and join its authorized room.`,
     confirmLabel: 'Redeem and join',
     destination: destination(input.managementBaseUrl, 'invite redemption'),
     details: [
@@ -76,7 +76,7 @@ export function inviteRedeemDisclosure(
       { label: 'Reconnect', value: input.reconnect ? 'Enabled' : 'Disabled' },
     ],
     warning:
-      'The invite and returned access credential remain in volatile main-process memory. Forgeboard sends only allowlisted collaboration metadata after joining.',
+      'The invite and returned access credential remain in volatile main-process memory. Artemis sends only allowlisted collaboration metadata after joining.',
   };
 }
 
@@ -92,7 +92,7 @@ export function inviteRevokeDisclosure(
   return {
     action: 'collaboration-invite-revoke',
     title: 'Revoke collaboration invite?',
-    summary: `Forgeboard will revoke the selected invite for room ${JSON.stringify(lease.binding.roomId)}.`,
+    summary: `Artemis will revoke the selected invite for room ${JSON.stringify(lease.binding.roomId)}.`,
     confirmLabel: 'Revoke invite',
     destination: destination(lease.binding.managementBaseUrl, lease.binding.roomId),
     details: [{ label: 'Invite ID', value: inviteId }],

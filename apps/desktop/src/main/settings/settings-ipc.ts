@@ -126,7 +126,7 @@ export class SettingsIpcService {
     this.#handle(IPC_CHANNELS.settingsExport, z.tuple([]), z.string().nullable(), async (event) => {
       const parent = requireSettingsParent(event);
       const selection = await this.dialog.showSaveDialog(parent, {
-        title: 'Export Forgeboard settings',
+        title: 'Export Artemis settings',
         defaultPath: 'forgeboard-settings.json',
         filters: [{ name: 'JSON', extensions: ['json'] }],
       });
@@ -159,7 +159,7 @@ export class SettingsIpcService {
       async (event) => {
         const parent = requireSettingsParent(event);
         const selection = await this.dialog.showOpenDialog(parent, {
-          title: 'Import Forgeboard settings',
+          title: 'Import Artemis settings',
           properties: ['openFile'],
           filters: [{ name: 'JSON', extensions: ['json'] }],
         });
@@ -273,7 +273,7 @@ export class SettingsIpcService {
           error: {
             code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
             message: validation
-              ? 'Forgeboard rejected invalid settings.'
+              ? 'Artemis rejected invalid settings.'
               : error instanceof Error
                 ? error.message
                 : 'The settings operation failed.',
@@ -310,7 +310,7 @@ function requireSettingsParent(event: IpcMainInvokeEvent): BrowserWindow {
   assertLiveMainFrame(event, 'Settings dialog');
   const parent = BrowserWindow.fromWebContents(event.sender);
   if (parent === null || parent.isDestroyed()) {
-    throw new Error('Settings dialogs require a live Forgeboard window.');
+    throw new Error('Settings dialogs require a live Artemis window.');
   }
   return parent;
 }
@@ -318,6 +318,6 @@ function requireSettingsParent(event: IpcMainInvokeEvent): BrowserWindow {
 function assertSettingsParent(event: IpcMainInvokeEvent, parent: BrowserWindow): void {
   assertLiveMainFrame(event, 'Settings dialog');
   if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
-    throw new Error('The originating Forgeboard window changed during the settings dialog.');
+    throw new Error('The originating Artemis window changed during the settings dialog.');
   }
 }

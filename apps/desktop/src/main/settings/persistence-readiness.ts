@@ -109,7 +109,7 @@ export class SettingsPersistenceReadinessVerifier {
   async #verifyDocker(request: DockerReadinessInput): Promise<void> {
     if (this.docker === undefined) {
       throw new Error(
-        'Docker readiness verification is unavailable. Restart Forgeboard and try again.',
+        'Docker readiness verification is unavailable. Restart Artemis and try again.',
       );
     }
     await this.docker.requireSettingsReadiness(request);

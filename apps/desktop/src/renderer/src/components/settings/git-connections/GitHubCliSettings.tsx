@@ -79,7 +79,7 @@ export function GitHubCliSettings({
       <div
         className="git-connections-actions"
         role="group"
-        aria-label="How Forgeboard finds GitHub CLI"
+        aria-label="How Artemis finds GitHub CLI"
       >
         <button
           className="button"
@@ -100,7 +100,7 @@ export function GitHubCliSettings({
       </div>
       <small>
         Automatic looks in the usual install locations. A chosen file is saved only after you review
-        and confirm it and Forgeboard checks its version. Pushing code does not need the GitHub CLI.
+        and confirm it and Artemis checks its version. Pushing code does not need the GitHub CLI.
       </small>
     </section>
   );

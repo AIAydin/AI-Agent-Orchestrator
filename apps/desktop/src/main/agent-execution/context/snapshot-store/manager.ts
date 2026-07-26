@@ -91,7 +91,7 @@ interface StorageOwner {
  * writes one marker-bound instance directory per parent; fresh processes remove only fully
  * validated prior instances. Production initializes the singleton only after Electron acquires its
  * single-instance lock, and this manager initializes each parent once before creating its own UUID,
- * so no live Forgeboard instance can be among the children it scavenges.
+ * so no live Artemis instance can be among the children it scavenges.
  */
 export class ContextSnapshotStorageManager {
   readonly #hostBasePath: string;
@@ -489,7 +489,7 @@ let defaultHostBasePath = process.platform === 'win32' ? undefined : tmpdir();
 export async function initializeHostContextSnapshotStorage(hostBasePath?: string): Promise<void> {
   if (process.platform === 'win32' && hostBasePath === undefined) {
     throw new Error(
-      "Windows context snapshot storage requires Forgeboard's per-user application-data folder.",
+      "Windows context snapshot storage requires Artemis's per-user application-data folder.",
     );
   }
   const selectedBase = hostBasePath ?? tmpdir();
@@ -509,7 +509,7 @@ export async function createContextSnapshotDirectory(
 ): Promise<ContextSnapshotDirectoryLease> {
   if (defaultManager === undefined) {
     throw new Error(
-      'Windows context snapshot storage is not initialized for this user. Reopen Forgeboard before running an agent with context.',
+      'Windows context snapshot storage is not initialized for this user. Reopen Artemis before running an agent with context.',
     );
   }
   return await defaultManager.createSnapshotDirectory(request);

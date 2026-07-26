@@ -87,13 +87,13 @@ test('startup restores a corrupt local database from the verified backup chosen 
       {
         kind: 'message',
         title: 'Local data needs recovery',
-        buttons: ['Quit Forgeboard', 'Choose verified backup'],
+        buttons: ['Quit Artemis', 'Choose verified backup'],
         cancelId: 0,
         defaultId: 0,
       },
       {
         kind: 'open',
-        title: 'Choose a verified Forgeboard backup',
+        title: 'Choose a verified Artemis backup',
         buttonLabel: 'Choose backup',
         properties: ['openFile'],
       },

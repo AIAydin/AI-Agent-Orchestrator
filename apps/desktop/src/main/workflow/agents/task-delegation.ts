@@ -54,7 +54,7 @@ export function workflowTaskPrompt(task: CanonicalTaskNode, projectId: string): 
         })`,
     );
   const prompt = [
-    '# Forgeboard task execution',
+    '# Artemis task execution',
     '',
     `Title: ${task.title}`,
     `Priority: ${task.data.priority}`,

@@ -18,7 +18,7 @@ interface GitWorktreeCleanupController {
 function cleanupErrorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
-    : "Forgeboard couldn't finish cleaning up the agent's workspace. Try again.";
+    : "Artemis couldn't finish cleaning up the agent's workspace. Try again.";
 }
 
 function cleanupCompleted(result: GitWorktreeCleanupResultView): boolean {
@@ -85,7 +85,7 @@ export function useGitWorktreeCleanup(
       if (result !== null && result !== undefined && !cleanupCompleted(result)) {
         reportError(
           new Error(
-            "Forgeboard couldn't confirm that the workspace, branch, and run details were all removed. Refresh the run history before continuing.",
+            "Artemis couldn't confirm that the workspace, branch, and run details were all removed. Refresh the run history before continuing.",
           ),
         );
         return undefined;

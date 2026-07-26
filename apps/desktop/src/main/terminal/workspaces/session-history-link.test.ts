@@ -14,8 +14,7 @@ import {
 
 const HOME = '/Users/owner';
 const PROJECT = '/Users/owner/earth-sim';
-const WORKTREE =
-  '/Users/owner/Documents/Forgeboard/worktrees/earth-sim-212463c611/claude-9d21e85ba0';
+const WORKTREE = '/Users/owner/Documents/Artemis/worktrees/earth-sim-212463c611/claude-9d21e85ba0';
 
 interface FakeFileSystem extends SessionHistoryFileSystem {
   readonly createdDirectories: string[];
@@ -85,8 +84,8 @@ describe('claudeHistoryDirectoryName', () => {
       '-Users-aydin-Library-Mobile-Documents-com-apple-CloudDocs-Symbiom-Website',
     ],
     [
-      '/Users/aydin/Documents/Forgeboard/worktrees/earth-sim-212463c611/claude-0892574e49',
-      '-Users-aydin-Documents-Forgeboard-worktrees-earth-sim-212463c611-claude-0892574e49',
+      '/Users/aydin/Documents/Artemis/worktrees/earth-sim-212463c611/claude-0892574e49',
+      '-Users-aydin-Documents-Artemis-worktrees-earth-sim-212463c611-claude-0892574e49',
     ],
   ])('encodes %s', (cwd, expected) => {
     expect(claudeHistoryDirectoryName(cwd)).toBe(expected);

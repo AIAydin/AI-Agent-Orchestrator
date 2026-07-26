@@ -206,7 +206,7 @@ export class GitTargetResolver {
     } catch (error) {
       throw new GitTargetResolutionError(
         'OWNERSHIP_UNAVAILABLE',
-        "Forgeboard's ownership record for this agent worktree is missing or invalid.",
+        "Artemis's ownership record for this agent worktree is missing or invalid.",
         { cause: error },
       );
     }
@@ -218,7 +218,7 @@ export class GitTargetResolver {
     } catch (error) {
       throw new GitTargetResolutionError(
         'OWNERSHIP_MISMATCH',
-        "This agent worktree no longer matches Forgeboard's record for it.",
+        "This agent worktree no longer matches Artemis's record for it.",
         { cause: error },
       );
     }
@@ -347,7 +347,7 @@ function completeBinding(run: StoredRunRecord): CompleteRunBinding {
   ) {
     throw new GitTargetResolutionError(
       'LEGACY_RUN_BINDING',
-      'This older run is missing the saved workspace records Forgeboard needs for a safe review.',
+      'This older run is missing the saved workspace records Artemis needs for a safe review.',
     );
   }
   return {

@@ -144,7 +144,7 @@ const REVIEW: ProviderConnectionNativeReview = {
     expiresAt: '2026-07-17T12:05:00.000Z',
   },
   providerName: 'OpenAI Codex',
-  providerDisclosure: 'Codex may contact OpenAI and Forgeboard stores no OAuth token.',
+  providerDisclosure: 'Codex may contact OpenAI and Artemis stores no OAuth token.',
   executable: '/usr/local/bin/codex',
   executableSha256: 'a'.repeat(64),
   validationArguments: [['--version']],

@@ -33,7 +33,7 @@ export function TrustCenter({
         setReport(await runIntegrityCheck({ mode }));
       } catch {
         setReport(null);
-        setError('The check could not finish. Try again, or restart Forgeboard.');
+        setError('The check could not finish. Try again, or restart Artemis.');
       } finally {
         setCheckingMode(null);
       }
@@ -48,7 +48,7 @@ export function TrustCenter({
   return (
     <SettingsSection
       title="Trust Center"
-      description="Check that Forgeboard’s records on this device are complete and unchanged."
+      description="Check that Artemis’s records on this device are complete and unchanged."
     >
       <div className="trust-check-modes" aria-label="Integrity check options">
         <div>

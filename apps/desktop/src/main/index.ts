@@ -1,5 +1,5 @@
-import { appendFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { appendFileSync, existsSync, renameSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
 import { app, BrowserWindow, dialog, ipcMain, protocol, session, shell } from 'electron';
@@ -55,6 +55,28 @@ traceE2eStartup('scheme-registered');
 app.setName(PRODUCT.name);
 const packagedSmokeProfile = configurePackagedSmokeProfile(app, process.argv);
 
+// One-time rebrand migration: renaming the app from Forgeboard to Artemis moves
+// Electron's default userData directory. Carry the existing profile across so
+// installs keep their settings, projects, and canvases. Custom profiles
+// (--user-data-dir, smoke mode) never match the default basename and are left alone.
+if (packagedSmokeProfile === null) {
+  const userData = app.getPath('userData');
+  if (basename(userData) === PRODUCT.name && !existsSync(userData)) {
+    const legacyUserData = join(dirname(userData), 'Forgeboard');
+    if (existsSync(legacyUserData)) {
+      try {
+        renameSync(legacyUserData, userData);
+      } catch (error) {
+        process.stderr.write(
+          `Artemis could not adopt the Forgeboard data directory: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }\n`,
+        );
+      }
+    }
+  }
+}
+
 traceE2eStartup('single-instance-lock-requested');
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 traceE2eStartup(
@@ -81,9 +103,7 @@ void app
     );
     traceE2eStartup('context-storage-attempted');
     if (!contextSnapshotStorage.ready) {
-      process.stderr.write(
-        `Forgeboard context startup deferred: ${contextSnapshotStorage.reason}\n`,
-      );
+      process.stderr.write(`Artemis context startup deferred: ${contextSnapshotStorage.reason}\n`);
     }
     const userDataPath = app.getPath('userData');
     const databasePath = join(userDataPath, 'forgeboard.sqlite');
@@ -126,7 +146,7 @@ void app
         const decision = await dialog.showMessageBox(parent, {
           type: 'warning',
           title: 'Open link in your browser?',
-          message: 'The preview wants to open a page outside Forgeboard.',
+          message: 'The preview wants to open a page outside Artemis.',
           detail: url,
           buttons: ['Cancel', 'Open in browser'],
           defaultId: 0,
@@ -185,7 +205,7 @@ void app
   })
   .catch(async (error: unknown) => {
     process.stderr.write(
-      `Forgeboard failed to start: ${error instanceof Error ? error.message : 'unknown error'}\n`,
+      `Artemis failed to start: ${error instanceof Error ? error.message : 'unknown error'}\n`,
     );
     if (packagedSmokeProfile !== null) {
       quitReady = true;
@@ -194,7 +214,7 @@ void app
         await disposeApplication();
       } catch (cleanupError) {
         process.stderr.write(
-          `Forgeboard smoke cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : 'unknown error'}\n`,
+          `Artemis smoke cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : 'unknown error'}\n`,
         );
       }
       app.exit(1);
@@ -238,7 +258,7 @@ app.on('before-quit', (event) => {
     },
     (error: unknown) => {
       process.stderr.write(
-        `Forgeboard failed to stop cleanly: ${error instanceof Error ? error.message : 'unknown error'}\n`,
+        `Artemis failed to stop cleanly: ${error instanceof Error ? error.message : 'unknown error'}\n`,
       );
       quitReady = true;
       app.exit(1);
@@ -259,7 +279,7 @@ async function attemptApplicationQuit(): Promise<boolean> {
     const options = {
       type: 'warning' as const,
       title: 'Backup failed before quitting',
-      message: 'Forgeboard could not create the final backup it makes when quitting.',
+      message: 'Artemis could not create the final backup it makes when quitting.',
       detail: `${detail}\n\nYour work was saved, but no fresh backup copy was made.`,
       buttons: ['Cancel quit', 'Quit without a fresh backup'],
       defaultId: 0,

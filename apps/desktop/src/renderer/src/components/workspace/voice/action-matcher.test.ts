@@ -83,7 +83,7 @@ describe('voice intent matching', () => {
   });
 
   it('survives politeness, fillers, and punctuation', () => {
-    expect(matchedId('Forgeboard, could you please start up a codex agent now?')).toBe(
+    expect(matchedId('Artemis, could you please start up a codex agent now?')).toBe(
       'add-agent-codex',
     );
     expect(matchedId('okay, I want to open the settings')).toBe('settings');
@@ -123,7 +123,7 @@ describe('voice intent matching', () => {
 
 describe('normalizeVoicePhrase', () => {
   it('lowercases, strips punctuation, politeness, and articles', () => {
-    expect(normalizeVoicePhrase('Forgeboard, please Connect the Hermes!')).toBe('connect hermes');
+    expect(normalizeVoicePhrase('Artemis, please Connect the Hermes!')).toBe('connect hermes');
     expect(normalizeVoicePhrase('Could you link an Agent?')).toBe('link agent');
   });
 });

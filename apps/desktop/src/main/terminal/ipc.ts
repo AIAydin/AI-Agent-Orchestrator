@@ -282,7 +282,7 @@ export class TerminalIpcService {
     try {
       this.#assertNotDisposed();
       if (this.#paused)
-        throw new Error('Terminal operations are paused while Forgeboard changes local data.');
+        throw new Error('Terminal operations are paused while Artemis changes local data.');
       this.#requireWindow(event);
       this.#ownerId(event.sender);
       const args = inputSchema.parse(rawArgs);
@@ -296,7 +296,7 @@ export class TerminalIpcService {
           code: error instanceof z.ZodError ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message:
             error instanceof z.ZodError
-              ? 'Forgeboard rejected an invalid terminal request.'
+              ? 'Artemis rejected an invalid terminal request.'
               : error instanceof Error
                 ? error.message
                 : 'The terminal operation failed.',
@@ -308,7 +308,7 @@ export class TerminalIpcService {
   #ownerId(owner: WebContents): string {
     if (this.#owner === owner) return this.#applicationOwnerId;
     if (this.#owner !== null && !this.#owner.isDestroyed()) {
-      throw new Error('Another live Forgeboard window is already connected to these terminals.');
+      throw new Error('Another live Artemis window is already connected to these terminals.');
     }
     this.#owner = owner;
     owner.once('destroyed', () => {
@@ -330,7 +330,7 @@ export class TerminalIpcService {
     assertLiveMainFrame(event, 'Terminal operation');
     const parent = this.resolveWindow(event);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required for this terminal operation.');
+      throw new Error('A live Artemis window is required for this terminal operation.');
     }
     return parent;
   }
@@ -343,7 +343,7 @@ export class TerminalIpcService {
       (ownerId !== undefined &&
         (ownerId !== this.#applicationOwnerId || this.#owner !== event.sender))
     ) {
-      throw new Error('The originating Forgeboard terminal window changed or closed.');
+      throw new Error('The originating Artemis terminal window changed or closed.');
     }
   }
 

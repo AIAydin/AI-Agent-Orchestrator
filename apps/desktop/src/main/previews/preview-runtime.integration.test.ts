@@ -21,7 +21,7 @@ const host = process.env.HOST;
 const port = Number(process.env.PORT);
 const server = http.createServer((request, response) => {
   response.writeHead(200, { 'content-type': 'text/html' });
-  response.end('<!doctype html><title>Forgeboard preview proof</title><h1>local preview ready</h1>');
+  response.end('<!doctype html><title>Artemis preview proof</title><h1>local preview ready</h1>');
 });
 server.listen(port, host, () => process.stdout.write('preview-ready\\n'));
 const close = () => server.close(() => process.exit(0));
@@ -176,9 +176,7 @@ describe('PreviewRuntime', () => {
     const restartedUrl = restarted.processes[0]?.previewUrl ?? '';
     await runtime.resetForPrivacy();
     expect(runtime.isAllowedFrameNavigation(restartedUrl)).toBe(false);
-    expect(() => runtime?.get('owner-a', input)).toThrow(
-      'paused while Forgeboard deletes local data',
-    );
+    expect(() => runtime?.get('owner-a', input)).toThrow('paused while Artemis deletes local data');
     await expect(fetch(restartedUrl)).rejects.toThrow();
 
     runtime.resumeAfterPrivacyReset();

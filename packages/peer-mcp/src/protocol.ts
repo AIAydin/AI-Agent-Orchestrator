@@ -229,7 +229,7 @@ const TOOLS = [
   {
     name: 'click_preview_element',
     description:
-      'Request one click on an opaque element handle. Forgeboard shows the user a native allow-once dialog and revalidates the tab, origin, page, and element after approval. Login, permission, download, upload, payment, secret, and popup controls are blocked.',
+      'Request one click on an opaque element handle. Artemis shows the user a native allow-once dialog and revalidates the tab, origin, page, and element after approval. Login, permission, download, upload, payment, secret, and popup controls are blocked.',
     inputSchema: {
       type: 'object',
       properties: {

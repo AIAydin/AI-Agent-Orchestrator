@@ -61,7 +61,7 @@ export class BrowserCompanionIpcService {
           requireMainFrame(event);
           const input = BrowserCompanionNodeKeySchema.parse(rawInput);
           const parent = BrowserWindow.fromWebContents(event.sender);
-          if (parent === null || parent.isDestroyed()) throw new Error('Forgeboard window closed.');
+          if (parent === null || parent.isDestroyed()) throw new Error('Artemis window closed.');
           const decision = await this.dialog.showMessageBox(parent, {
             type: 'warning',
             title: 'Clear saved Chrome sign-in data?',
@@ -168,6 +168,6 @@ export class BrowserCompanionIpcService {
 
 function requireMainFrame(event: IpcMainInvokeEvent): void {
   if (event.senderFrame !== event.sender.mainFrame) {
-    throw new Error('Chrome companion requests require the active Forgeboard main frame.');
+    throw new Error('Chrome companion requests require the active Artemis main frame.');
   }
 }

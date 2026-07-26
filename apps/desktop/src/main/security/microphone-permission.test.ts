@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { allowsForgeboardMicrophone } from './microphone-permission.js';
 
 describe('microphone permission policy', () => {
-  it('allows audio only for the opted-in main Forgeboard window', () => {
+  it('allows audio only for the opted-in main Artemis window', () => {
     expect(
       allowsForgeboardMicrophone({
         permission: 'media',

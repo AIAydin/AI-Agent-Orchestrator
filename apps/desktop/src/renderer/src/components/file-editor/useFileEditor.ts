@@ -110,7 +110,7 @@ export function useFileEditor(
       })
       .catch((cause: unknown) => {
         if (requestVersionRef.current !== requestVersion) return;
-        const failure = operationFailure(cause, "Forgeboard couldn't open this file. Try again.");
+        const failure = operationFailure(cause, "Artemis couldn't open this file. Try again.");
         setStatus(failure.code === 'FILE_NOT_FOUND' ? 'missing' : 'error');
         setMessage({ kind: 'error', text: failure.message });
       });
@@ -159,7 +159,7 @@ export function useFileEditor(
       setMessage({ kind: 'success', text: 'File saved.' });
     } catch (cause) {
       if (targetKeyRef.current !== operationTarget) return;
-      const failure = operationFailure(cause, "Forgeboard couldn't save this file. Try again.");
+      const failure = operationFailure(cause, "Artemis couldn't save this file. Try again.");
       if (failure.code === 'FILE_NOT_FOUND') setStatus('missing');
       setMessage({ kind: 'error', text: failure.message });
     } finally {
@@ -194,10 +194,7 @@ export function useFileEditor(
       });
     } catch (cause) {
       if (targetKeyRef.current !== operationTarget) return;
-      const failure = operationFailure(
-        cause,
-        "Forgeboard couldn't reload the saved file. Try again.",
-      );
+      const failure = operationFailure(cause, "Artemis couldn't reload the saved file. Try again.");
       if (failure.code === 'FILE_NOT_FOUND') setStatus('missing');
       setMessage({ kind: 'error', text: failure.message });
     } finally {
@@ -217,7 +214,7 @@ export function useFileEditor(
       if (targetKeyRef.current !== operationTarget) return;
       const failure = operationFailure(
         cause,
-        "Forgeboard couldn't show this file in your file manager. Try again.",
+        "Artemis couldn't show this file in your file manager. Try again.",
       );
       if (failure.code === 'FILE_NOT_FOUND') setStatus('missing');
       setMessage({ kind: 'error', text: failure.message });
@@ -238,7 +235,7 @@ export function useFileEditor(
       if (targetKeyRef.current !== operationTarget) return;
       const failure = operationFailure(
         cause,
-        "Forgeboard couldn't open this file in another app. Try again.",
+        "Artemis couldn't open this file in another app. Try again.",
       );
       if (failure.code === 'FILE_NOT_FOUND') setStatus('missing');
       setMessage({ kind: 'error', text: failure.message });

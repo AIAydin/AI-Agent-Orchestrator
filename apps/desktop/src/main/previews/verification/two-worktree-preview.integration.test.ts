@@ -386,7 +386,7 @@ async function createFixture(): Promise<Fixture> {
     realpath(managedRootPath),
   ]);
   await runGit(repository, ['init', '-b', 'main']);
-  await runGit(repository, ['config', 'user.name', 'Forgeboard Preview Verification']);
+  await runGit(repository, ['config', 'user.name', 'Artemis Preview Verification']);
   await runGit(repository, ['config', 'user.email', 'preview@example.invalid']);
   await Promise.all([
     writeFile(path.join(repository, 'README.md'), '# preview fixture\n', 'utf8'),

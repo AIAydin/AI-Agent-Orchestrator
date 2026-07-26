@@ -34,19 +34,19 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
   it('accepts Windows canonicalization differences after component link validation', () => {
     expect(
       sameCanonicalPath(
-        'C:\\Users\\RunnerAdmin\\AppData\\Local\\Temp\\Forgeboard',
-        'C:\\Users\\RUNNERADMIN\\AppData\\Local\\Temp\\Forgeboard',
+        'C:\\Users\\RunnerAdmin\\AppData\\Local\\Temp\\Artemis',
+        'C:\\Users\\RUNNERADMIN\\AppData\\Local\\Temp\\Artemis',
         'win32',
       ),
     ).toBe(true);
     expect(
       sameCanonicalPath(
-        'C:\\Users\\RunnerAdmin\\AppData\\Local\\Temp\\Forgeboard',
-        'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\Forgeboard',
+        'C:\\Users\\RunnerAdmin\\AppData\\Local\\Temp\\Artemis',
+        'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\Artemis',
         'win32',
       ),
     ).toBe(true);
-    expect(sameCanonicalPath('/tmp/Forgeboard', '/tmp/forgeboard', 'linux')).toBe(false);
+    expect(sameCanonicalPath('/tmp/Artemis', '/tmp/forgeboard', 'linux')).toBe(false);
   });
 
   it('reconciles before a healthy first open and presents no recovery UI', async () => {
@@ -225,7 +225,7 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
     expect(createStore).not.toHaveBeenCalled();
     expect(dialog.showMessageBox).toHaveBeenCalledWith(
       expect.objectContaining({
-        buttons: ['Quit Forgeboard', 'Choose verified backup'],
+        buttons: ['Quit Artemis', 'Choose verified backup'],
         defaultId: 0,
       }),
     );
@@ -429,7 +429,7 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
   });
 
   it.each([
-    ['newer' as const, 'A newer Forgeboard version is required'],
+    ['newer' as const, 'A newer Artemis version is required'],
     ['unavailable' as const, 'Local data is unavailable'],
   ])('does not offer restore for %s provenance', async (reason, expectedTitle) => {
     const root = await fixtureRoot();
@@ -459,7 +459,7 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
     expect(dialog.showMessageBox).toHaveBeenCalledWith(
       expect.objectContaining({
         title: expectedTitle,
-        buttons: ['Quit Forgeboard'],
+        buttons: ['Quit Artemis'],
       }),
     );
   });
@@ -490,7 +490,7 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
     ).resolves.toBeNull();
     expect(dialog.showMessageBox).toHaveBeenCalledWith(
       expect.objectContaining({
-        buttons: ['Quit Forgeboard', 'Choose verified backup'],
+        buttons: ['Quit Artemis', 'Choose verified backup'],
         defaultId: 0,
       }),
     );

@@ -11,7 +11,7 @@ describe('BootstrapScreen', () => {
   it('announces an honest loading state', () => {
     const { container } = render(<BootstrapScreen error={null} onRetry={vi.fn()} />);
 
-    expect(screen.getByRole('status').textContent).toBe('Opening Forgeboard…');
+    expect(screen.getByRole('status').textContent).toBe('Opening Artemis…');
     expect(container.querySelector('main')?.getAttribute('aria-busy')).toBe('true');
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });

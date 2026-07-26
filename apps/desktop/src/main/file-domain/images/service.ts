@@ -73,7 +73,7 @@ export class ProjectImageService {
         throw new FileDomainError('NOT_A_FILE', loaded.view.message);
       }
       if (loaded.sha256 === undefined) {
-        throw new FileDomainError('IO_ERROR', 'Forgeboard could not verify the selected image.');
+        throw new FileDomainError('IO_ERROR', 'Artemis could not verify the selected image.');
       }
       return {
         projectId: parsed.projectId,

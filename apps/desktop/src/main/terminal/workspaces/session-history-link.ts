@@ -3,7 +3,7 @@ import { lstat, mkdir, stat, symlink } from 'node:fs/promises';
 import path from 'node:path';
 
 /**
- * Every built-in agent CLI keys its session history by *something*. A Forgeboard managed worktree
+ * Every built-in agent CLI keys its session history by *something*. A Artemis managed worktree
  * is a brand-new directory, so any CLI that keys history by the working directory starts with an
  * empty history there: its resume picker reports "No sessions yet" even though the owner has years
  * of sessions for the project the worktree was cut from.
@@ -14,7 +14,7 @@ import path from 'node:path';
 interface CwdDirectorySessionHistoryStrategy {
   /**
    * History lives in one directory per working directory, named by a pure function of that
-   * directory's absolute path. Forgeboard can make the worktree's directory *be* the project's by
+   * directory's absolute path. Artemis can make the worktree's directory *be* the project's by
    * creating it as a symbolic link before the CLI ever runs.
    */
   readonly kind: 'cwd-directory';
@@ -26,10 +26,10 @@ interface CwdDirectorySessionHistoryStrategy {
 interface OpaqueSessionHistoryStrategy {
   /**
    * `repository-keyed`: history already follows the repository, so a worktree shares the project's
-   * sessions with no help from Forgeboard.
+   * sessions with no help from Artemis.
    *
    * `global-cwd-filtered`: history is one global store whose records merely *record* their cwd, so
-   * there is no per-directory location to link. Nothing Forgeboard creates on disk can widen the
+   * there is no per-directory location to link. Nothing Artemis creates on disk can widen the
    * CLI's own filter.
    */
   readonly kind: 'repository-keyed' | 'global-cwd-filtered';

@@ -44,7 +44,7 @@ export const UpdateReleaseSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['url'],
-        message: 'Use the exact official Forgeboard release URL.',
+        message: 'Use the exact official Artemis release URL.',
       });
     }
     if (release.tagName !== `v${release.version}`) {

@@ -56,7 +56,7 @@ export function WorkspaceStatusIndicators({
       <WorkspaceTooltip
         content={
           !projectStatusAvailable
-            ? 'Forgeboard could not verify this project folder or its current Git state.'
+            ? 'Artemis could not verify this project folder or its current Git state.'
             : branch === null
               ? 'This project is not a Git repository.'
               : `${project.health.dirty ? 'Uncommitted changes on' : 'Current branch'} ${branch}`

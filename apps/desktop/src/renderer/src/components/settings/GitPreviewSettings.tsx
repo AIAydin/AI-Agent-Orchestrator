@@ -47,7 +47,7 @@ export function GitPreviewSettings({
               Browse
             </button>
           </span>
-          <small>Forgeboard asks before deleting a worktree or branch.</small>
+          <small>Artemis asks before deleting a worktree or branch.</small>
           <FolderReadinessEvidence status={managedWorktreeReadiness} />
         </div>
         {draft.worktreeCleanupPolicy !== 'manual' && (
@@ -68,7 +68,7 @@ export function GitPreviewSettings({
       </SettingsSection>
       <SettingsSection
         title="Previews"
-        description="The local ports Forgeboard uses to open app previews."
+        description="The local ports Artemis uses to open app previews."
       >
         <div className="two-column">
           <label>

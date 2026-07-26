@@ -136,7 +136,7 @@ export function GitShippingDisclosure({
             {qualityApproval === undefined
               ? 'No one has approved these exact check results yet.'
               : `${displayEscapedText(qualityApproval.actorLabel)} approved these exact check results ${formatTime(qualityApproval.approvedAt)}.`}{' '}
-            Forgeboard re-checks this evidence (
+            Artemis re-checks this evidence (
             <code>{plan.readiness.evidenceFingerprint.slice(0, 12)}</code>) before you confirm and
             again before delivery.
           </small>
@@ -170,7 +170,7 @@ function formatTime(value: string): string {
 }
 
 function identitySource(source: GitShippingPlanView['identity']['nameSource']): string {
-  if (source === 'settings') return 'Forgeboard settings';
+  if (source === 'settings') return 'Artemis settings';
   if (source === 'git-config') return "the primary checkout's Git settings";
   return 'an unknown source';
 }

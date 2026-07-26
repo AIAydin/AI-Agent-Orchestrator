@@ -28,9 +28,9 @@ export function registerPreviewOriginIpc(ipc: IpcMainLike, registry: PreviewOrig
   ipc.handle(IPC_CHANNELS.previewsSetAllowedOrigin, (event, rawInput): IpcResult<null> => {
     try {
       // Mirrors the other preview IPC handlers' trust boundary: only the live
-      // main frame of a Forgeboard window may register an allowed origin.
+      // main frame of a Artemis window may register an allowed origin.
       if (event.senderFrame !== event.sender.mainFrame) {
-        throw new Error('Preview origin registration requires the active Forgeboard main frame.');
+        throw new Error('Preview origin registration requires the active Artemis main frame.');
       }
       const input = PreviewSetAllowedOriginInputSchema.parse(rawInput);
       const origin = validatedAllowedOrigin(input.origin);

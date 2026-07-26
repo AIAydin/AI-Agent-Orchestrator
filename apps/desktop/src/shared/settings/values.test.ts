@@ -9,7 +9,7 @@ import {
 describe('machine-specific settings values', () => {
   it('bounds folders and rejects blank or control-bearing paths', () => {
     expect(MachineSpecificPathSchema.safeParse('/tmp/forgeboard').success).toBe(true);
-    expect(MachineSpecificPathSchema.safeParse('C:\\Forgeboard\\worktrees').success).toBe(true);
+    expect(MachineSpecificPathSchema.safeParse('C:\\Artemis\\worktrees').success).toBe(true);
     expect(MachineSpecificPathSchema.safeParse('relative/worktrees').success).toBe(false);
     expect(MachineSpecificPathSchema.safeParse('   ').success).toBe(false);
     expect(MachineSpecificPathSchema.safeParse(' /tmp/forgeboard').success).toBe(false);

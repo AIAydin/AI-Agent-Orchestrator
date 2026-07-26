@@ -69,7 +69,7 @@ describe('withProcessQuiescence', () => {
     const broken = service('broken', trace, undefined, new Error('resume failed'));
 
     await expect(withProcessQuiescence([broken], () => 'cleaned')).rejects.toThrow(
-      'cleanup finished, but Forgeboard could not restart',
+      'cleanup finished, but Artemis could not restart',
     );
     expect(trace).toEqual(['broken:pause', 'broken:resume']);
   });

@@ -28,7 +28,7 @@ export async function renderMermaidSvg(source: string, render: MermaidRender): P
   return applyInertDiagramTheme(sanitizeSvg(rendered.svg));
 }
 
-/** Adds presentation attributes after sanitization; no Mermaid CSS enters the Forgeboard DOM. */
+/** Adds presentation attributes after sanitization; no Mermaid CSS enters the Artemis DOM. */
 function applyInertDiagramTheme(source: string): string {
   const document = new DOMParser().parseFromString(source, 'image/svg+xml');
   const root = document.documentElement;

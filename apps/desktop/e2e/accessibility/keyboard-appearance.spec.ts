@@ -44,7 +44,7 @@ test('onboarding and appearance controls work with only the keyboard', async () 
         page.getByRole('button', { name: /Explore the safe demo/i }),
         'Enter',
       );
-      await expect(page.locator('.project-switcher')).toContainText('forgeboard-demo');
+      await expect(page.locator('.project-switcher')).toContainText('artemis-demo');
     });
 
     await test.step('theme and reduced-motion choices change real computed presentation', async () => {

@@ -251,7 +251,7 @@ async function createRepository(): Promise<RepositoryFixture> {
   await Promise.all([mkdir(repository), mkdir(home), mkdir(xdgConfigHome)]);
   const fixture = { root, repository, home, xdgConfigHome };
   await runGit(fixture, ['init', '-b', 'main']);
-  await runGit(fixture, ['config', 'user.name', 'Forgeboard Test']);
+  await runGit(fixture, ['config', 'user.name', 'Artemis Test']);
   await runGit(fixture, ['config', 'user.email', 'forgeboard@example.invalid']);
   await writeFile(path.join(repository, 'README.md'), '# fixture\n', 'utf8');
   await runGit(fixture, ['add', '--', 'README.md']);

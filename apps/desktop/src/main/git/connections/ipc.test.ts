@@ -47,7 +47,7 @@ const CLI_PLAN_ID = '30000000-0000-4000-8000-000000000001';
 const REVISION = 'a'.repeat(64);
 const NOW = '2026-07-17T14:00:00.000Z';
 const LOCAL_REPOSITORY_PATH = '/private/forgeboard-e2e/local-backup.git';
-const CUSTOM_GH_PATH = '/Applications/Forgeboard Test Tools/fake-gh';
+const CUSTOM_GH_PATH = '/Applications/Artemis Test Tools/fake-gh';
 const PROJECT_INPUT = { projectId: PROJECT_ID };
 const NETWORK_INPUT = {
   projectId: PROJECT_ID,

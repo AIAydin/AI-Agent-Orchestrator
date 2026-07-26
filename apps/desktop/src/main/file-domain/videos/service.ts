@@ -200,10 +200,7 @@ async function importExternalVideo(root: string, selectedPath: string): Promise<
       throw cause;
     }
   }
-  throw new FileDomainError(
-    'IO_ERROR',
-    'Forgeboard could not choose a unique imported video name.',
-  );
+  throw new FileDomainError('IO_ERROR', 'Artemis could not choose a unique imported video name.');
 }
 
 async function canonicalProjectVideoDirectory(root: string, relativePath: string): Promise<string> {

@@ -17,7 +17,7 @@ export function roomBootstrapDisclosure(
   return disclosure(
     'collaboration-room-bootstrap',
     'Create collaboration room?',
-    `Forgeboard will create room ${JSON.stringify(input.roomId)} and connect as its owner.`,
+    `Artemis will create room ${JSON.stringify(input.roomId)} and connect as its owner.`,
     'Create and connect',
     input,
     [
@@ -42,7 +42,7 @@ export function ownerRecoverDisclosure(
   return disclosure(
     'collaboration-owner-recover',
     'Recover room ownership?',
-    `Forgeboard will rotate the owner credential for room ${JSON.stringify(input.roomId)}.`,
+    `Artemis will rotate the owner credential for room ${JSON.stringify(input.roomId)}.`,
     'Recover and connect',
     input,
     [
@@ -61,7 +61,7 @@ export function ownerRefreshDisclosure(lease: CollaborationInviteSessionLease) {
   return disclosure(
     'collaboration-owner-refresh',
     'Renew owner session?',
-    `Forgeboard will request a fresh expiry for room ${JSON.stringify(lease.binding.roomId)}.`,
+    `Artemis will request a fresh expiry for room ${JSON.stringify(lease.binding.roomId)}.`,
     'Renew session',
     target(lease),
     [{ label: 'Owner ID', value: lease.binding.subject }],
@@ -73,11 +73,11 @@ export function membersListDisclosure(lease: CollaborationInviteSessionLease, af
   return disclosure(
     'collaboration-members-list',
     'Load collaboration members?',
-    `Forgeboard will read a member page for room ${JSON.stringify(lease.binding.roomId)}.`,
+    `Artemis will read a member page for room ${JSON.stringify(lease.binding.roomId)}.`,
     'Load members',
     target(lease),
     [{ label: 'Page cursor', value: after ?? 'First page' }],
-    'Member identities, roles, and concurrency versions will be shown in this Forgeboard window.',
+    'Member identities, roles, and concurrency versions will be shown in this Artemis window.',
   );
 }
 
@@ -88,7 +88,7 @@ export function memberUpdateDisclosure(
   return disclosure(
     'collaboration-member-update',
     'Change collaboration member role?',
-    `Forgeboard will change ${JSON.stringify(input.subject)} to ${input.role}.`,
+    `Artemis will change ${JSON.stringify(input.subject)} to ${input.role}.`,
     'Change role',
     target(lease),
     [
@@ -106,7 +106,7 @@ export function memberRevokeDisclosure(
   return disclosure(
     'collaboration-member-revoke',
     'Revoke collaboration member?',
-    `Forgeboard will revoke access for ${JSON.stringify(input.subject)}.`,
+    `Artemis will revoke access for ${JSON.stringify(input.subject)}.`,
     'Revoke member',
     target(lease),
     [
@@ -121,7 +121,7 @@ export function auditListDisclosure(lease: CollaborationInviteSessionLease, afte
   return disclosure(
     'collaboration-audit-list',
     'Load collaboration audit history?',
-    `Forgeboard will read audit events for room ${JSON.stringify(lease.binding.roomId)}.`,
+    `Artemis will read audit events for room ${JSON.stringify(lease.binding.roomId)}.`,
     'Load audit history',
     target(lease),
     [{ label: 'After sequence', value: String(after) }],

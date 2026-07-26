@@ -17,7 +17,7 @@ const GIT_TIMEOUT_MS = 30_000;
 const REMOTE_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 1024 * 1_024;
 
-export const AGENT_PR_COMMIT_MESSAGE = 'Forgeboard: agent session changes';
+export const AGENT_PR_COMMIT_MESSAGE = 'Artemis: agent session changes';
 
 export interface AgentPrCommandResult {
   readonly stdout: string;

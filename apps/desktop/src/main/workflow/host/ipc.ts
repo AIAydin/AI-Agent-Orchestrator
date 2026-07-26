@@ -558,7 +558,7 @@ export class WorkflowIpcService {
   #claimExecutionOwner(ownerToken: string, executionId: string): boolean {
     const current = this.#executionOwners.get(executionId);
     if (current !== undefined && current !== ownerToken) {
-      throw new Error('The workflow belongs to another Forgeboard window.');
+      throw new Error('The workflow belongs to another Artemis window.');
     }
     if (current === ownerToken) return false;
     this.#executionOwners.set(executionId, ownerToken);
@@ -567,7 +567,7 @@ export class WorkflowIpcService {
 
   #assertExecutionOwner(ownerToken: string, executionId: string): void {
     if (this.#executionOwners.get(executionId) !== ownerToken) {
-      throw new Error('The workflow belongs to another Forgeboard window.');
+      throw new Error('The workflow belongs to another Artemis window.');
     }
   }
 
@@ -608,7 +608,7 @@ export class WorkflowIpcService {
       this.#ownerTokens.get(event.sender) !== ownerToken ||
       this.#owners.get(ownerToken) !== event.sender
     ) {
-      throw new Error('The originating Forgeboard window ownership token is stale.');
+      throw new Error('The originating Artemis window ownership token is stale.');
     }
   }
 
@@ -620,7 +620,7 @@ export class WorkflowIpcService {
   #requireOwnedToken(event: IpcMainInvokeEvent, executionId: string): string {
     const ownerToken = this.#ownerTokens.get(event.sender);
     if (ownerToken === undefined) {
-      throw new Error('The originating Forgeboard window has no workflow ownership token.');
+      throw new Error('The originating Artemis window has no workflow ownership token.');
     }
     this.#assertOwnedInvocation(event, ownerToken, executionId);
     return ownerToken;
@@ -642,7 +642,7 @@ export class WorkflowIpcService {
     this.#assertLiveMainFrame(event);
     const window = this.#resolveWindow(event);
     if (window === null || window.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required for workflow approval.');
+      throw new Error('A live Artemis window is required for workflow approval.');
     }
     return window;
   }
@@ -650,14 +650,14 @@ export class WorkflowIpcService {
   #assertCurrentWindow(event: IpcMainInvokeEvent, expected: BrowserWindow): void {
     this.#assertLiveMainFrame(event);
     if (expected.isDestroyed() || this.#resolveWindow(event) !== expected) {
-      throw new Error('The originating Forgeboard window changed during workflow approval.');
+      throw new Error('The originating Artemis window changed during workflow approval.');
     }
   }
 
   #assertLiveMainFrame(event: IpcMainInvokeEvent): void {
-    if (event.sender.isDestroyed()) throw new Error('The originating Forgeboard window is closed.');
+    if (event.sender.isDestroyed()) throw new Error('The originating Artemis window is closed.');
     if (event.senderFrame !== event.sender.mainFrame) {
-      throw new Error('Workflow operations are allowed only from the main Forgeboard frame.');
+      throw new Error('Workflow operations are allowed only from the main Artemis frame.');
     }
   }
 
@@ -761,8 +761,7 @@ export class WorkflowIpcService {
   ): Promise<IpcResult<Output>> {
     try {
       if (this.#disposed) throw new Error('The workflow service has been disposed.');
-      if (this.#paused)
-        throw new Error('Workflows are paused while Forgeboard changes local data.');
+      if (this.#paused) throw new Error('Workflows are paused while Artemis changes local data.');
       this.#assertLiveMainFrame(event);
       const args = inputSchema.parse(rawArgs);
       let delegateParent: BrowserWindow | null = null;
@@ -774,7 +773,7 @@ export class WorkflowIpcService {
         show: async (options) => {
           const parent = this.#requireLiveWindow(event);
           if (delegateParent !== null && delegateParent !== parent) {
-            throw new Error('The originating Forgeboard window changed during workflow approval.');
+            throw new Error('The originating Artemis window changed during workflow approval.');
           }
           delegateParent = parent;
           const result = await this.dialog.showMessageBox(parent, options);
@@ -799,7 +798,7 @@ export class WorkflowIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid workflow request.'
+            ? 'Artemis rejected an invalid workflow request.'
             : error instanceof Error
               ? error.message
               : 'The workflow operation failed.',
@@ -876,7 +875,7 @@ function launchConfirmation(approval: WorkflowHostState['approvals'][number]): M
       'What will run:',
       JSON.stringify(approval.disclosure, null, 2),
       '',
-      'Forgeboard checks that nothing changed before starting.',
+      'Artemis checks that nothing changed before starting.',
     ]),
     buttons: ['Cancel', 'Run node'],
     defaultId: 0,
@@ -902,7 +901,7 @@ function semanticDecisionConfirmation(
       '',
       `Evidence ID: ${input.evidenceFingerprint}`,
       '',
-      'Forgeboard checks that this is still the current evidence before saving the decision.',
+      'Artemis checks that this is still the current evidence before saving the decision.',
     ]),
     buttons: ['Cancel', 'Save decision'],
     defaultId: 0,
@@ -932,7 +931,7 @@ function revisionEscapeConfirmation(
       '',
       `Evidence ID: ${request.evidenceFingerprint}`,
       '',
-      'Failed checks still stand. Forgeboard checks the loop evidence again before applying this decision.',
+      'Failed checks still stand. Artemis checks the loop evidence again before applying this decision.',
     ]),
     buttons: ['Cancel', decision === 'accept' ? 'Accept result' : 'Cancel workflow'],
     defaultId: 0,
@@ -946,8 +945,7 @@ function cancelConfirmation(): MessageBoxOptions {
     type: 'warning',
     title: 'Cancel workflow',
     message: 'Cancel this workflow and stop everything it is running?',
-    detail:
-      'Forgeboard stops every running step and saves the final result. This can take a moment.',
+    detail: 'Artemis stops every running step and saves the final result. This can take a moment.',
     buttons: ['Keep running', 'Cancel workflow'],
     defaultId: 0,
     cancelId: 0,
@@ -960,7 +958,7 @@ function nodeCancelConfirmation(nodeId: string): MessageBoxOptions {
     type: 'warning',
     title: 'Cancel workflow node',
     message: 'Stop only this run of the workflow node?',
-    detail: `Node: ${nodeId}\n\nForgeboard checks that nothing changed before stopping it.`,
+    detail: `Node: ${nodeId}\n\nArtemis checks that nothing changed before stopping it.`,
     buttons: ['Keep running', 'Cancel node'],
     defaultId: 0,
     cancelId: 0,

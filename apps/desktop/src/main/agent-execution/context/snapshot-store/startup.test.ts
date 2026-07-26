@@ -8,7 +8,7 @@ describe('context snapshot storage startup', () => {
 
     await expect(
       attemptContextSnapshotStorageStartup(
-        'C:\\Users\\Aydin\\AppData\\Roaming\\Forgeboard',
+        'C:\\Users\\Aydin\\AppData\\Roaming\\Artemis',
         initialize,
       ),
     ).resolves.toEqual({ ready: true });
@@ -19,7 +19,7 @@ describe('context snapshot storage startup', () => {
     const initialize = vi.fn(async () => await Promise.reject(failure));
 
     const result = await attemptContextSnapshotStorageStartup(
-      'C:\\Users\\Aydin\\AppData\\Roaming\\Forgeboard',
+      'C:\\Users\\Aydin\\AppData\\Roaming\\Artemis',
       initialize,
     );
 

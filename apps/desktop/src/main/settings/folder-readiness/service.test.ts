@@ -122,7 +122,7 @@ describe('FolderReadinessService', () => {
     expect(result).toMatchObject({
       state: 'unavailable',
       ready: false,
-      reason: 'Forgeboard does not have permission to access the selected folder.',
+      reason: 'Artemis does not have permission to access the selected folder.',
     });
     expect(result.reason).not.toContain('/private/canonical/backups');
   });
@@ -208,7 +208,7 @@ describe('FolderReadinessService', () => {
     const assertSafeParent = vi.fn(() =>
       Promise.reject(
         new Error(
-          'Forgeboard could not verify Windows folder permissions. Choose a private folder inside your Windows profile.',
+          'Artemis could not verify Windows folder permissions. Choose a private folder inside your Windows profile.',
         ),
       ),
     );

@@ -385,7 +385,7 @@ describe('DockerIpcService', () => {
     await fixture.service.pauseForShutdown();
     resolution.resolve(canonicalInput.dockerExecutable);
 
-    await expect(verification).rejects.toThrow('paused while Forgeboard quits');
+    await expect(verification).rejects.toThrow('paused while Artemis quits');
     fixture.service.resumeAfterShutdownPause();
     await fixture.service.dispose();
   });

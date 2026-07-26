@@ -40,7 +40,7 @@ describe('openStoreWithStartupRecovery', () => {
     expect(fixture.chooseVerifiedBackup).not.toHaveBeenCalled();
     expect(fixture.restoreVerifiedBackup).not.toHaveBeenCalled();
     expect(firstDialogOptions(fixture)).toMatchObject({
-      buttons: ['Quit Forgeboard', 'Choose verified backup'],
+      buttons: ['Quit Artemis', 'Choose verified backup'],
       defaultId: 0,
       cancelId: 0,
       noLink: true,
@@ -70,7 +70,7 @@ describe('openStoreWithStartupRecovery', () => {
   });
 
   it.each([
-    ['newer-schema' as const, 'A newer Forgeboard version is required'],
+    ['newer-schema' as const, 'A newer Artemis version is required'],
     ['unavailable' as const, 'Local data is unavailable'],
   ])('offers only Quit for a non-recoverable %s failure', async (kind, title) => {
     const fixture = failedOpenFixture();
@@ -81,7 +81,7 @@ describe('openStoreWithStartupRecovery', () => {
     expect(fixture.restoreVerifiedBackup).not.toHaveBeenCalled();
     expect(firstDialogOptions(fixture)).toMatchObject({
       title,
-      buttons: ['Quit Forgeboard'],
+      buttons: ['Quit Artemis'],
       defaultId: 0,
       cancelId: 0,
     });
@@ -96,7 +96,7 @@ describe('openStoreWithStartupRecovery', () => {
     expect(fixture.openStore).toHaveBeenCalledOnce();
     expect(fixture.restoreVerifiedBackup).not.toHaveBeenCalled();
     expect(firstDialogOptions(fixture).detail).toContain(
-      'Canceling the backup picker will quit Forgeboard.',
+      'Canceling the backup picker will quit Artemis.',
     );
   });
 
@@ -117,7 +117,7 @@ describe('openStoreWithStartupRecovery', () => {
     expect(fixture.dialog.showMessageBox).toHaveBeenCalledTimes(2);
     expect(fixture.dialog.showMessageBox.mock.calls[1]?.[0]).toMatchObject({
       title: 'Recovery record could not be saved',
-      buttons: ['Quit Forgeboard'],
+      buttons: ['Quit Artemis'],
     });
     expect(JSON.stringify(fixture.dialog.showMessageBox.mock.calls)).not.toContain('/private');
   });
@@ -141,7 +141,7 @@ describe('openStoreWithStartupRecovery', () => {
     expect(fixture.chooseVerifiedBackup).toHaveBeenCalledOnce();
     expect(fixture.dialog.showMessageBox.mock.calls[1]?.[0]).toMatchObject({
       title: 'Local data is unavailable',
-      buttons: ['Quit Forgeboard'],
+      buttons: ['Quit Artemis'],
     });
   });
 
@@ -162,7 +162,7 @@ describe('openStoreWithStartupRecovery', () => {
     expect(fixture.restoreVerifiedBackup).toHaveBeenCalledTimes(2);
     expect(fixture.dialog.showMessageBox).toHaveBeenCalledTimes(3);
     expect(fixture.dialog.showMessageBox.mock.calls[2]?.[0]).toMatchObject({
-      buttons: ['Quit Forgeboard'],
+      buttons: ['Quit Artemis'],
       defaultId: 0,
       cancelId: 0,
     });

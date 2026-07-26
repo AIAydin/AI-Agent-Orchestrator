@@ -37,7 +37,7 @@ export function SettingsRepairHistory({ onError, onNotice }: SettingsRepairHisto
   return (
     <SettingsSection
       title="Repaired settings"
-      description="Forgeboard replaced old settings that no longer meet its safety rules. The originals stay on this computer — out of normal exports — until you delete all local data."
+      description="Artemis replaced old settings that no longer meet its safety rules. The originals stay on this computer — out of normal exports — until you delete all local data."
     >
       <div className="settings-repair-warning">
         <ShieldAlert size={18} aria-hidden="true" />

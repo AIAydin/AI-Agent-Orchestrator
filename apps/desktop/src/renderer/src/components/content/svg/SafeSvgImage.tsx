@@ -8,7 +8,7 @@ interface SafeSvgImageProps {
   readonly className?: string;
 }
 
-/** Renders sanitized SVG in an image document, not in the Forgeboard renderer DOM. */
+/** Renders sanitized SVG in an image document, not in the Artemis renderer DOM. */
 export function SafeSvgImage({ source, alt, className }: SafeSvgImageProps) {
   const result = useMemo(() => {
     try {

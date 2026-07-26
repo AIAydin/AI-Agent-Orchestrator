@@ -71,7 +71,7 @@ export function GitWorktreeCleanupDisclosure({
             </h3>
             <p id="git-cleanup-review-description">
               {plan.recovery
-                ? 'Forgeboard prepared a fresh plan for the interrupted cleanup. Your computer will ask you to confirm — you can still cancel there.'
+                ? 'Artemis prepared a fresh plan for the interrupted cleanup. Your computer will ask you to confirm — you can still cancel there.'
                 : 'Nothing has been removed yet. Your computer will ask you to confirm this exact plan — you can still cancel there.'}
             </p>
           </span>
@@ -79,7 +79,7 @@ export function GitWorktreeCleanupDisclosure({
         <div className="git-disclosure-body">
           <p className="git-cleanup-policy">
             {plan.recovery
-              ? 'Recovery continues only after Forgeboard re-checks the workspace: no unsaved changes, branch merged into the recorded base. The branch must be deleted — there is no way to force cleanup.'
+              ? 'Recovery continues only after Artemis re-checks the workspace: no unsaved changes, branch merged into the recorded base. The branch must be deleted — there is no way to force cleanup.'
               : 'Cleanup runs only when the workspace has no unsaved changes and its branch is merged into the recorded base. The branch is always deleted with it — there is no way to force cleanup.'}
           </p>
           <dl>

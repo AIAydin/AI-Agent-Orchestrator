@@ -16,9 +16,9 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-describe('Forgeboard database provenance inspection', () => {
+describe('Artemis database provenance inspection', () => {
   it.each([1, Math.max(1, MIGRATIONS.length - 1), MIGRATIONS.length])(
-    'accepts a genuine contiguous Forgeboard schema at version %s',
+    'accepts a genuine contiguous Artemis schema at version %s',
     async (version) => {
       const path = await forgeboardDatabase(version);
       const before = await readFile(path);
@@ -103,7 +103,7 @@ describe('Forgeboard database provenance inspection', () => {
     });
   });
 
-  it('rejects an arbitrary foreign database that has no Forgeboard anchors', async () => {
+  it('rejects an arbitrary foreign database that has no Artemis anchors', async () => {
     const path = await databaseFixture();
     const database = new DatabaseSync(path);
     database.exec('CREATE TABLE unrelated(secret TEXT NOT NULL); PRAGMA user_version = 1;');
@@ -132,7 +132,7 @@ describe('Forgeboard database provenance inspection', () => {
     });
   });
 
-  it('distinguishes a database created by a newer Forgeboard schema', async () => {
+  it('distinguishes a database created by a newer Artemis schema', async () => {
     const path = await forgeboardDatabase(MIGRATIONS.length);
     const database = new DatabaseSync(path);
     database.exec(`PRAGMA user_version = ${String(MIGRATIONS.length + 1)};`);
@@ -141,8 +141,7 @@ describe('Forgeboard database provenance inspection', () => {
     expect(inspectForgeboardDatabaseProvenance(path)).toEqual({
       ok: false,
       reason: 'newer',
-      message:
-        'This database was created by a newer Forgeboard version. Update Forgeboard to open it.',
+      message: 'This database was created by a newer Artemis version. Update Artemis to open it.',
     });
   });
 
@@ -193,7 +192,7 @@ describe('Forgeboard database provenance inspection', () => {
     expect(result).toEqual({
       ok: false,
       reason: 'unavailable',
-      message: 'Forgeboard could not inspect the database safely.',
+      message: 'Artemis could not inspect the database safely.',
     });
     expect(JSON.stringify(result)).not.toContain(path);
     expect(JSON.stringify(result).length).toBeLessThan(256);

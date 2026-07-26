@@ -60,7 +60,7 @@ export async function captureLaunchFileIdentity(
     assertWithinSizeLimit(after.size, maximumBytes);
     assertWithinSizeLimit(pathAfter.size, maximumBytes);
     if (!sameFileIdentity(before, after) || !sameFileIdentity(after, pathAfter)) {
-      throw new Error('The launch file changed while Forgeboard verified it.');
+      throw new Error('The launch file changed while Artemis verified it.');
     }
     return {
       path: canonical,
@@ -173,5 +173,5 @@ function sizeLimitError(): Error {
 }
 
 function changedDuringVerificationError(): Error {
-  return new Error('The launch file changed while Forgeboard verified it.');
+  return new Error('The launch file changed while Artemis verified it.');
 }

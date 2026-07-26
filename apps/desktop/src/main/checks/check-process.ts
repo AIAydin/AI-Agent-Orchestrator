@@ -421,7 +421,7 @@ async function terminateProcessTree(
   if (process.platform === 'win32') {
     await taskkillTree(child.pid);
     if (!(await exitsWithin(exited, forceStopMs))) {
-      throw new Error('Forgeboard could not stop the Windows check process.');
+      throw new Error('Artemis could not stop the Windows check process.');
     }
     return;
   }
@@ -429,7 +429,7 @@ async function terminateProcessTree(
   if (await exitsWithin(exited, gracefulStopMs)) return;
   signalChildTree(child, 'SIGKILL');
   if (!(await exitsWithin(exited, forceStopMs))) {
-    throw new Error('Forgeboard could not stop the check process.');
+    throw new Error('Artemis could not stop the check process.');
   }
 }
 

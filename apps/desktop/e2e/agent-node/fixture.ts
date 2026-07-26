@@ -18,7 +18,7 @@ export async function createRepository(repositoryPath: string): Promise<PrimaryS
   await runGit(repositoryPath, ['add', '--', 'README.md']);
   await runGit(repositoryPath, [
     '-c',
-    'user.name=Forgeboard E2E',
+    'user.name=Artemis E2E',
     '-c',
     'user.email=forgeboard-e2e@example.invalid',
     'commit',

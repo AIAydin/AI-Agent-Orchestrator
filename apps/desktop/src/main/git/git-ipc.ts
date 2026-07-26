@@ -1294,7 +1294,7 @@ export class GitIpcService {
           assertCurrent: () => {
             const current = this.#requireLiveWindow(event);
             if (current !== parent) {
-              throw new Error('The originating Forgeboard window changed during worktree cleanup.');
+              throw new Error('The originating Artemis window changed during worktree cleanup.');
             }
           },
         },
@@ -1503,26 +1503,26 @@ export class GitIpcService {
     const current = this.resolveWindow(event);
     const bound = this.#operationParents.get(event);
     if (bound !== undefined && current !== bound) {
-      throw new Error('The originating Forgeboard window changed during the Git operation.');
+      throw new Error('The originating Artemis window changed during the Git operation.');
     }
     const parent = bound ?? current;
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required for Git confirmation.');
+      throw new Error('A live Artemis window is required for Git confirmation.');
     }
     return parent;
   }
 
   #assertLiveSender(event: IpcMainInvokeEvent): void {
-    if (event.sender.isDestroyed()) throw new Error('The originating Forgeboard window is closed.');
+    if (event.sender.isDestroyed()) throw new Error('The originating Artemis window is closed.');
     if (event.senderFrame !== event.sender.mainFrame) {
-      throw new Error('Git operations are allowed only from the main Forgeboard frame.');
+      throw new Error('Git operations are allowed only from the main Artemis frame.');
     }
   }
 
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The Git review service has been disposed.');
     if (this.#privacyResetting) {
-      throw new Error('Git review is paused while Forgeboard deletes local data.');
+      throw new Error('Git review is paused while Artemis deletes local data.');
     }
   }
 
@@ -1561,7 +1561,7 @@ export class GitIpcService {
         const assertCurrent = (): void => {
           this.#assertLiveSender(event);
           if (parent.isDestroyed() || this.resolveWindow(event) !== parent) {
-            throw new Error('The originating Forgeboard window changed during the Git operation.');
+            throw new Error('The originating Artemis window changed during the Git operation.');
           }
         };
         this.#operationParents.set(event, parent);
@@ -1596,7 +1596,7 @@ export class GitIpcService {
           error: {
             code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
             message: validation
-              ? 'Forgeboard rejected an invalid Git request.'
+              ? 'Artemis rejected an invalid Git request.'
               : error instanceof Error
                 ? error.message
                 : 'The Git operation failed.',

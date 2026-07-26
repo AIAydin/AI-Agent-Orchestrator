@@ -12,7 +12,7 @@ const plan: TerminalLaunchPlanView = {
   kind: 'terminal-launch',
   planId: '20000000-0000-4000-8000-000000000001',
   projectId: '10000000-0000-4000-8000-000000000001',
-  projectName: 'Forgeboard',
+  projectName: 'Artemis',
   nodeId: 'terminal-1',
   executable: '/bin/zsh',
   arguments: ['-l'],

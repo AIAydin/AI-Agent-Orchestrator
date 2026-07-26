@@ -202,13 +202,13 @@ export class ProviderConnectionIpcService {
     assertLiveMainFrame(event, 'Provider connection request');
     const parent = this.resolveWindow(event);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required for provider connections.');
+      throw new Error('A live Artemis window is required for provider connections.');
     }
     const assertCurrent = (): void => {
       this.#assertAvailable();
       assertLiveMainFrame(event, 'Provider connection request');
       if (parent.isDestroyed() || this.resolveWindow(event) !== parent) {
-        throw new Error('The originating Forgeboard window changed or closed.');
+        throw new Error('The originating Artemis window changed or closed.');
       }
     };
     return { parent, assertCurrent };
@@ -247,7 +247,7 @@ function failure<Output>(error: unknown): IpcResult<Output> {
     error: {
       code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
       message: validation
-        ? 'Forgeboard rejected an invalid provider connection request.'
+        ? 'Artemis rejected an invalid provider connection request.'
         : error instanceof Error
           ? error.message.slice(0, 4_096)
           : 'The provider connection operation failed.',

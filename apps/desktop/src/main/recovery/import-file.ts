@@ -26,7 +26,7 @@ export async function readValidatedLocalDataImportFile(
   selectedPath: string,
 ): Promise<ValidatedLocalDataImportFile> {
   if (!isAbsolute(selectedPath) || selectedPath.includes('\0')) {
-    throw new Error('Forgeboard cannot use the selected file path.');
+    throw new Error('Artemis cannot use the selected file path.');
   }
   const fileName = safeFileName(selectedPath);
   try {
@@ -42,9 +42,7 @@ export async function readValidatedLocalDataImportFile(
       const before = await handle.stat();
       if (!before.isFile()) throw new Error('The selected file is not a regular file.');
       if (!sameFile(initialPathStats, before)) {
-        throw new Error(
-          'The selected file changed before Forgeboard could read it. Choose it again.',
-        );
+        throw new Error('The selected file changed before Artemis could read it. Choose it again.');
       }
       assertBoundedSize(before.size);
 
@@ -57,9 +55,7 @@ export async function readValidatedLocalDataImportFile(
         !sameFile(after, finalPathStats) ||
         finalPathStats.isSymbolicLink()
       ) {
-        throw new Error(
-          'The selected file changed while Forgeboard was reading it. Choose it again.',
-        );
+        throw new Error('The selected file changed while Artemis was reading it. Choose it again.');
       }
       assertBoundedSize(bytes.byteLength);
 
@@ -78,7 +74,7 @@ export async function readValidatedLocalDataImportFile(
     if (error instanceof SafeImportFileError) throw error;
     if (error instanceof Error && error.message.startsWith('The selected file')) throw error;
     throw new SafeImportFileError(
-      'Forgeboard could not read the selected file safely. Try exporting it again.',
+      'Artemis could not read the selected file safely. Try exporting it again.',
     );
   }
 }
@@ -104,7 +100,7 @@ function safeFileName(selectedPath: string): string {
     })
   ) {
     throw new SafeImportFileError(
-      'Forgeboard cannot use this file name. Rename the file and try again.',
+      'Artemis cannot use this file name. Rename the file and try again.',
     );
   }
   return fileName;
@@ -125,13 +121,13 @@ function parseLocalDataExport(bytes: Buffer): LocalDataExport {
     value = JSON.parse(bytes.toString('utf8')) as unknown;
   } catch {
     throw new SafeImportFileError(
-      'The selected file is not a readable Forgeboard export. It may be damaged.',
+      'The selected file is not a readable Artemis export. It may be damaged.',
     );
   }
   assertBoundedJsonComplexity(value);
   const parsed = LocalDataExportSchema.safeParse(value);
   if (!parsed.success) {
-    throw new SafeImportFileError('The selected file is not a Forgeboard data export.');
+    throw new SafeImportFileError('The selected file is not a Artemis data export.');
   }
   return parsed.data;
 }

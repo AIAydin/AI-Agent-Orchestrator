@@ -1363,7 +1363,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     const impact = await this.#worktrees.cleanupImpact(ownership);
     if (impact.dirtyPaths.length > 0) {
       throw new Error(
-        'Forgeboard preserved the prepared worktree because it unexpectedly contains changes.',
+        'Artemis preserved the prepared worktree because it unexpectedly contains changes.',
       );
     }
     await this.#worktrees.cleanup(ownership, {
@@ -1513,7 +1513,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         planId,
       });
       throw new Error(
-        'Forgeboard is already launching or running the maximum number of agents. Wait for a run to finish and try again.',
+        'Artemis is already launching or running the maximum number of agents. Wait for a run to finish and try again.',
       );
     }
     if (ownerCount >= this.#maxActiveRunsPerOwner) {
@@ -1598,7 +1598,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The agent runtime is shutting down.');
     if (this.#privacyResetting) {
-      throw new Error('Agent runs are paused while Forgeboard changes local data.');
+      throw new Error('Agent runs are paused while Artemis changes local data.');
     }
   }
 
@@ -1810,8 +1810,8 @@ function contextSnapshotDisclosureWarnings(
   const rewritten = warnings.map((warning) =>
     docker
       ? warning.replace(
-          'Forgeboard adds no host credential, Docker socket, SSH agent, keychain, or extra host-path mounts.',
-          'Forgeboard adds no host credential, Docker socket, SSH agent, or keychain mounts. Selected context uses one private read-only snapshot mount; the approved worktree bind policy is unchanged.',
+          'Artemis adds no host credential, Docker socket, SSH agent, keychain, or extra host-path mounts.',
+          'Artemis adds no host credential, Docker socket, SSH agent, or keychain mounts. Selected context uses one private read-only snapshot mount; the approved worktree bind policy is unchanged.',
         )
       : warning,
   );

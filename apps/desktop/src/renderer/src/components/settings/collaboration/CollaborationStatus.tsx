@@ -37,9 +37,9 @@ export function CollaborationStatus({
       <details className="collaboration-sharing-details">
         <summary>What gets shared?</summary>
         <p>
-          Forgeboard shares only these canvas details: layout, titles, positions, task and review
+          Artemis shares only these canvas details: layout, titles, positions, task and review
           status, comments, and who is present. Prompts, file contents, local paths, environment
-          variables, credentials, and tokens are never selected automatically. Forgeboard does not
+          variables, credentials, and tokens are never selected automatically. Artemis does not
           check shared titles, connection labels, or comments for secrets; sensitive information
           typed into one of those shared fields is sent to the room.
         </p>

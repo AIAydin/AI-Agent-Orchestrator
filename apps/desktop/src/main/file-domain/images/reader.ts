@@ -102,7 +102,7 @@ function assertOrdinarySamePath(handleStats: BigIntStats, pathStats: BigIntStats
       captureFileSystemSnapshot(pathStats),
     )
   ) {
-    throw new FileDomainError('SYMLINK_BLOCKED', 'Forgeboard refused an unsafe image reference.');
+    throw new FileDomainError('SYMLINK_BLOCKED', 'Artemis refused an unsafe image reference.');
   }
 }
 

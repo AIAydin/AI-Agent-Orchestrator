@@ -105,7 +105,7 @@ describe('HelpSettings', () => {
     });
     expect(screen.getByText(/read-only comparison of everything the run saved/u)).toBeTruthy();
     expect(screen.getByText(/PR action on the agent node/u)).toBeTruthy();
-    expect(screen.getByText(/Forgeboard never force-pushes/u)).toBeTruthy();
+    expect(screen.getByText(/Artemis never force-pushes/u)).toBeTruthy();
     expect(screen.getByText(/only checks your GitHub sign-in/u)).toBeTruthy();
     expect(screen.queryByText(/Add a Git \/ PR node/u)).toBeNull();
 

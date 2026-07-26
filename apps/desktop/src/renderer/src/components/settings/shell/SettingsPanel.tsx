@@ -192,7 +192,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
             <BrandMark size={27} />
             <div>
               <h2 id="settings-title">Settings</h2>
-              <p>Change how Forgeboard works here.</p>
+              <p>Change how Artemis works here.</p>
             </div>
           </div>
           <WorkspaceTooltip
@@ -347,7 +347,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
 
         <footer className="settings-footer">
           <span>
-            Forgeboard {props.info.version} · {props.info.platform}
+            Artemis {props.info.version} · {props.info.platform}
             {draftIssues[0] !== undefined && (
               <small id="settings-draft-validation" role="alert">
                 {draftIssues[0]}

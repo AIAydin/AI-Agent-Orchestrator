@@ -228,7 +228,7 @@ export class GitHubCliExecutor implements GitHubCommandRunner {
         if (settled || timedOut || terminationError !== undefined) return;
         terminationError = new GitEngineError(
           'COMMAND_FAILED',
-          'GitHub CLI closed command input before Forgeboard finished writing it.',
+          'GitHub CLI closed command input before Artemis finished writing it.',
           {},
           { cause: error },
         );
@@ -290,7 +290,7 @@ export class GitHubCliExecutor implements GitHubCommandRunner {
           reject(
             new GitEngineError(
               'COMMAND_FAILED',
-              'GitHub CLI closed command input before Forgeboard finished writing it.',
+              'GitHub CLI closed command input before Artemis finished writing it.',
             ),
           );
         } else if (result.exitCode !== 0 && options.allowNonZeroExit !== true) {

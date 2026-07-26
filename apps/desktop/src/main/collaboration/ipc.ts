@@ -355,7 +355,7 @@ export class CollaborationIpcService {
         value: CollaborationConnectionSchema.nullable().parse(value),
       };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not read collaboration status.');
+      return ipcFailure(error, 'Artemis could not read collaboration status.');
     }
   }
 
@@ -373,7 +373,7 @@ export class CollaborationIpcService {
         value: CollaborationMetadataSnapshotSchema.nullable().parse(value),
       };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not read the shared canvas.');
+      return ipcFailure(error, 'Artemis could not read the shared canvas.');
     }
   }
 
@@ -389,7 +389,7 @@ export class CollaborationIpcService {
       ) {
         return joinFailure(
           'authorization-failed',
-          'Another Forgeboard window is already connected or connecting to a collaboration room.',
+          'Another Artemis window is already connected or connecting to a collaboration room.',
           false,
         );
       }
@@ -406,7 +406,7 @@ export class CollaborationIpcService {
           parent.isDestroyed() ||
           BrowserWindow.fromWebContents(event.sender) !== parent
         ) {
-          throw new Error('The originating Forgeboard window changed or closed.');
+          throw new Error('The originating Artemis window changed or closed.');
         }
       };
       const disclosure = collaborationJoinDisclosure(input);
@@ -456,7 +456,7 @@ export class CollaborationIpcService {
         invalid ? 'invalid-configuration' : 'network-failed',
         invalid
           ? 'The collaboration connection settings are not valid. Check them and try again.'
-          : 'Forgeboard could not start the collaboration connection.',
+          : 'Artemis could not start the collaboration connection.',
         !invalid,
       );
     }
@@ -491,7 +491,7 @@ export class CollaborationIpcService {
       if ((this.#owner !== null && this.#owner !== event.sender) || this.#joiningOwner !== null) {
         return joinFailure(
           'authorization-failed',
-          'Another Forgeboard window owns the active or pending collaboration session.',
+          'Another Artemis window owns the active or pending collaboration session.',
           false,
         );
       }
@@ -507,7 +507,7 @@ export class CollaborationIpcService {
           parent.isDestroyed() ||
           BrowserWindow.fromWebContents(event.sender) !== parent
         ) {
-          throw new Error('The originating Forgeboard window or room session changed.');
+          throw new Error('The originating Artemis window or room session changed.');
         }
       };
       const result = await this.#invites.redeemAndJoin(
@@ -541,8 +541,8 @@ export class CollaborationIpcService {
       return joinFailure(
         invalid ? 'invalid-configuration' : 'network-failed',
         invalid
-          ? 'Forgeboard rejected invalid collaboration invite settings.'
-          : 'Forgeboard could not redeem and join the collaboration invite.',
+          ? 'Artemis rejected invalid collaboration invite settings.'
+          : 'Artemis could not redeem and join the collaboration invite.',
         !invalid,
       );
     }
@@ -582,7 +582,7 @@ export class CollaborationIpcService {
             (this.#owner !== null && this.#owner !== event.sender) ||
             this.#joiningOwner !== null
           ) {
-            throw new Error('Another Forgeboard window owns the collaboration session.');
+            throw new Error('Another Artemis window owns the collaboration session.');
           }
           this.#joiningOwner = event.sender;
           const ownerId = this.#ownerId(event.sender);
@@ -596,7 +596,7 @@ export class CollaborationIpcService {
               parent.isDestroyed() ||
               BrowserWindow.fromWebContents(event.sender) !== parent
             ) {
-              throw new Error('The originating Forgeboard window or room session changed.');
+              throw new Error('The originating Artemis window or room session changed.');
             }
           };
           const authority = { ownerId, parent, assertCurrent };
@@ -633,7 +633,7 @@ export class CollaborationIpcService {
           } else if (this.#joiningOwner === event.sender) {
             this.#joiningOwner = null;
           }
-          return ipcFailure(error, `Forgeboard could not ${mode} the collaboration owner.`);
+          return ipcFailure(error, `Artemis could not ${mode} the collaboration owner.`);
         }
       });
     } catch (error) {
@@ -741,7 +741,7 @@ export class CollaborationIpcService {
         return { ok: true, value };
       });
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not complete the collaboration room action.');
+      return ipcFailure(error, 'Artemis could not complete the collaboration room action.');
     }
   }
 
@@ -762,7 +762,7 @@ export class CollaborationIpcService {
         };
       });
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not list collaboration invites.');
+      return ipcFailure(error, 'Artemis could not list collaboration invites.');
     }
   }
 
@@ -775,7 +775,7 @@ export class CollaborationIpcService {
         async () => await this.#createInviteOperation(event, rawArgs),
       );
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not create the collaboration invite.');
+      return ipcFailure(error, 'Artemis could not create the collaboration invite.');
     }
   }
 
@@ -794,7 +794,7 @@ export class CollaborationIpcService {
         value: CollaborationInviteSafeViewSchema.nullable().parse(value),
       };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not create the collaboration invite.');
+      return ipcFailure(error, 'Artemis could not create the collaboration invite.');
     }
   }
 
@@ -807,7 +807,7 @@ export class CollaborationIpcService {
         async () => await this.#copyInviteLinkOperation(event, rawArgs),
       );
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not copy the collaboration invite.');
+      return ipcFailure(error, 'Artemis could not copy the collaboration invite.');
     }
   }
 
@@ -823,7 +823,7 @@ export class CollaborationIpcService {
       authority.assertCurrent();
       return { ok: true, value };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not copy the collaboration invite.');
+      return ipcFailure(error, 'Artemis could not copy the collaboration invite.');
     }
   }
 
@@ -836,7 +836,7 @@ export class CollaborationIpcService {
         async () => await this.#revokeInviteOperation(event, rawArgs),
       );
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not revoke the collaboration invite.');
+      return ipcFailure(error, 'Artemis could not revoke the collaboration invite.');
     }
   }
 
@@ -855,7 +855,7 @@ export class CollaborationIpcService {
         value: CollaborationInviteHistoryViewSchema.nullable().parse(value),
       };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not revoke the collaboration invite.');
+      return ipcFailure(error, 'Artemis could not revoke the collaboration invite.');
     }
   }
 
@@ -876,7 +876,7 @@ export class CollaborationIpcService {
       this.#discardOwner();
       return { ok: true, value: null };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not leave the collaboration room.');
+      return ipcFailure(error, 'Artemis could not leave the collaboration room.');
     }
   }
 
@@ -905,7 +905,7 @@ export class CollaborationIpcService {
       });
       return { ok: true, value: receipt };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard rejected the shared canvas changes.');
+      return ipcFailure(error, 'Artemis rejected the shared canvas changes.');
     }
   }
 
@@ -1013,7 +1013,7 @@ export class CollaborationIpcService {
         value: CollaborationSyncRecoverySchema.nullable().parse(recovery),
       };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not recover the shared canvas changes.');
+      return ipcFailure(error, 'Artemis could not recover the shared canvas changes.');
     }
   }
 
@@ -1063,7 +1063,7 @@ export class CollaborationIpcService {
       }
       return { ok: true, value: true };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not update the collaboration recovery state.');
+      return ipcFailure(error, 'Artemis could not update the collaboration recovery state.');
     }
   }
 
@@ -1082,7 +1082,7 @@ export class CollaborationIpcService {
       const assertCurrent = (): void => {
         this.#assertOwner(event, 'Rejected collaboration comment discard');
         if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
-          throw new Error('The originating Forgeboard window changed during confirmation.');
+          throw new Error('The originating Artemis window changed during confirmation.');
         }
         const recovered = this.#retryRetainedSettlements(
           scope,
@@ -1133,7 +1133,7 @@ export class CollaborationIpcService {
         value: CollaborationSyncRecoverySchema.parse(recovery),
       };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not discard the rejected comment.');
+      return ipcFailure(error, 'Artemis could not discard the rejected comment.');
     }
   }
 
@@ -1187,7 +1187,7 @@ export class CollaborationIpcService {
         value: CollaborationCreateCommentResultSchema.nullable().parse(result),
       };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard rejected the shared comment.');
+      return ipcFailure(error, 'Artemis rejected the shared comment.');
     }
   }
 
@@ -1203,7 +1203,7 @@ export class CollaborationIpcService {
       });
       return { ok: true, value: this.#client.updateAwareness(input.awareness) };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard rejected the collaborator presence update.');
+      return ipcFailure(error, 'Artemis rejected the collaborator presence update.');
     }
   }
 
@@ -1235,7 +1235,7 @@ export class CollaborationIpcService {
 
   #assignOwner(owner: WebContents): void {
     if (this.#owner !== null && this.#owner !== owner) {
-      throw new Error('Another Forgeboard window is already connected to a collaboration room.');
+      throw new Error('Another Artemis window is already connected to a collaboration room.');
     }
     this.#owner = owner;
   }
@@ -1255,7 +1255,7 @@ export class CollaborationIpcService {
   }
 
   #ownerId(owner: WebContents): string {
-    if (owner.isDestroyed()) throw new Error('The originating Forgeboard window is closed.');
+    if (owner.isDestroyed()) throw new Error('The originating Artemis window is closed.');
     const existing = this.#ownerIds.get(owner);
     if (existing !== undefined) return existing;
     const ownerId = `web-contents:${String(owner.id)}:${this.#createOwnerId()}`;
@@ -1284,7 +1284,7 @@ export class CollaborationIpcService {
     assertLiveMainFrame(event, 'Collaboration join');
     const parent = BrowserWindow.fromWebContents(event.sender);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required to confirm collaboration.');
+      throw new Error('A live Artemis window is required to confirm collaboration.');
     }
     return parent;
   }
@@ -1315,7 +1315,7 @@ export class CollaborationIpcService {
         this.#ownerIds.get(event.sender) !== ownerId ||
         JSON.stringify(this.#requiredActiveConnection()) !== fingerprint
       ) {
-        throw new Error('The originating Forgeboard window or room session changed.');
+        throw new Error('The originating Artemis window or room session changed.');
       }
     };
     return { ownerId, parent, assertCurrent, connection };
@@ -1347,7 +1347,7 @@ export class CollaborationIpcService {
         this.#ownerIds.get(event.sender) !== ownerId ||
         JSON.stringify(this.#requiredActiveConnection()) !== fingerprint
       ) {
-        throw new Error('The originating Forgeboard window or room session changed.');
+        throw new Error('The originating Artemis window or room session changed.');
       }
     };
     return { ownerId, parent, assertCurrent, connection };
@@ -1383,14 +1383,13 @@ export class CollaborationIpcService {
   #assertOwner(event: IpcMainInvokeEvent, operation: string): void {
     assertLiveMainFrame(event, operation);
     if (this.#owner !== event.sender) {
-      throw new Error(`${operation} belongs to another Forgeboard window.`);
+      throw new Error(`${operation} belongs to another Artemis window.`);
     }
   }
 
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The collaboration service has been disposed.');
-    if (this.#paused)
-      throw new Error('Collaboration is paused while Forgeboard changes local data.');
+    if (this.#paused) throw new Error('Collaboration is paused while Artemis changes local data.');
   }
 
   #requiredActiveConnection(): CollaborationConnection {
@@ -1823,7 +1822,7 @@ export function collaborationJoinDisclosure(
   return {
     action: 'collaboration-connect',
     title: 'Connect to collaboration server?',
-    summary: `Forgeboard will join collaboration room ${JSON.stringify(parsed.roomId)}.`,
+    summary: `Artemis will join collaboration room ${JSON.stringify(parsed.roomId)}.`,
     confirmLabel: 'Connect',
     destination: {
       kind: 'collaboration-server',
@@ -1843,7 +1842,7 @@ export function collaborationJoinDisclosure(
       },
     ],
     warning:
-      'Forgeboard sends only the fields listed above. Prompts, file contents, local paths, environment variables, credentials, and tokens are never selected automatically. Forgeboard does not check shared titles, connection labels, or comments for secrets; if you type sensitive information into one of those shared fields, it is sent to the room.',
+      'Artemis sends only the fields listed above. Prompts, file contents, local paths, environment variables, credentials, and tokens are never selected automatically. Artemis does not check shared titles, connection labels, or comments for secrets; if you type sensitive information into one of those shared fields, it is sent to the room.',
   };
 }
 

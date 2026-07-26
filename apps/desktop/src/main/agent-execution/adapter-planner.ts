@@ -426,7 +426,7 @@ function permissionProfile(
     readRoots: [cwd],
     writeRoots: writable ? [cwd] : [],
     network: 'provider-controlled',
-    approvalPolicy: 'The exact process launch requires approval in Forgeboard.',
+    approvalPolicy: 'The exact process launch requires approval in Artemis.',
     disclosure: providerPermissionEnforced
       ? writable
         ? 'The provider is asked to confine writes to the dedicated worktree.'

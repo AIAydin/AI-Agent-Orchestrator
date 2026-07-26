@@ -69,7 +69,7 @@ export function ProjectContentSearch({
     } catch (cause) {
       if (requestVersionRef.current !== requestVersion) return;
       setStatus('error');
-      setMessage(fileBrowserError(cause, "Forgeboard couldn't search this project. Try again."));
+      setMessage(fileBrowserError(cause, "Artemis couldn't search this project. Try again."));
     }
   };
 

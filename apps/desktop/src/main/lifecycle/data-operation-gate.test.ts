@@ -41,10 +41,10 @@ describe('DataOperationGate', () => {
     gate.beginShutdown();
 
     await expect(gate.run(() => undefined)).rejects.toThrow(
-      'Forgeboard is closing, so this cannot start right now.',
+      'Artemis is closing, so this cannot start right now.',
     );
     await expect(gate.beginMutation('delete')).rejects.toThrow(
-      'Forgeboard is closing, so this cannot start right now.',
+      'Artemis is closing, so this cannot start right now.',
     );
 
     let quitStarted = false;
