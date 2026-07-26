@@ -11,11 +11,11 @@ import { describe, expect, it } from 'vitest';
  * These invariants keep the handle styling on the neutral foundation token.
  */
 const canvasStylesheet = readFileSync(
-  fileURLToPath(new URL('../../../styles/workspace/canvas.css', import.meta.url)),
+  fileURLToPath(new URL('../../../../styles/workspace/canvas.css', import.meta.url)),
   'utf8',
 );
 const tokenStylesheet = readFileSync(
-  fileURLToPath(new URL('../../../styles/foundation/tokens.css', import.meta.url)),
+  fileURLToPath(new URL('../../../../styles/foundation/tokens.css', import.meta.url)),
   'utf8',
 );
 

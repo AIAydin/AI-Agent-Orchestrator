@@ -69,7 +69,9 @@ export function AgentsSettings({
             <option value="claude">Claude Code</option>
             <option value="gemini">Gemini CLI</option>
             <option value="opencode">OpenCode</option>
-            {draft.defaultAgent === 'custom' && <option value="custom">Custom (saved earlier)</option>}
+            {draft.defaultAgent === 'custom' && (
+              <option value="custom">Custom (saved earlier)</option>
+            )}
           </select>
         </label>
       </SettingsSection>

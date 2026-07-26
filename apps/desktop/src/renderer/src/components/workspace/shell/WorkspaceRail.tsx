@@ -181,7 +181,11 @@ function ProjectTemplates({
                   className="agent-monogram-badge"
                   style={{ background: theme?.accent ?? '#d4a85b' }}
                 >
-                  {Logo === null ? (agent.label.slice(0, 1).toUpperCase() || 'A') : <Logo size={14} />}
+                  {Logo === null ? (
+                    agent.label.slice(0, 1).toUpperCase() || 'A'
+                  ) : (
+                    <Logo size={14} />
+                  )}
                 </span>
                 <span>
                   <strong>{theme?.label ?? agent.label}</strong>

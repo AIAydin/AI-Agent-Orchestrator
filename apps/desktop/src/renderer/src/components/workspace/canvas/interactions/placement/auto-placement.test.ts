@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WorkshopNode } from '../CanvasNode.js';
+import type { WorkshopNode } from '../../CanvasNode.js';
 import { canvasPlacementObstacles, freeCanvasPosition } from './auto-placement.js';
 
 const SIZE = { width: 320, height: 180 };
@@ -61,14 +61,8 @@ describe('freeCanvasPosition', () => {
   it('respects the breathing gap around neighbors', () => {
     const obstacles = [rect(220, 150, 100, 100)];
     const position = freeCanvasPosition({ x: 220, y: 150 }, SIZE, obstacles);
-    const gapX =
-      position.x >= 220
-        ? position.x - (220 + 100)
-        : 220 - (position.x + SIZE.width);
-    const gapY =
-      position.y >= 150
-        ? position.y - (150 + 100)
-        : 150 - (position.y + SIZE.height);
+    const gapX = position.x >= 220 ? position.x - (220 + 100) : 220 - (position.x + SIZE.width);
+    const gapY = position.y >= 150 ? position.y - (150 + 100) : 150 - (position.y + SIZE.height);
     expect(Math.max(gapX, gapY)).toBeGreaterThanOrEqual(24);
   });
 });

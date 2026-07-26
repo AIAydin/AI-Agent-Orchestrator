@@ -14,7 +14,8 @@ import {
 
 const HOME = '/Users/owner';
 const PROJECT = '/Users/owner/earth-sim';
-const WORKTREE = '/Users/owner/Documents/Forgeboard/worktrees/earth-sim-212463c611/claude-9d21e85ba0';
+const WORKTREE =
+  '/Users/owner/Documents/Forgeboard/worktrees/earth-sim-212463c611/claude-9d21e85ba0';
 
 interface FakeFileSystem extends SessionHistoryFileSystem {
   readonly createdDirectories: string[];
@@ -147,16 +148,16 @@ describe('resolveSessionHistoryLocation', () => {
   );
 
   it('returns null when the "worktree" is the project checkout itself', () => {
-    expect(
-      resolveSessionHistoryLocation({ ...claudeInput, worktreePath: PROJECT }),
-    ).toBeNull();
+    expect(resolveSessionHistoryLocation({ ...claudeInput, worktreePath: PROJECT })).toBeNull();
     expect(
       resolveSessionHistoryLocation({ ...claudeInput, worktreePath: `${PROJECT}/` }),
     ).toBeNull();
   });
 
   it('returns null for non-absolute inputs rather than guessing a root', () => {
-    expect(resolveSessionHistoryLocation({ ...claudeInput, repositoryRoot: 'earth-sim' })).toBeNull();
+    expect(
+      resolveSessionHistoryLocation({ ...claudeInput, repositoryRoot: 'earth-sim' }),
+    ).toBeNull();
     expect(resolveSessionHistoryLocation({ ...claudeInput, worktreePath: './wt' })).toBeNull();
     expect(resolveSessionHistoryLocation({ ...claudeInput, homeDirectory: 'owner' })).toBeNull();
   });
@@ -242,23 +243,21 @@ describe('linkSessionHistoryForWorktree', () => {
     },
   );
 
-  it.each([
-    'isDirectory',
-    'exists',
-    'createDirectory',
-    'createDirectorySymbolicLink',
-  ] as const)('reports, and never throws, when %s fails', async (operation) => {
-    const projectHistory = '/Users/owner/.claude/projects/-Users-owner-earth-sim';
-    const fileSystem = fakeFileSystem({ directories: [projectHistory], failOn: operation });
+  it.each(['isDirectory', 'exists', 'createDirectory', 'createDirectorySymbolicLink'] as const)(
+    'reports, and never throws, when %s fails',
+    async (operation) => {
+      const projectHistory = '/Users/owner/.claude/projects/-Users-owner-earth-sim';
+      const fileSystem = fakeFileSystem({ directories: [projectHistory], failOn: operation });
 
-    const outcome = await linkSessionHistoryForWorktree(claudeInput, fileSystem);
+      const outcome = await linkSessionHistoryForWorktree(claudeInput, fileSystem);
 
-    expect(outcome).toEqual({
-      linked: false,
-      reason: 'link-failed',
-      detail: `${operation} exploded`,
-    });
-  });
+      expect(outcome).toEqual({
+        linked: false,
+        reason: 'link-failed',
+        detail: `${operation} exploded`,
+      });
+    },
+  );
 
   it('is idempotent: a second launch finds the link already in place and leaves it alone', async () => {
     const projectHistory = '/Users/owner/.claude/projects/-Users-owner-earth-sim';

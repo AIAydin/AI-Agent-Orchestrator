@@ -10,7 +10,6 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { promisify } from 'node:util';
 
 import {
   getBuiltInAgentManifest,
@@ -37,7 +36,7 @@ import { customAgentManifest } from '../custom-agent/custom-agent.js';
 import {
   environmentWithLoginShellPath,
   loginShellPath,
-} from '../terminal/login-shell-path.js';
+} from '../terminal/environment/login-shell-path.js';
 import { resolveTerminalExecutable } from '../terminal/launch-resolution.js';
 import { gitCloneDisclosure } from '../outbound/destinations.js';
 import type {

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 import type { AgentDetection, Project } from '../../../../../shared/application/contracts.js';
-import { ProjectSwitcher } from './ProjectSwitcher.js';
+import { ProjectSwitcher } from './project-switcher/ProjectSwitcher.js';
 import {
   WorkspaceStatusIndicators,
   type WorkspaceSharingStatus,

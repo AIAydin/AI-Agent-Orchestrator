@@ -52,7 +52,8 @@ export function VideoNodeFace({ id, data }: NodeFaceProps): JSX.Element {
   };
 
   const disabled = data.locked || session.graphReadOnly || interactions.readOnly;
-  const unavailableMessage = result !== null && result.status !== 'available' ? result.message : null;
+  const unavailableMessage =
+    result !== null && result.status !== 'available' ? result.message : null;
   return (
     <section className="node-face video-node-face" aria-label="Video player">
       <div className="node-face-strip nodrag">

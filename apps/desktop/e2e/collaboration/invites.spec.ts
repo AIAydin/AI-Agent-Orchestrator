@@ -84,28 +84,6 @@ async function openConnectivitySettings(page: Page): Promise<Locator> {
   return settings;
 }
 
-async function configureIdentity(
-  settings: Locator,
-  server: CollaborationServerFixture,
-  identity: { displayName: string; subject: string },
-): Promise<void> {
-  await settings.getByText('Advanced', { exact: true }).click();
-  await settings.getByRole('checkbox', { name: /Enable collaboration/u }).check();
-  await settings.getByLabel('Collaboration server URL').fill(server.webSocketUrl);
-  await settings
-    .getByRole('textbox', { name: /Collaboration management API URL/u })
-    .fill(server.httpUrl);
-  await settings.getByLabel('Collaboration display name').fill(identity.displayName);
-  await settings.getByLabel('Collaborator ID').fill(identity.subject);
-}
-
-function sessionInvite(settings: Locator, role: 'reviewer' | 'viewer'): Locator {
-  return settings
-    .getByRole('list', { name: 'Room invite history' })
-    .getByRole('listitem')
-    .filter({ hasText: new RegExp(`^${role} \\u00b7`, 'u') });
-}
-
 function collaborationStatus(settings: Locator): Locator {
   return settings.locator('.recovery-guidance[role="status"]');
 }

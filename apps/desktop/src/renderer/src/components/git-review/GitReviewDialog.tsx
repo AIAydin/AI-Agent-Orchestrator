@@ -315,7 +315,6 @@ export function GitReviewDialog({
     void deliveryReadiness.refresh();
   };
 
-
   const confirmShipping = () => {
     if (shippingPlan === null) return;
     void controller.confirmShipping(shippingPlan.planId).then((result) => {

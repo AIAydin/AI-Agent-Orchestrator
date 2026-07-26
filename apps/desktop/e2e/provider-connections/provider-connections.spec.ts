@@ -123,9 +123,7 @@ test('Codex connects through provider OAuth UI, refreshes after restart, and nev
     await settings.getByRole('button', { name: /Agents & runtime/ }).click();
 
     await test.step('restart is passive and settings keep only plain detection status', async () => {
-      await expect(
-        settings.getByRole('region', { name: 'Detected agent CLIs' }),
-      ).toBeVisible();
+      await expect(settings.getByRole('region', { name: 'Detected agent CLIs' })).toBeVisible();
       await expect(settings.getByRole('button', { name: 'Connect with OpenAI' })).toHaveCount(0);
       await expect(settings.getByLabel('Executable override')).toHaveCount(0);
       expect(await readFixtureInvocations(executable)).toEqual(beforeRestart);

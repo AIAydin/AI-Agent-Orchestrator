@@ -1,5 +1,5 @@
-import type { WorkshopNode } from '../CanvasNode.js';
-import { canvasNodeBounds, type CanvasNodeBounds } from './groups/group-containment.js';
+import type { WorkshopNode } from '../../CanvasNode.js';
+import { canvasNodeBounds, type CanvasNodeBounds } from '../groups/group-containment.js';
 
 /** Breathing room kept between a newly placed node and every existing node. */
 const PLACEMENT_GAP = 24;

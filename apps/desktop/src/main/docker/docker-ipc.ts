@@ -315,7 +315,10 @@ export class DockerIpcService {
    * network, so unlike check/pull it needs no native confirmation. Failures degrade to an empty,
    * reasoned list instead of an error.
    */
-  async #listLocal(event: IpcMainInvokeEvent, configuredExecutable: string): Promise<DockerLocalList> {
+  async #listLocal(
+    event: IpcMainInvokeEvent,
+    configuredExecutable: string,
+  ): Promise<DockerLocalList> {
     this.#assertLiveMainFrame(event);
     const list = DockerLocalListSchema.parse(await this.operations.list(configuredExecutable));
     this.store.appendAudit('docker', 'list-local', list.daemonAvailable ? 'allowed' : 'failed', {

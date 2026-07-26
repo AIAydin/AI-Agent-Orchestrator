@@ -355,9 +355,7 @@ describe('SettingsPanel draft transactions', () => {
     expect(screen.queryByLabelText('Default model (optional)')).toBeNull();
     expect(screen.queryByLabelText('Default terminal executable')).toBeNull();
     expect(screen.queryByLabelText('Output format')).toBeNull();
-    expect(
-      screen.queryByLabelText('Environment variable names allowed into processes'),
-    ).toBeNull();
+    expect(screen.queryByLabelText('Environment variable names allowed into processes')).toBeNull();
     expect(screen.getByRole('heading', { name: 'GitHub CLI' })).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: /Enable Docker profiles/u })).toBeTruthy();
   });

@@ -143,7 +143,9 @@ describe('WorkspaceProjectTree', () => {
 
     const folder = await screen.findByRole('treeitem', { name: 'Expand folder dist' });
     fireEvent.click(folder);
-    expect(await screen.findByRole('treeitem', { name: 'Ignored file dist/bundle.js' })).toBeTruthy();
+    expect(
+      await screen.findByRole('treeitem', { name: 'Ignored file dist/bundle.js' }),
+    ).toBeTruthy();
     expect(tree).toHaveBeenCalledWith({ projectId: PROJECT_ID, directory: 'dist' });
   });
 

@@ -27,7 +27,7 @@ import {
   type NodeKind,
   type WorkshopNode,
 } from './CanvasNode.js';
-import { CanvasEmptyState } from './CanvasEmptyState.js';
+import { CanvasEmptyState } from './empty-state/CanvasEmptyState.js';
 import { CollaborationPresence } from '../collaboration/CollaborationPresence.js';
 import { CollaboratorRoster } from '../collaboration/presence/CollaboratorRoster.js';
 import {

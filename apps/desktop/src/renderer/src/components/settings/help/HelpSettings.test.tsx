@@ -30,9 +30,9 @@ describe('HelpSettings', () => {
     const pageCount = Math.ceil(HELP_ARTICLES.length / HELP_PAGE_SIZE);
     expect(pageCount).toBeGreaterThan(1);
     expect(screen.getByText(`Page 1 of ${pageCount}`)).toBeTruthy();
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Previous help page' }).disabled).toBe(
-      true,
-    );
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Previous help page' }).disabled,
+    ).toBe(true);
 
     const seen = new Set<string>();
     const collectTitles = () => {
@@ -47,7 +47,9 @@ describe('HelpSettings', () => {
     }
     expect(seen.size).toBe(HELP_ARTICLES.length);
     expect(screen.getByText(`Page ${pageCount} of ${pageCount}`)).toBeTruthy();
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next help page' }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next help page' }).disabled).toBe(
+      true,
+    );
     expect(screen.getByText('Understand what can leave this device')).toBeTruthy();
   });
 

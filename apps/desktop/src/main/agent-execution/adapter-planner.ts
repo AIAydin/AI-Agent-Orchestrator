@@ -128,7 +128,9 @@ async function prepareAdapter(
         ? permissionProfile(
             // Headless runs provision a worktree for every writable profile, so a
             // "Write in current directory" node discloses as worktree-write here.
-            input.permissionProfile === 'project-write' ? 'worktree-write' : input.permissionProfile,
+            input.permissionProfile === 'project-write'
+              ? 'worktree-write'
+              : input.permissionProfile,
             cwd,
             input.adapterId !== 'custom',
           )

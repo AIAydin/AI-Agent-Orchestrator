@@ -625,7 +625,10 @@ export function AgentSessionNode({
             title={workspaceDirectory ?? undefined}
             aria-label="Session workspace"
           >
-            {[workspaceBranch, workspaceDirectory === null ? null : directoryLabel(workspaceDirectory)]
+            {[
+              workspaceBranch,
+              workspaceDirectory === null ? null : directoryLabel(workspaceDirectory),
+            ]
               .filter((part): part is string => part !== null)
               .join(' · ')}
           </span>

@@ -87,8 +87,8 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
         <span>
           <strong>Enable voice commands</strong>
           <small>
-            Mic access stays in the main window. Commands run right after transcription;
-            destructive actions still ask.
+            Mic access stays in the main window. Commands run right after transcription; destructive
+            actions still ask.
           </small>
         </span>
         <input

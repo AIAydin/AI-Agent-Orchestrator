@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, DoorOpen, Plus } from 'lucide-react';
 
-import type { Project } from '../../../../../shared/application/contracts.js';
-import { unwrap } from '../../../lib/ipc.js';
-import { BrandMark } from '../../shell/BrandMark.js';
+import type { Project } from '../../../../../../shared/application/contracts.js';
+import { unwrap } from '../../../../lib/ipc.js';
+import { BrandMark } from '../../../shell/BrandMark.js';
 
 interface ProjectSwitcherProps {
   project: Project;

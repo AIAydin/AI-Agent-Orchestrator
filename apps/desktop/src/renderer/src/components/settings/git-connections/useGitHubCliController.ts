@@ -104,10 +104,7 @@ export function useGitHubCliController({ onError }: { readonly onError: (m: stri
     return mounted.current && planRequest.current === requestId;
   }
 
-  async function acceptPreparedPlan(
-    plan: GitHubCliPendingPlan,
-    requestId: number,
-  ): Promise<void> {
+  async function acceptPreparedPlan(plan: GitHubCliPendingPlan, requestId: number): Promise<void> {
     if (planRequestIsCurrent(requestId)) {
       pendingPlanRef.current = plan;
       setPendingPlan(plan);

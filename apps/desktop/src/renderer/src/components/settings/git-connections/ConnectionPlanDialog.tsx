@@ -82,7 +82,9 @@ export function ConnectionPlanDialog({
           <PlanFact label="Version" value="Checked after you confirm" />
           <PlanFact
             label="Size"
-            value={plan.candidate === null ? 'Not available' : formatBytes(plan.candidate.sizeBytes)}
+            value={
+              plan.candidate === null ? 'Not available' : formatBytes(plan.candidate.sizeBytes)
+            }
           />
           <PlanFact
             label="Fingerprint (SHA-256)"
@@ -93,8 +95,8 @@ export function ConnectionPlanDialog({
         <div className="git-connections-plan-safety">
           <strong>No internet access needed</strong>
           <span>
-            This only chooses which GitHub CLI program on this computer Forgeboard uses. It does
-            not sign in, contact GitHub, or check access to any project.
+            This only chooses which GitHub CLI program on this computer Forgeboard uses. It does not
+            sign in, contact GitHub, or check access to any project.
           </span>
         </div>
         <small>

@@ -38,7 +38,10 @@ export interface PreviewGuestContents {
   isDestroyed(): boolean;
   getURL(): string;
   executeJavaScript(code: string, userGesture?: boolean): Promise<unknown>;
-  executeJavaScriptInIsolatedWorld(worldId: number, scripts: Array<{ code: string }>): Promise<unknown>;
+  executeJavaScriptInIsolatedWorld(
+    worldId: number,
+    scripts: Array<{ code: string }>,
+  ): Promise<unknown>;
   capturePage(): Promise<{ toPNG(): Buffer }>;
   loadURL(url: string): Promise<void>;
   sendInputEvent(event: {
@@ -113,7 +116,11 @@ export function createGuestAgentSource(contents: PreviewGuestContents): {
     const descriptor = parsePageElementDescriptor(reply['descriptor']);
     if (descriptor === null) throw new Error('preview-element-handle-invalid');
     const stored = registry.descriptors.get(handle);
-    if (stored === undefined || !descriptor.connected || !sameElementDescriptor(stored, descriptor)) {
+    if (
+      stored === undefined ||
+      !descriptor.connected ||
+      !sameElementDescriptor(stored, descriptor)
+    ) {
       registry.descriptors.delete(handle);
       throw new Error('preview-element-changed');
     }
@@ -226,7 +233,9 @@ export function createGuestAgentSource(contents: PreviewGuestContents): {
       if (registry === null) throw new Error('preview-page-changed');
       if (action.kind === 'type') {
         const reply = unknownRecord(
-          await runInRegistryWorld(focusScript(registry.nonce, action.elementHandle, action.replace)),
+          await runInRegistryWorld(
+            focusScript(registry.nonce, action.elementHandle, action.replace),
+          ),
         );
         if (reply?.['focused'] !== true) throw new Error('preview-element-not-editable');
         await contents.insertText(action.text);

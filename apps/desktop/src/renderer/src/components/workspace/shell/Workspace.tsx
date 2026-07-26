@@ -71,7 +71,7 @@ import { projectGroupDisplay } from '../canvas/interactions/groups/group-display
 import {
   canvasPlacementObstacles,
   freeCanvasPosition,
-} from '../canvas/interactions/auto-placement.js';
+} from '../canvas/interactions/placement/auto-placement.js';
 import {
   fitAutomaticGroupFrames,
   frameIdsClaimingMembers,

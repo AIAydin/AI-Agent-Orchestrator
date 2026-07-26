@@ -376,9 +376,13 @@ async function removeProbeContainer(
   name: string,
   beforeCommand?: BeforeDockerCommand,
 ): Promise<void> {
-  await runBoundedDockerCommand(executable, ['rm', '--force', name], 2_000, 2_048, beforeCommand).catch(
-    () => undefined,
-  );
+  await runBoundedDockerCommand(
+    executable,
+    ['rm', '--force', name],
+    2_000,
+    2_048,
+    beforeCommand,
+  ).catch(() => undefined);
 }
 
 export async function runBoundedDockerCommand(

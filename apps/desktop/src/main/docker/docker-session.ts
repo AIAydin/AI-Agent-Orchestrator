@@ -195,9 +195,12 @@ export async function resolveDockerSessionLaunch(
     throw new Error('Turn on Docker in Settings to use Docker isolated.');
   }
   if (settings.dockerMountHostCredentials) {
-    throw new Error('Docker launches are blocked while host credentials sharing is on in Settings.');
+    throw new Error(
+      'Docker launches are blocked while host credentials sharing is on in Settings.',
+    );
   }
-  const image = settings.dockerImage.trim() === '' ? DEFAULT_DOCKER_SESSION_IMAGE : settings.dockerImage.trim();
+  const image =
+    settings.dockerImage.trim() === '' ? DEFAULT_DOCKER_SESSION_IMAGE : settings.dockerImage.trim();
   const command = dockerSessionContainerCommand(input.adapterId, image, input.model);
   if (command === null) {
     throw new Error('Docker isolated supports the built-in agents only.');

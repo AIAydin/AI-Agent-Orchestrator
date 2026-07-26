@@ -20,7 +20,7 @@ import type {
   Project,
 } from '../../../../../shared/application/contracts.js';
 import { settingsDraftValidationIssues } from '../../../../../shared/settings/draft-validation.js';
-import { applyAppearance } from '../../../lib/appearance.js';
+import { applyAppearance } from '../../../lib/appearance/appearance.js';
 import { unwrap } from '../../../lib/ipc.js';
 import { WorkspaceTooltip } from '../../workspace/shell/tooltips/WorkspaceTooltip.js';
 import { AgentsSettings } from '../agents/AgentsSettings.js';

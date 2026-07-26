@@ -1,4 +1,4 @@
-import type { AppSettings } from '../../../shared/application/contracts.js';
+import type { AppSettings } from '../../../../shared/application/contracts.js';
 
 export type AppearanceSettings = Pick<AppSettings, 'theme' | 'density' | 'reducedMotion'>;
 

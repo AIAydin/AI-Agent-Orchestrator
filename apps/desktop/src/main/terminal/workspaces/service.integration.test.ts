@@ -187,9 +187,7 @@ describe('ManagedTerminalWorkspaceService', () => {
     expect(launch).not.toBeNull();
     expect(launch?.executable).toBe(await realpath(dockerExecutable));
     expect(launch?.arguments[0]).toBe('run');
-    expect(launch?.arguments).toContain(
-      `type=bind,source=${workspace.rootPath},target=/workspace`,
-    );
+    expect(launch?.arguments).toContain(`type=bind,source=${workspace.rootPath},target=/workspace`);
     expect(launch?.arguments.slice(-4)).toEqual([
       'acme/agents:1',
       'claude',
@@ -274,9 +272,7 @@ interface Fixture {
   readonly store: MemoryWorkspaceStore;
 }
 
-async function createFixture(
-  profiles: Readonly<Record<string, string>> = {},
-): Promise<Fixture> {
+async function createFixture(profiles: Readonly<Record<string, string>> = {}): Promise<Fixture> {
   const root = await realpath(
     await mkdtemp(path.join(os.tmpdir(), 'forgeboard-agent-workspaces-')),
   );

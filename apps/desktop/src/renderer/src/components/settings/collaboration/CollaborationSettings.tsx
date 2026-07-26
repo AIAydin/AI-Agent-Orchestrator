@@ -421,10 +421,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
                 onJoin={joinInvite}
               />
             </section>
-            <section
-              className="collaboration-setup-card"
-              aria-labelledby="create-invite-title"
-            >
+            <section className="collaboration-setup-card" aria-labelledby="create-invite-title">
               <h4 id="create-invite-title">Invite someone</h4>
               <p>Creates your room and copies a one-use invite link that works for 10 minutes.</p>
               <button

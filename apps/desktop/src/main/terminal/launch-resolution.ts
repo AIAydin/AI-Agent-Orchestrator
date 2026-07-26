@@ -227,8 +227,7 @@ function executableCandidates(command: string, cwd: string, pathOverride?: strin
   if (command.includes('/') || command.includes('\\') || command.includes(sep)) {
     return [resolve(cwd, command)];
   }
-  const pathValue =
-    pathOverride ?? process.env.PATH ?? process.env.Path ?? process.env.path ?? '';
+  const pathValue = pathOverride ?? process.env.PATH ?? process.env.Path ?? process.env.path ?? '';
   const extensions =
     process.platform === 'win32' && extname(command) === ''
       ? (process.env.PATHEXT ?? '.COM;.EXE')

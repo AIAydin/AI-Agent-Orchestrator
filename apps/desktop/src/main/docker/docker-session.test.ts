@@ -85,9 +85,9 @@ describe('dockerSessionRunArguments', () => {
     expect(() => dockerSessionRunArguments({ ...input, worktreePath: 'relative/path' })).toThrow(
       /absolute/i,
     );
-    expect(() =>
-      dockerSessionRunArguments({ ...input, worktreePath: '/tmp/with,comma' }),
-    ).toThrow(/bind-mounted/i);
+    expect(() => dockerSessionRunArguments({ ...input, worktreePath: '/tmp/with,comma' })).toThrow(
+      /bind-mounted/i,
+    );
   });
 
   it('rejects hostile images, names, limits, and empty commands before any process starts', () => {
@@ -196,14 +196,13 @@ describe('resolveDockerSessionLaunch', () => {
       'claude-sonnet-5',
     ]);
     expect(launch.arguments).toContain('--mount');
-    expect(launch.arguments).toContain('type=bind,source=/tmp/managed/worktree-1,target=/workspace');
+    expect(launch.arguments).toContain(
+      'type=bind,source=/tmp/managed/worktree-1,target=/workspace',
+    );
   });
 });
 
-function runnerFor(exitCodes: {
-  version: number;
-  inspect?: number;
-}): DockerSessionCommandRunner {
+function runnerFor(exitCodes: { version: number; inspect?: number }): DockerSessionCommandRunner {
   return vi.fn((_executable: string, arguments_: readonly string[]) => {
     const exitCode = arguments_[0] === 'version' ? exitCodes.version : (exitCodes.inspect ?? 1);
     return Promise.resolve({ exitCode, stdout: '', stderr: '', timedOut: false });

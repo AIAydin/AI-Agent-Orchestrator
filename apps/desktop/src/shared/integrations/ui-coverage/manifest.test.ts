@@ -50,5 +50,4 @@ describe('ordinary integration UI coverage', () => {
       );
     }
   });
-
 });

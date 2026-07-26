@@ -369,7 +369,9 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
   'storage/workflow/executions.ts': entry('durable-internal-state', ['node:sqlite#DatabaseSync']),
   'storage/writes.ts': entry('durable-internal-state', ['node:sqlite#DatabaseSync']),
   'storage.ts': entry('durable-internal-state', ['node:sqlite#DatabaseSync']),
-  'terminal/login-shell-path.ts': entry('reviewed-runtime', ['node:child_process#execFile']),
+  'terminal/environment/login-shell-path.ts': entry('reviewed-runtime', [
+    'node:child_process#execFile',
+  ]),
   'terminal/pty-process.ts': entry('reviewed-runtime', ['node:fs/promises#chmod']),
   // Create-only, inside the agent CLI's own history root, and audited on every provision: the
   // symbolic link is written only where nothing exists (lstat-checked, so even a broken link is

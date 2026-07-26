@@ -20,10 +20,7 @@ import { synchronizeCanvasDocument } from '../../../shared/canvas/adapter.js';
 import { resolveDockerSessionLaunch } from '../../docker/docker-session.js';
 import type { LocalStore, StoredRunRecord } from '../../storage.js';
 import { assertPersistedAgentNodeMutable } from '../../runs/context/persisted-agent-context.js';
-import {
-  environmentWithLoginShellPath,
-  loginShellPath,
-} from '../login-shell-path.js';
+import { environmentWithLoginShellPath, loginShellPath } from '../environment/login-shell-path.js';
 import type {
   AutomaticTerminalAgentLaunch,
   AutomaticTerminalProjectLaunch,
@@ -240,11 +237,15 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       );
     }
 
-    const currentConfiguration = this.#persistedAgentConfiguration(record.projectId, record.nodeId, {
-      expectedAdapterId: record.adapterId,
-      profiles: ['worktree-write'],
-      profileLabel: '“Write in a worktree”',
-    });
+    const currentConfiguration = this.#persistedAgentConfiguration(
+      record.projectId,
+      record.nodeId,
+      {
+        expectedAdapterId: record.adapterId,
+        profiles: ['worktree-write'],
+        profileLabel: '“Write in a worktree”',
+      },
+    );
     this.#assertRecordedConfiguration(record, currentConfiguration);
     const currentOverride = this.getSettings().agentExecutableOverrides[record.adapterId]?.trim();
     if ((currentOverride ?? '') !== (executableOverride ?? '')) {
@@ -274,12 +275,16 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       worktreePath: workspace.rootPath,
       containerName: `forgeboard-agent-${this.#createId()}`,
     });
-    const currentConfiguration = this.#persistedAgentConfiguration(record.projectId, record.nodeId, {
-      expectedAdapterId: record.adapterId,
-      profiles: ['docker-isolated'],
-      profileLabel: '“Docker isolated”',
-      runtime: 'docker',
-    });
+    const currentConfiguration = this.#persistedAgentConfiguration(
+      record.projectId,
+      record.nodeId,
+      {
+        expectedAdapterId: record.adapterId,
+        profiles: ['docker-isolated'],
+        profileLabel: '“Docker isolated”',
+        runtime: 'docker',
+      },
+    );
     this.#assertRecordedConfiguration(record, currentConfiguration);
     return {
       executable: launch.executable,

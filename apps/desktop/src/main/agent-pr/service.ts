@@ -9,7 +9,7 @@ import { resolveTerminalExecutable } from '../terminal/launch-resolution.js';
 import {
   environmentWithLoginShellPath,
   loginShellPath,
-} from '../terminal/login-shell-path.js';
+} from '../terminal/environment/login-shell-path.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -166,10 +166,13 @@ export function pullRequestUrl(output: string): string | null {
 }
 
 function commandFailureMessage(file: string, args: readonly string[], error: unknown): string {
-  const stderr =
+  const raw =
     typeof error === 'object' && error !== null && 'stderr' in error
-      ? String((error as { stderr?: unknown }).stderr ?? '').trim()
-      : '';
+      ? (error as { stderr?: unknown }).stderr
+      : undefined;
+  // Only real text is useful here; anything else stringifies to '[object Object]'.
+  const stderr =
+    typeof raw === 'string' ? raw.trim() : Buffer.isBuffer(raw) ? raw.toString('utf8').trim() : '';
   const detail =
     stderr !== ''
       ? stderr.split('\n').slice(-3).join(' ').slice(0, 512)

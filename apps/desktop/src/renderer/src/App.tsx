@@ -15,7 +15,7 @@ import { Welcome } from './components/onboarding/Welcome.js';
 import { Workspace } from './components/workspace/shell/Workspace.js';
 import type { WorkspaceHandle } from './components/workspace/model/types.js';
 import { unwrap } from './lib/ipc.js';
-import { applyAppearance, watchSystemTheme } from './lib/appearance.js';
+import { applyAppearance, watchSystemTheme } from './lib/appearance/appearance.js';
 import { BootstrapScreen } from './components/application/bootstrap/BootstrapScreen.js';
 
 const ERROR_TOAST_MS = 8_000;

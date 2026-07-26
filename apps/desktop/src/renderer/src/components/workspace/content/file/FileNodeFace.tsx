@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 
-import {
-  FileDocumentSchema,
-  type FileDocument,
-} from '../../../../../../shared/files/contracts.js';
+import { FileDocumentSchema, type FileDocument } from '../../../../../../shared/files/contracts.js';
 import { minimumNodeDimensionsForKind } from '../../../../../../shared/canvas/node-dimensions.js';
 import { fileBrowserError } from '../../../file-editor/browser/useProjectFileBrowser.js';
 import { languageForFile } from '../../../file-editor/language.js';

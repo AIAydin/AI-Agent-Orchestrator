@@ -213,10 +213,7 @@ export function useWorkspaceContextActions({
       edgesRef.current = nextEdges;
       setEdges(nextEdges);
       setEvents((items) =>
-        [
-          `Connected ${source.data.title} to ${target.data.title} by voice.`,
-          ...items,
-        ].slice(0, 30),
+        [`Connected ${source.data.title} to ${target.data.title} by voice.`, ...items].slice(0, 30),
       );
     },
     [
