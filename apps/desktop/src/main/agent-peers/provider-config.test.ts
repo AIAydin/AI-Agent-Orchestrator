@@ -14,6 +14,7 @@ vi.mock('electron', () => ({
   },
 }));
 
+import type * as ProviderConfig from './provider-config.js';
 import { shimEntryPath, writeProviderPeerMaterial } from './provider-config.js';
 
 const ENVIRONMENT = Object.freeze({
@@ -377,16 +378,12 @@ describe('writeProviderPeerMaterial', () => {
         expect(afterFirstCleanup.mcpServers[keyB]).toBeDefined();
         await expect(stat(settingsPath)).resolves.toBeDefined();
 
-        // Cleaning up the SECOND provision removes its key too. It must NOT delete the file:
-        // the file already existed (A created it) before B's own write, so B never qualifies as
-        // the creator and must never be the one to delete it -- even though it is now empty.
+        // Cleaning up the SECOND provision removes its key too, and now that nothing but
+        // Forgeboard residue is left the file goes with it: A created it in this same app
+        // instance, so B knows the file is Forgeboard's own and that deleting it restores the
+        // project to its pre-Forgeboard state.
         await materialB.cleanup();
-        const afterSecondCleanup = (await readJson(settingsPath)) as {
-          mcpServers?: Record<string, unknown>;
-        };
-        expect(afterSecondCleanup.mcpServers?.[keyA]).toBeUndefined();
-        expect(afterSecondCleanup.mcpServers?.[keyB]).toBeUndefined();
-        await expect(stat(settingsPath)).resolves.toBeDefined();
+        await expect(stat(settingsPath)).rejects.toMatchObject({ code: 'ENOENT' });
       } finally {
         await rm(provisionDirA, { recursive: true, force: true });
         await rm(provisionDirB, { recursive: true, force: true });
@@ -494,20 +491,461 @@ describe('writeProviderPeerMaterial', () => {
         expect(afterFirstCleanup.mcp[keyB]).toBeDefined();
         await expect(stat(configPath)).resolves.toBeDefined();
 
-        // Cleaning up the SECOND provision removes its key too. It must NOT delete the file:
-        // the file already existed (A created it) before B's own write, so B never qualifies as
-        // the creator and must never be the one to delete it -- even though it is now empty.
+        // Cleaning up the SECOND provision removes its key too, and now that nothing but
+        // Forgeboard residue is left the file goes with it: A created it in this same app
+        // instance, so B knows the file is Forgeboard's own and that deleting it restores the
+        // project to its pre-Forgeboard state.
         await materialB.cleanup();
-        const afterSecondCleanup = (await readJson(configPath)) as {
-          mcp?: Record<string, unknown>;
-        };
-        expect(afterSecondCleanup.mcp?.[keyA]).toBeUndefined();
-        expect(afterSecondCleanup.mcp?.[keyB]).toBeUndefined();
-        await expect(stat(configPath)).resolves.toBeDefined();
+        await expect(stat(configPath)).rejects.toMatchObject({ code: 'ENOENT' });
       } finally {
         await rm(provisionDirA, { recursive: true, force: true });
         await rm(provisionDirB, { recursive: true, force: true });
       }
+    });
+  });
+
+  // The shared project-root files (`opencode.json`, `.gemini/settings.json`) live inside the
+  // user's git repo, and the process that wrote an entry can die without ever running its
+  // cleanup. These cover the two halves of the answer: a sweep on every write that removes
+  // leaked entries, and a cleanup that restores the pre-session file exactly.
+  describe('shared project-root config hygiene', () => {
+    const OTHER_CHECKOUT = '/Users/someone/Another Checkout';
+
+    function leakedOpencodeEntry(checkout = OTHER_CHECKOUT): Record<string, unknown> {
+      return {
+        type: 'local',
+        command: [
+          `${checkout}/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`,
+          `${checkout}/packages/peer-mcp/dist/main.js`,
+        ],
+        environment: { ELECTRON_RUN_AS_NODE: '1' },
+      };
+    }
+
+    function leakedGeminiEntry(checkout = OTHER_CHECKOUT): Record<string, unknown> {
+      return {
+        command: `${checkout}/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`,
+        args: [`${checkout}/packages/peer-mcp/dist/main.js`],
+        env: { ELECTRON_RUN_AS_NODE: '1' },
+      };
+    }
+
+    function leakedKey(index: number): string {
+      return `forgeboard-1c9a1f${String(index).padStart(2, '0')}-27b4-42b8-9a08-238ee0c15600`;
+    }
+
+    /** A fresh module instance -- a new process, i.e. the live-provision registry starts empty.
+     * That is exactly what a crash/kill looks like to the next app run: the entries a dead
+     * session left behind are on disk, but nothing in memory claims them. */
+    async function restartApp(): Promise<typeof ProviderConfig> {
+      vi.resetModules();
+      return await import('./provider-config.js');
+    }
+
+    describe('opencode', () => {
+      it('sweeps leaked forgeboard-* entries on write while preserving every key it did not author', async () => {
+        const configPath = join(projectRoot, 'opencode.json');
+        const userEntry = { type: 'local', command: ['npx', '-y', 'docs-mcp'] };
+        // A user MCP server that merely happens to be named `forgeboard-*`: the prefix matches
+        // but the shape does not, so the sweep must leave it completely alone.
+        const userNamedLikeOurs = { type: 'remote', url: 'https://example.test/mcp' };
+        await writeFile(
+          configPath,
+          JSON.stringify(
+            {
+              $schema: 'https://opencode.ai/config.json',
+              model: 'anthropic/claude-opus-4',
+              mcp: {
+                docs: userEntry,
+                'forgeboard-mine': userNamedLikeOurs,
+                [leakedKey(1)]: leakedOpencodeEntry(),
+                [leakedKey(2)]: leakedOpencodeEntry(),
+                [leakedKey(3)]: leakedOpencodeEntry('/Users/aydin/AI Agent Orchestrator'),
+              },
+            },
+            null,
+            2,
+          ),
+        );
+
+        const material = await writeProviderPeerMaterial({
+          adapterId: 'opencode',
+          provisionDir,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+
+        const entryKey = `forgeboard-${String(provisionDir.split('/').pop())}`;
+        const afterWrite = (await readJson(configPath)) as Record<string, unknown> & {
+          mcp: Record<string, unknown>;
+        };
+        expect(Object.keys(afterWrite.mcp).sort()).toEqual(
+          ['docs', 'forgeboard-mine', entryKey].sort(),
+        );
+        expect(afterWrite.mcp['docs']).toEqual(userEntry);
+        expect(afterWrite.mcp['forgeboard-mine']).toEqual(userNamedLikeOurs);
+        expect(afterWrite['$schema']).toBe('https://opencode.ai/config.json');
+        expect(afterWrite['model']).toBe('anthropic/claude-opus-4');
+
+        await material.cleanup();
+
+        const afterCleanup = (await readJson(configPath)) as { mcp: Record<string, unknown> };
+        expect(Object.keys(afterCleanup.mcp).sort()).toEqual(['docs', 'forgeboard-mine']);
+      });
+
+      it('collapses a file that accumulated many leaked entries down to the live one', async () => {
+        const configPath = join(projectRoot, 'opencode.json');
+        const leaked = Object.fromEntries(
+          Array.from({ length: 13 }, (_unused, index) => [leakedKey(index), leakedOpencodeEntry()]),
+        );
+        await writeFile(
+          configPath,
+          JSON.stringify({ $schema: 'https://opencode.ai/config.json', mcp: leaked }, null, 2),
+        );
+
+        const material = await writeProviderPeerMaterial({
+          adapterId: 'opencode',
+          provisionDir,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+
+        const entryKey = `forgeboard-${String(provisionDir.split('/').pop())}`;
+        const afterWrite = (await readJson(configPath)) as { mcp: Record<string, unknown> };
+        expect(Object.keys(afterWrite.mcp)).toEqual([entryKey]);
+
+        await material.cleanup();
+
+        // The file pre-existed this app instance, so it is never deleted -- but every entry the
+        // `mcp` map held was Forgeboard's, so the emptied map goes with them.
+        const afterCleanup = (await readJson(configPath)) as Record<string, unknown>;
+        expect(afterCleanup).toEqual({ $schema: 'https://opencode.ai/config.json' });
+      });
+
+      it('never sweeps a live sibling provision of the same app instance', async () => {
+        const siblingDir = await makeTempDir('forgeboard-peer-provision-sibling-');
+        try {
+          const configPath = join(projectRoot, 'opencode.json');
+          const siblingKey = `forgeboard-${String(siblingDir.split('/').pop())}`;
+          const entryKey = `forgeboard-${String(provisionDir.split('/').pop())}`;
+
+          const sibling = await writeProviderPeerMaterial({
+            adapterId: 'opencode',
+            provisionDir: siblingDir,
+            projectRoot,
+            environment: ENVIRONMENT,
+          });
+          const material = await writeProviderPeerMaterial({
+            adapterId: 'opencode',
+            provisionDir,
+            projectRoot,
+            environment: ENVIRONMENT,
+          });
+
+          const afterWrites = (await readJson(configPath)) as { mcp: Record<string, unknown> };
+          expect(Object.keys(afterWrites.mcp).sort()).toEqual([siblingKey, entryKey].sort());
+
+          await sibling.cleanup();
+          await material.cleanup();
+        } finally {
+          await rm(siblingDir, { recursive: true, force: true });
+        }
+      });
+
+      it('restores a pre-existing file byte-for-byte after a killed session cleans up', async () => {
+        const configPath = join(projectRoot, 'opencode.json');
+        // Deliberately unusual bytes: four-space indent, an unsorted key order and no trailing
+        // newline. A cleanup that merely re-serialises would change all three.
+        const original = [
+          '{',
+          '    "model": "anthropic/claude-opus-4",',
+          '    "$schema": "https://opencode.ai/config.json",',
+          '    "mcp": {',
+          '        "docs": { "type": "local", "command": ["npx", "-y", "docs-mcp"] }',
+          '    }',
+          '}',
+        ].join('\n');
+        await writeFile(configPath, original);
+
+        const material = await writeProviderPeerMaterial({
+          adapterId: 'opencode',
+          provisionDir,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+        expect(await readFile(configPath, 'utf8')).not.toBe(original);
+
+        // The PTY was killed: the session's only teardown signal is this cleanup call.
+        await material.cleanup();
+
+        expect(await readFile(configPath, 'utf8')).toBe(original);
+      });
+
+      it('removes a file it created once nothing but its own residue is left', async () => {
+        const configPath = join(projectRoot, 'opencode.json');
+        const material = await writeProviderPeerMaterial({
+          adapterId: 'opencode',
+          provisionDir,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+        await expect(stat(configPath)).resolves.toBeDefined();
+
+        await material.cleanup();
+
+        await expect(stat(configPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      });
+
+      it('removes a file it created even when the CLI added a $schema pointer of its own', async () => {
+        const configPath = join(projectRoot, 'opencode.json');
+        const material = await writeProviderPeerMaterial({
+          adapterId: 'opencode',
+          provisionDir,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+
+        // opencode normalises the config it loads and writes a `$schema` pointer back into it.
+        const normalised = (await readJson(configPath)) as Record<string, unknown>;
+        await writeFile(
+          configPath,
+          `${JSON.stringify({ $schema: 'https://opencode.ai/config.json', ...normalised }, null, 2)}\n`,
+        );
+
+        await material.cleanup();
+
+        await expect(stat(configPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      });
+
+      it('keeps a file it created when the user put real content in it during the session', async () => {
+        const configPath = join(projectRoot, 'opencode.json');
+        const material = await writeProviderPeerMaterial({
+          adapterId: 'opencode',
+          provisionDir,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+
+        const current = (await readJson(configPath)) as Record<string, unknown>;
+        await writeFile(
+          configPath,
+          `${JSON.stringify({ ...current, model: 'anthropic/claude-opus-4' }, null, 2)}\n`,
+        );
+
+        await material.cleanup();
+
+        const afterCleanup = (await readJson(configPath)) as Record<string, unknown>;
+        expect(afterCleanup).toEqual({ model: 'anthropic/claude-opus-4' });
+      });
+
+      it('sweeps the previous run leak after a crash, leaving the file as the crash found it', async () => {
+        const configPath = join(projectRoot, 'opencode.json');
+        const original = `${JSON.stringify(
+          {
+            $schema: 'https://opencode.ai/config.json',
+            mcp: { docs: { type: 'local', command: ['npx', '-y', 'docs-mcp'] } },
+          },
+          null,
+          2,
+        )}\n`;
+        await writeFile(configPath, original);
+
+        const crashedDir = await makeTempDir('forgeboard-peer-provision-crashed-');
+        try {
+          const crashedApp = await restartApp();
+          await crashedApp.writeProviderPeerMaterial({
+            adapterId: 'opencode',
+            provisionDir: crashedDir,
+            projectRoot,
+            environment: ENVIRONMENT,
+          });
+          // The app is killed here: `cleanup()` is never called and the entry is left on disk.
+          const leaked = (await readJson(configPath)) as { mcp: Record<string, unknown> };
+          expect(Object.keys(leaked.mcp)).toHaveLength(2);
+
+          const restartedApp = await restartApp();
+          const material = await restartedApp.writeProviderPeerMaterial({
+            adapterId: 'opencode',
+            provisionDir,
+            projectRoot,
+            environment: ENVIRONMENT,
+          });
+
+          const entryKey = `forgeboard-${String(provisionDir.split('/').pop())}`;
+          const afterWrite = (await readJson(configPath)) as { mcp: Record<string, unknown> };
+          expect(Object.keys(afterWrite.mcp).sort()).toEqual(['docs', entryKey].sort());
+
+          await material.cleanup();
+
+          expect(await readFile(configPath, 'utf8')).toBe(original);
+        } finally {
+          await rm(crashedDir, { recursive: true, force: true });
+        }
+      });
+
+      it('is idempotent: repeated cleanup calls neither throw nor touch the file again', async () => {
+        const configPath = join(projectRoot, 'opencode.json');
+        await writeFile(configPath, `${JSON.stringify({ model: 'gpt-mini' }, null, 2)}\n`);
+        const original = await readFile(configPath, 'utf8');
+
+        const material = await writeProviderPeerMaterial({
+          adapterId: 'opencode',
+          provisionDir,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+
+        await Promise.all([material.cleanup(), material.cleanup()]);
+        await expect(material.cleanup()).resolves.toBeUndefined();
+
+        expect(await readFile(configPath, 'utf8')).toBe(original);
+      });
+
+      it('keeps the JSON valid and every live entry intact across interleaved writes and cleanups', async () => {
+        const configPath = join(projectRoot, 'opencode.json');
+        const dirs = await Promise.all([
+          makeTempDir('forgeboard-peer-provision-x-'),
+          makeTempDir('forgeboard-peer-provision-y-'),
+          makeTempDir('forgeboard-peer-provision-z-'),
+        ]);
+        const [dirX, dirY, dirZ] = dirs;
+        try {
+          const keys = dirs.map((dir) => `forgeboard-${String(dir.split('/').pop())}`);
+          const write = async (dir: string) =>
+            await writeProviderPeerMaterial({
+              adapterId: 'opencode',
+              provisionDir: dir,
+              projectRoot,
+              environment: ENVIRONMENT,
+            });
+          const liveKeys = async (): Promise<string[]> => {
+            const parsed = (await readJson(configPath)) as { mcp?: Record<string, unknown> };
+            return Object.keys(parsed.mcp ?? {}).sort();
+          };
+
+          // Two provisions racing on the same file: both entries must survive.
+          const [first, second] = await Promise.all([write(dirX), write(dirY)]);
+          expect(await liveKeys()).toEqual([keys[0], keys[1]].sort());
+
+          // A third registration racing against the first one's teardown.
+          const [, third] = await Promise.all([first.cleanup(), write(dirZ)]);
+          expect(await liveKeys()).toEqual([keys[1], keys[2]].sort());
+
+          await Promise.all([second.cleanup(), third.cleanup()]);
+          await expect(stat(configPath)).rejects.toMatchObject({ code: 'ENOENT' });
+        } finally {
+          await Promise.all(
+            dirs.map(async (dir) => await rm(dir, { recursive: true, force: true })),
+          );
+        }
+      });
+    });
+
+    describe('gemini', () => {
+      it('sweeps leaked forgeboard-* entries on write while preserving every key it did not author', async () => {
+        const settingsPath = join(projectRoot, '.gemini', 'settings.json');
+        await mkdir(join(projectRoot, '.gemini'), { recursive: true });
+        const userEntry = { command: 'npx', args: ['-y', 'docs-mcp'] };
+        const userNamedLikeOurs = { httpUrl: 'https://example.test/mcp' };
+        await writeFile(
+          settingsPath,
+          JSON.stringify(
+            {
+              theme: 'dark',
+              mcpServers: {
+                docs: userEntry,
+                'forgeboard-mine': userNamedLikeOurs,
+                [leakedKey(1)]: leakedGeminiEntry(),
+                [leakedKey(2)]: leakedGeminiEntry(),
+              },
+            },
+            null,
+            2,
+          ),
+        );
+
+        const material = await writeProviderPeerMaterial({
+          adapterId: 'gemini',
+          provisionDir,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+
+        const entryKey = `forgeboard-${String(provisionDir.split('/').pop())}`;
+        const afterWrite = (await readJson(settingsPath)) as Record<string, unknown> & {
+          mcpServers: Record<string, unknown>;
+        };
+        expect(Object.keys(afterWrite.mcpServers).sort()).toEqual(
+          ['docs', 'forgeboard-mine', entryKey].sort(),
+        );
+        expect(afterWrite.mcpServers['docs']).toEqual(userEntry);
+        expect(afterWrite.mcpServers['forgeboard-mine']).toEqual(userNamedLikeOurs);
+        expect(afterWrite['theme']).toBe('dark');
+
+        await material.cleanup();
+
+        const afterCleanup = (await readJson(settingsPath)) as {
+          mcpServers: Record<string, unknown>;
+        };
+        expect(Object.keys(afterCleanup.mcpServers).sort()).toEqual(['docs', 'forgeboard-mine']);
+      });
+
+      it('restores a pre-existing settings file byte-for-byte after a killed session cleans up', async () => {
+        await mkdir(join(projectRoot, '.gemini'), { recursive: true });
+        const settingsPath = join(projectRoot, '.gemini', 'settings.json');
+        const original = '{\n\t"theme": "dark",\n\t"mcpServers": {}\n}';
+        await writeFile(settingsPath, original);
+
+        const material = await writeProviderPeerMaterial({
+          adapterId: 'gemini',
+          provisionDir,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+        expect(await readFile(settingsPath, 'utf8')).not.toBe(original);
+
+        await material.cleanup();
+
+        expect(await readFile(settingsPath, 'utf8')).toBe(original);
+      });
+
+      it('sweeps the previous run leak after a crash, leaving the file as the crash found it', async () => {
+        await mkdir(join(projectRoot, '.gemini'), { recursive: true });
+        const settingsPath = join(projectRoot, '.gemini', 'settings.json');
+        const original = `${JSON.stringify({ theme: 'dark' }, null, 2)}\n`;
+        await writeFile(settingsPath, original);
+
+        const crashedDir = await makeTempDir('forgeboard-peer-provision-crashed-g-');
+        try {
+          const crashedApp = await restartApp();
+          await crashedApp.writeProviderPeerMaterial({
+            adapterId: 'gemini',
+            provisionDir: crashedDir,
+            projectRoot,
+            environment: ENVIRONMENT,
+          });
+
+          const restartedApp = await restartApp();
+          const material = await restartedApp.writeProviderPeerMaterial({
+            adapterId: 'gemini',
+            provisionDir,
+            projectRoot,
+            environment: ENVIRONMENT,
+          });
+
+          const entryKey = `forgeboard-${String(provisionDir.split('/').pop())}`;
+          const afterWrite = (await readJson(settingsPath)) as {
+            mcpServers: Record<string, unknown>;
+          };
+          expect(Object.keys(afterWrite.mcpServers)).toEqual([entryKey]);
+
+          await material.cleanup();
+
+          expect(await readFile(settingsPath, 'utf8')).toBe(original);
+        } finally {
+          await rm(crashedDir, { recursive: true, force: true });
+        }
+      });
     });
   });
 
