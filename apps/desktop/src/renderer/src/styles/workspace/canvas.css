@@ -1,9 +1,27 @@
 .canvas-region {
   grid-area: canvas;
   position: relative;
+  isolation: isolate;
   min-width: 0;
   min-height: 0;
   background: var(--canvas);
+}
+/* Cosmic backdrop artwork behind the flow surface. The source art is dark, so
+   dark mode shows it as-is; light mode inverts it into cream-toned line art
+   and lets the canvas base color temper it. */
+.canvas-region::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: url('../../assets/canvas-background.png') center / cover no-repeat;
+  filter: invert(1) hue-rotate(180deg) saturate(0.75);
+  opacity: 0.55;
+}
+:root[data-theme='dark'] .canvas-region::before {
+  filter: none;
+  opacity: 1;
 }
 .canvas-region .react-flow__viewport {
   will-change: transform;
