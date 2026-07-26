@@ -158,14 +158,14 @@ describe('FileNodeFace', () => {
     expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 
-  it('surfaces the read policy message for files the renderer cannot read', async () => {
+  it('surfaces the read failure message for files the renderer cannot read', async () => {
     read.mockRejectedValue({
-      code: 'SENSITIVE_FILE',
-      message: 'Sensitive files are not exposed to the embedded renderer.',
+      code: 'IO_ERROR',
+      message: 'The file changed while it was being read. Try again.',
     });
     render(<FileNodeFace id="n1" data={nodeData({ file: fileReference })} />);
     expect(
-      await screen.findByText('Sensitive files are not exposed to the embedded renderer.'),
+      await screen.findByText('The file changed while it was being read. Try again.'),
     ).toBeTruthy();
   });
 

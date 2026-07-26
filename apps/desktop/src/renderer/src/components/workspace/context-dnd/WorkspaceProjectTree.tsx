@@ -60,7 +60,7 @@ export function WorkspaceProjectTree({
           ),
     [browser.entries, expandedDirectories, query, searching],
   );
-  // Directories the background scan skips (ignored folders) list lazily on first expand.
+  // Directories the background scan skips (ignored and sensitive folders) list lazily on first expand.
   const indexedParents = useMemo(() => {
     const parents = new Set<string>();
     for (const entry of browser.entries) parents.add(parentDirectory(entry.relativePath));
@@ -142,7 +142,7 @@ export function WorkspaceProjectTree({
             expanded={expandedDirectories.has(entry.relativePath)}
             selected={selectedFile?.relativePath === entry.relativePath}
             onSelectFile={(selected) => {
-              if (selected.policy.status === 'normal') setSelectedFile(selected);
+              setSelectedFile(selected);
               onOpenFile?.(selected);
             }}
             onToggleDirectory={searching ? revealDirectory : toggleDirectory}
@@ -215,14 +215,13 @@ function ProjectTreeEntry({
   readonly onSelectFile: (entry: FileTreeEntry) => void;
   readonly onToggleDirectory: (relativePath: string) => void;
 }) {
-  const safe = entry.canOpen && entry.policy.status === 'normal';
-  const ignored = entry.policy.status === 'ignored';
-  const draggable = safe && entry.kind === 'file';
+  const normal = entry.policy.status === 'normal';
+  const draggable = entry.canOpen && normal && entry.kind === 'file';
   const label = searching ? entry.relativePath : entry.name;
   const indent = { paddingInlineStart: 4 + depth * 12 };
   if (entry.kind === 'directory') {
-    // Ignored folders stay browsable (shield kept); sensitive ones never list.
-    if (!safe && !ignored) {
+    // Ignored and sensitive folders stay browsable (shield kept, listed lazily on expand).
+    if (!entry.canOpen) {
       return (
         <WorkspaceTooltip content={entry.policy.reason ?? policyLabel(entry)}>
           <div
@@ -248,7 +247,7 @@ function ProjectTreeEntry({
         role="treeitem"
         className="workspace-project-tree-row"
         style={indent}
-        title={ignored ? (entry.policy.reason ?? policyLabel(entry)) : entry.relativePath}
+        title={normal ? entry.relativePath : (entry.policy.reason ?? policyLabel(entry))}
         aria-level={depth + 1}
         {...(searching ? {} : { 'aria-expanded': open })}
         aria-label={`${open ? 'Collapse' : 'Expand'} folder ${entry.relativePath}`}
@@ -276,16 +275,18 @@ function ProjectTreeEntry({
           <Folder size={13} aria-hidden="true" />
         )}
         <span>{label}</span>
-        {ignored ? <ShieldAlert size={12} aria-hidden="true" /> : null}
+        {normal ? null : <ShieldAlert size={12} aria-hidden="true" />}
       </button>
     );
   }
-  const openable = safe || ignored;
+  const openable = entry.canOpen;
   const guidance = draggable
     ? `Drag ${entry.relativePath} onto an agent to share it, or click to open it`
-    : ignored
+    : entry.policy.status === 'ignored'
       ? 'Ignored — opens on the canvas, never shared with agents.'
-      : (entry.policy.reason ?? "This file can't be opened.");
+      : entry.policy.status === 'sensitive'
+        ? 'May hold credentials — opens on the canvas, never shared with agents.'
+        : (entry.policy.reason ?? "This file can't be opened.");
   return (
     <WorkspaceTooltip content={guidance}>
       <button
@@ -297,11 +298,13 @@ function ProjectTreeEntry({
         draggable={draggable}
         aria-level={depth + 1}
         aria-label={
-          safe
+          normal
             ? `File ${entry.relativePath}`
-            : ignored
+            : entry.policy.status === 'ignored'
               ? `Ignored file ${entry.relativePath}`
-              : `Protected file ${entry.relativePath} (${policyLabel(entry)})`
+              : entry.policy.status === 'sensitive'
+                ? `Sensitive file ${entry.relativePath}`
+                : `Protected file ${entry.relativePath} (${policyLabel(entry)})`
         }
         aria-disabled={!openable}
         aria-selected={selected}
@@ -322,7 +325,7 @@ function ProjectTreeEntry({
         <span className="workspace-project-tree-gutter" aria-hidden="true" />
         <File size={13} aria-hidden="true" />
         <span>{label}</span>
-        {safe ? null : <ShieldAlert size={12} aria-hidden="true" />}
+        {normal ? null : <ShieldAlert size={12} aria-hidden="true" />}
       </button>
     </WorkspaceTooltip>
   );

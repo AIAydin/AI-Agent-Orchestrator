@@ -143,6 +143,8 @@ export const FileDocumentSchema = z
       .nullable(),
     readOnly: z.boolean(),
     readOnlyReason: z.string().min(1).max(1_000).nullable(),
+    /** True when the path matches a credential-like rule. Viewable locally, never shared with agents. */
+    sensitive: z.boolean().optional(),
   })
   .strict()
   .superRefine((document, context) => {

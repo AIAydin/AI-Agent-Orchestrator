@@ -39,6 +39,11 @@ export function linkProjectFileToAgent(input: {
   ) {
     return failure("The file on disk doesn't match the file you dragged. Try again.");
   }
+  // Sensitive files open locally but never travel to an agent; the launch-time
+  // attachment manifest enforces the same boundary in the main process.
+  if (input.document.sensitive === true) {
+    return failure("This file looks like it holds credentials, so it can't be shared with agents.");
+  }
 
   const attachmentIds = target.data.contextAttachmentIds ?? [];
   const sameFileAttachment = attachmentIds.find((attachmentId) => {

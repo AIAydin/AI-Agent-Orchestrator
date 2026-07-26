@@ -32,7 +32,6 @@ import {
   type FileProjectStore,
 } from './authority.js';
 import { FileDomainError, fileDomainBoundary } from './errors.js';
-import { assertDirectoryListable, assertFileContentNotSensitive } from './policy.js';
 import { readProjectDocument } from './reader.js';
 import {
   defaultProjectFileSearchOptions,
@@ -90,9 +89,6 @@ export class ProjectFileService {
       const parsed = FileTreeInputSchema.parse(input);
       const root = await resolveProjectFileRoot(this.store, parsed.projectId);
       const matcher = await loadProjectIgnoreMatcher(root);
-      if (parsed.directory !== '.') {
-        assertDirectoryListable(parsed.directory);
-      }
       return FileTreeResultSchema.parse(
         await listProjectDirectory(root, parsed.projectId, parsed.directory, matcher, {
           maxDirectoryEntries: this.#maxDirectoryEntries,
@@ -137,7 +133,6 @@ export class ProjectFileService {
       const parsed = FileSaveInputSchema.parse(input);
       return await this.#serializeSave(`${parsed.projectId}:${parsed.relativePath}`, async () => {
         const root = await resolveProjectFileRoot(this.store, parsed.projectId);
-        assertFileContentNotSensitive(parsed.relativePath);
         return FileDocumentSchema.parse(
           await saveProjectDocument(
             root,
@@ -187,7 +182,6 @@ export class ProjectFileService {
     return await fileDomainBoundary(async () => {
       const parsed = FileOpenExternalInputSchema.parse(input);
       const root = await resolveProjectFileRoot(this.store, parsed.projectId);
-      assertFileContentNotSensitive(parsed.relativePath);
       const resolved = await resolveExactProjectPath(root, parsed.relativePath);
       const targetStat = await lstat(resolved.path);
       if (!targetStat.isFile() || targetStat.isSymbolicLink()) {
@@ -207,7 +201,6 @@ export class ProjectFileService {
 
   async #readParsed(input: FileReadInput): Promise<FileDocument> {
     const root = await resolveProjectFileRoot(this.store, input.projectId);
-    assertFileContentNotSensitive(input.relativePath);
     return FileDocumentSchema.parse(
       await readProjectDocument(root, input.projectId, input.relativePath, {
         maxTextBytes: this.#maxTextBytes,

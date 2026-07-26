@@ -62,7 +62,9 @@ export async function listProjectDirectory(
       sizeBytes: kind === 'file' ? entryStat.size : null,
       modifiedAt: entryStat.mtime.toISOString(),
       policy,
-      canOpen: policy.status === 'normal' && (kind === 'file' || kind === 'directory'),
+      // Every ordinary file and folder opens for the local user — including ignored and
+      // sensitive entries. Policy status still gates what agents may receive.
+      canOpen: policy.status !== 'symlink' && (kind === 'file' || kind === 'directory'),
     });
   }
   entries.sort((left, right) => {
