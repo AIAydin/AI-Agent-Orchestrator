@@ -13,8 +13,8 @@ corepack pnpm start
 Running from source requires Node.js 22.12 or later with Corepack. Packaged installers are not
 published yet, so this source bootstrap is currently the only way to try Artemis.
 
-Artemis is an MIT-licensed, local-first visual workshop for building software with locally
-installed coding-agent CLIs. The current desktop application combines a spatial canvas, isolated
+Artemis is a fair-code, source-available, local-first visual workshop for building software with
+locally installed coding-agent CLIs. The current desktop application combines a spatial canvas, isolated
 Git worktrees, streamed agent sessions, loopback web/mobile previews, and explicit launch and
 workflow approval gates, authoritative primary-checkout Git review, staging, and commits, plus
 UI-configured project checks with persisted output. Completed writable runs can also be reopened as
@@ -385,4 +385,9 @@ and corresponding-source details are in
 
 ## License
 
-MIT
+Artemis is distributed under the [Sustainable Use License](LICENSE). You may use or modify it for
+your own internal business purposes or for non-commercial or personal use. You may not sell,
+commercially host, white-label, or otherwise provide Artemis to others for a fee.
+
+Third-party components retain their original licenses; see
+[Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md).

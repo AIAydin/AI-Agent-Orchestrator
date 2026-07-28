@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "A local-first visual workshop for software-building agents.",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "packageManager": "pnpm@11.15.1",
   "engines": {

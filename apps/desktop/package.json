@@ -9,7 +9,7 @@
     "name": "Artemis contributors",
     "email": "AIAydin@users.noreply.github.com"
   },
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {

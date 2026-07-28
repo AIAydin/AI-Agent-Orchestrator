@@ -1,7 +1,7 @@
 # Contributing
 
 Artemis welcomes focused issues and pull requests. By contributing, you agree that your work is
-licensed under the MIT license.
+licensed under the same Sustainable Use License that covers the project.
 
 ## Setup
 

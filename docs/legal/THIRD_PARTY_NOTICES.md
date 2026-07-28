@@ -1,6 +1,6 @@
 # Third-party notices
 
-Artemis is distributed under the MIT License. Its desktop installers also contain the
+Artemis is distributed under the Sustainable Use License. Its desktop installers also contain the
 following separately licensed software.
 
 ## Transformers.js 3.8.1
@@ -73,4 +73,5 @@ machine-checked source/version ledger; CI fails if the pinned Dugite package or 
 Git metadata drifts from it. The embedded distribution's additional dependency notices remain
 available at `git/libexec/git-core/NOTICE` inside the application resources.
 
-Bundled Git remains a separate program; Artemis's own source continues to be MIT licensed.
+Bundled Git remains a separate program; Artemis's own source is licensed under the Sustainable Use
+License.
