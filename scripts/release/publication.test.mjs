@@ -22,7 +22,7 @@ describe('release publication summary', () => {
 
     const summary = createPublicationSummary(records, '# Prepared notes');
 
-    assert.equal(summary.title, 'Forgeboard v0.1.0 (unsigned development; Linux checksum-only)');
+    assert.equal(summary.title, 'Artemis v0.1.0 (unsigned development; Linux checksum-only)');
     assert.match(summary.notes, /Unsigned development release/u);
     assert.match(summary.notes, /macOS x64: `unsigned-development`/u);
     assert.match(summary.notes, /# Prepared notes/u);
@@ -36,7 +36,7 @@ describe('release publication summary', () => {
 
     assert.equal(
       summary.title,
-      'Forgeboard v0.1.0 (macOS signed, not notarized; Windows signed; Linux checksum-only)',
+      'Artemis v0.1.0 (macOS signed, not notarized; Windows signed; Linux checksum-only)',
     );
     assert.match(summary.notes, /no stapled notarization ticket/u);
   });
@@ -46,7 +46,7 @@ describe('release publication summary', () => {
 
     assert.equal(
       summary.title,
-      'Forgeboard v0.1.0 (macOS signed and notarized; Windows signed; Linux checksum-only)',
+      'Artemis v0.1.0 (macOS signed and notarized; Windows signed; Linux checksum-only)',
     );
     assert.match(summary.notes, /Windows Authenticode signature were verified/u);
     assert.doesNotMatch(summary.notes, /Unsigned development release/u);
@@ -76,7 +76,7 @@ describe('release publication summary', () => {
     const notesPath = join(root, 'prepared.md');
     const sourceCommit = 'a'.repeat(40);
     try {
-      await writeFile(notesPath, '# Forgeboard v0.1.0\n');
+      await writeFile(notesPath, '# Artemis v0.1.0\n');
       for (const [platform, architecture, status] of targets) {
         const plan = platformReleasePlan('0.1.0', platform, architecture);
         for (const artifact of plan.artifacts) await writeFile(join(root, artifact), artifact);

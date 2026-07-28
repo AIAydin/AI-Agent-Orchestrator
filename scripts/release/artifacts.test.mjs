@@ -16,18 +16,18 @@ const VERSION = '0.1.0';
 
 test('release plans use deterministic platform and architecture names', () => {
   assert.deepEqual(platformReleasePlan(VERSION, 'darwin', 'arm64').artifacts, [
-    'Forgeboard-0.1.0-mac-arm64.dmg',
-    'Forgeboard-0.1.0-mac-arm64.zip',
+    'Artemis-0.1.0-mac-arm64.dmg',
+    'Artemis-0.1.0-mac-arm64.zip',
   ]);
   assert.deepEqual(platformReleasePlan(VERSION, 'darwin', 'x64').artifacts, [
-    'Forgeboard-0.1.0-mac-x64.dmg',
-    'Forgeboard-0.1.0-mac-x64.zip',
+    'Artemis-0.1.0-mac-x64.dmg',
+    'Artemis-0.1.0-mac-x64.zip',
   ]);
   assert.deepEqual(platformReleasePlan(VERSION, 'win32', 'x64').artifacts, [
-    'Forgeboard-0.1.0-windows-x64-setup.exe',
+    'Artemis-0.1.0-windows-x64-setup.exe',
   ]);
   assert.deepEqual(platformReleasePlan(VERSION, 'linux', 'x64').artifacts, [
-    'Forgeboard-0.1.0-linux-x86_64.AppImage',
+    'Artemis-0.1.0-linux-x86_64.AppImage',
     'forgeboard_0.1.0_amd64.deb',
   ]);
   assert.throws(() => platformReleasePlan(VERSION, 'linux', 'arm64'), /Unsupported release/u);

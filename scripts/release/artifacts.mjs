@@ -21,13 +21,13 @@ export function platformReleasePlan(version, platform, architecture) {
   let artifacts;
   if (key === 'darwin-arm64' || key === 'darwin-x64') {
     artifacts = [
-      `Forgeboard-${version}-mac-${architecture}.dmg`,
-      `Forgeboard-${version}-mac-${architecture}.zip`,
+      `Artemis-${version}-mac-${architecture}.dmg`,
+      `Artemis-${version}-mac-${architecture}.zip`,
     ];
   } else if (key === 'win32-x64') {
-    artifacts = [`Forgeboard-${version}-windows-x64-setup.exe`];
+    artifacts = [`Artemis-${version}-windows-x64-setup.exe`];
   } else if (key === 'linux-x64') {
-    artifacts = [`Forgeboard-${version}-linux-x86_64.AppImage`, `forgeboard_${version}_amd64.deb`];
+    artifacts = [`Artemis-${version}-linux-x86_64.AppImage`, `forgeboard_${version}_amd64.deb`];
   } else {
     throw new Error(`Unsupported release target ${key}.`);
   }
@@ -52,7 +52,7 @@ export function createPlatformReleaseInfo({
     : null;
   return {
     schemaVersion: INFO_SCHEMA_VERSION,
-    product: 'Forgeboard',
+    product: 'Artemis',
     version,
     platform,
     architecture,
@@ -129,7 +129,7 @@ export async function verifyCompleteReleaseSet(releaseRoot, version) {
 function assertReleaseInfo(info, plan, version) {
   if (
     info?.schemaVersion !== INFO_SCHEMA_VERSION ||
-    info.product !== 'Forgeboard' ||
+    info.product !== 'Artemis' ||
     info.version !== version ||
     info.platform !== plan.platform ||
     info.architecture !== plan.architecture ||

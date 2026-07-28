@@ -23,7 +23,7 @@ async function download(url, outputPath) {
     const temporaryPath = `${outputPath}.partial-${process.pid}-${attempt}`;
     try {
       const response = await fetch(url, {
-        headers: { 'User-Agent': 'Forgeboard-release-source-fetch' },
+        headers: { 'User-Agent': 'Artemis-release-source-fetch' },
         redirect: 'follow',
       });
       if (!response.ok || !response.body) {

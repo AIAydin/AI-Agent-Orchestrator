@@ -55,7 +55,7 @@ test('bumps both package versions and creates matching prepared release notes', 
   assert.equal(fixture.desktopPackage.version, '0.2.0');
   assert.equal(fixture.rootPackage.private, true);
   assert.equal(fixture.desktopPackage.private, true);
-  assert.match(notes, /Forgeboard v0\.2\.0/u);
+  assert.match(notes, /Artemis v0\.2\.0/u);
   assert.match(notes, /do not indicate that a tag/u);
   assert.deepEqual(result.changedPaths, [
     'package.json',
@@ -69,7 +69,7 @@ test('preserves existing matching release notes byte for byte', async (context) 
   const root = await createFixture();
   context.after(() => rm(root, { recursive: true, force: true }));
   const notesPath = join(root, 'docs', 'releases', 'v0.2.0.md');
-  const existingNotes = '# Forgeboard v0.2.0\n\nMaintainer-written notes.\n';
+  const existingNotes = '# Artemis v0.2.0\n\nMaintainer-written notes.\n';
   await writeFile(notesPath, existingNotes);
 
   const result = await bumpVersion(root, '0.2.0');
@@ -100,13 +100,13 @@ test('rejects package drift and mismatched existing notes without writing manife
   context.after(() => rm(notesRoot, { recursive: true, force: true }));
   await writeFile(
     join(notesRoot, 'docs', 'releases', 'v0.2.0.md'),
-    '# Forgeboard v9.9.9\n\nWrong release.\n',
+    '# Artemis v9.9.9\n\nWrong release.\n',
   );
   const driftBefore = await readFixture(driftRoot);
   const notesBefore = await readFixture(notesRoot);
 
   await assert.rejects(() => bumpVersion(driftRoot, '0.2.0'), /Refusing to repair version drift/u);
-  await assert.rejects(() => bumpVersion(notesRoot, '0.2.0'), /do not identify Forgeboard v0.2.0/u);
+  await assert.rejects(() => bumpVersion(notesRoot, '0.2.0'), /do not identify Artemis v0.2.0/u);
 
   assert.deepEqual(await readFixture(driftRoot), driftBefore);
   assert.deepEqual(await readFixture(notesRoot), notesBefore);
@@ -145,5 +145,5 @@ test('rolls back completed replacements and newly created files after a later wr
 test('root package exposes the documented version:bump command', async () => {
   const rootPackage = JSON.parse(await readFile(join(repositoryRoot, 'package.json'), 'utf8'));
   assert.equal(rootPackage.scripts?.['version:bump'], 'node scripts/release/version/bump.mjs');
-  assert.match(createReleaseNotes('1.2.3'), /# Forgeboard v1\.2\.3/u);
+  assert.match(createReleaseNotes('1.2.3'), /# Artemis v1\.2\.3/u);
 });

@@ -9,7 +9,8 @@ not be reclassified as future work.
 - [x] Initialize an isolated Git repository in the requested empty workspace.
 - [x] Create the required strict TypeScript `pnpm` monorepo layout.
 - [x] Centralize the temporary product name and identity in `@forgeboard/core`.
-- [x] Add MIT license and initial architecture, security, privacy, and contribution documents.
+- [x] Add the Sustainable Use License and initial architecture, security, privacy, and contribution
+      documents.
 - [x] Pin all production/development dependencies and commit a verified lockfile.
 - [x] Enforce the 2,000-line hard ceiling and keep source, tests, styles, scripts, services, and UI
       organized into coherent feature/domain modules well below that limit.
@@ -2051,3 +2052,8 @@ unchecked when only a subset of their required behavior has proof.
   verified already live from the drawable-whiteboard work (WS-I-1..3). Six new canvas tests cover
   select-tool moves, empty-canvas clicks, both delete keys with propagation assertions, and pointer
   focus; the 752-test workspace unit suite, desktop typecheck, and lint on touched files passed.
+- 2026-07-28: project-authored code and documentation moved from MIT to the Sustainable Use License
+  used by n8n, while bundled and incorporated third-party components retain their original terms.
+  Root and desktop package metadata, README terms, contribution terms, packaged notices, and the
+  shipped license now agree. The structure gate, all three docs tests, all seven quality tests,
+  focused formatting checks, and whitespace validation passed.
