@@ -68,9 +68,9 @@ export function compareSemver(leftValue, rightValue) {
 }
 
 export function createReleaseNotes(version) {
-  return `# Forgeboard v${version}
+  return `# Artemis v${version}
 
-These are prepared release notes for Forgeboard v${version}. They do not indicate that a tag,
+These are prepared release notes for Artemis v${version}. They do not indicate that a tag,
 installer set, or GitHub Release has been published.
 
 ## Highlights
@@ -114,9 +114,9 @@ export async function bumpVersion(root, targetVersion) {
   }
 
   const existingNotes = await readOptionalFile(releaseNotesPath);
-  if (existingNotes !== undefined && !existingNotes.includes(`Forgeboard v${targetVersion}`)) {
+  if (existingNotes !== undefined && !existingNotes.includes(`Artemis v${targetVersion}`)) {
     throw new Error(
-      `Existing release notes ${relative(root, releaseNotesPath)} do not identify Forgeboard v${targetVersion}; no files were changed.`,
+      `Existing release notes ${relative(root, releaseNotesPath)} do not identify Artemis v${targetVersion}; no files were changed.`,
     );
   }
 
@@ -240,7 +240,7 @@ async function main() {
   }
 
   const result = await bumpVersion(repositoryRoot, arguments_[0]);
-  console.log(`Forgeboard version updated: ${result.currentVersion} -> ${result.targetVersion}`);
+  console.log(`Artemis version updated: ${result.currentVersion} -> ${result.targetVersion}`);
   for (const path of result.changedPaths) {
     console.log(`- ${path}`);
   }

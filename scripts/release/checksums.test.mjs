@@ -56,7 +56,7 @@ test('publication verifies every uploaded platform checksum before replacing it'
   const root = await completeReleaseFixture();
   try {
     assert.deepEqual(await verifyReleaseChecksums(root), { artifactCount: 8 });
-    await writeFile(join(root, 'Forgeboard-0.1.0-windows-x64-setup.exe'), 'tampered');
+    await writeFile(join(root, 'Artemis-0.1.0-windows-x64-setup.exe'), 'tampered');
     await assert.rejects(verifyReleaseChecksums(root), /SHA-256 mismatch/u);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -71,7 +71,7 @@ test('publication rejects unclaimed and cross-platform checksum entries', async 
     await assert.rejects(verifyReleaseChecksums(root), /missing from platform checksum manifests/u);
     await rm(join(root, unexpected));
 
-    const windows = 'Forgeboard-0.1.0-windows-x64-setup.exe';
+    const windows = 'Artemis-0.1.0-windows-x64-setup.exe';
     const darwinManifest = join(root, 'SHA256SUMS-darwin-arm64.txt');
     await writeFile(
       darwinManifest,

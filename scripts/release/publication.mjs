@@ -46,7 +46,7 @@ export function createPublicationSummary(releaseInfo, preparedNotes) {
   if (!notes) throw new Error('Prepared release notes are required for publication.');
 
   return {
-    title: `Forgeboard v${version} (${label})`,
+    title: `Artemis v${version} (${label})`,
     notes: `> [!WARNING]\n> ${warning}\n\n## Verified signing status\n\n${signingLines}\n\n${notes}\n`,
   };
 }

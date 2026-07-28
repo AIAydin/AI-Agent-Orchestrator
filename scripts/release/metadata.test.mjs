@@ -56,10 +56,10 @@ test('desktop release targets keep deterministic artifacts and user-preserving i
   }
 });
 
-test('versioned release notes must identify the matching Forgeboard version', async () => {
+test('versioned release notes must identify the matching Artemis version', async () => {
   const metadata = structuredClone(await loadReleaseMetadata());
   metadata.releaseNotes = 'Generic release notes';
-  assert.throws(() => validateReleaseMetadata(metadata), /must identify Forgeboard v0.1.0/u);
+  assert.throws(() => validateReleaseMetadata(metadata), /must identify Artemis v0.1.0/u);
 });
 
 test('release tag must equal both package versions', async () => {

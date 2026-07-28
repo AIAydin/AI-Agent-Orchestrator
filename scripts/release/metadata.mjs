@@ -102,15 +102,15 @@ export function validateReleaseMetadata(metadata) {
 function validateReleaseNotes(releaseNotes, version) {
   assertString(releaseNotes, 'Versioned release notes');
   assert(
-    releaseNotes.includes(`Forgeboard v${version}`),
-    `Release notes must identify Forgeboard v${version}.`,
+    releaseNotes.includes(`Artemis v${version}`),
+    `Release notes must identify Artemis v${version}.`,
   );
 }
 
 function validateDesktopPackageMetadata(desktopPackage) {
   assert(
-    desktopPackage.homepage === 'https://github.com/AIAydin/AI-Agent-Orchestrator',
-    'Desktop package homepage must identify the Forgeboard repository URL.',
+    desktopPackage.homepage === 'https://github.com/AIAydin/Artemis',
+    'Desktop package homepage must identify the Artemis repository URL.',
   );
   assertRecord(desktopPackage.author, 'Desktop package author');
   assertString(desktopPackage.author.name, 'Desktop package author name');
@@ -134,14 +134,14 @@ function validateDesktopPackageMetadata(desktopPackage) {
   );
   const build = desktopPackage.build;
   assert(
-    build?.mac?.artifactName === 'Forgeboard-${version}-mac-${arch}.${ext}' &&
+    build?.mac?.artifactName === 'Artemis-${version}-mac-${arch}.${ext}' &&
       sameStrings(build.mac.target, ['dmg', 'zip']) &&
       build.mac.hardenedRuntime === true,
     'macOS release targets and artifact names must remain deterministic and hardened.',
   );
   assert(
     sameStrings(build?.win?.target, ['nsis']) &&
-      build?.nsis?.artifactName === 'Forgeboard-${version}-windows-${arch}-setup.${ext}',
+      build?.nsis?.artifactName === 'Artemis-${version}-windows-${arch}-setup.${ext}',
     'Windows must emit the deterministic architecture-specific NSIS installer.',
   );
   assert(
@@ -153,7 +153,7 @@ function validateDesktopPackageMetadata(desktopPackage) {
   );
   assert(
     sameStrings(build?.linux?.target, ['AppImage', 'deb']) &&
-      build?.appImage?.artifactName === 'Forgeboard-${version}-linux-${arch}.${ext}',
+      build?.appImage?.artifactName === 'Artemis-${version}-linux-${arch}.${ext}',
     'Linux must emit deterministic AppImage and DEB artifacts.',
   );
 }
