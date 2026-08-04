@@ -118,8 +118,8 @@ importers:
         specifier: 17.8.0
         version: 17.8.0
       pnpm:
-        specifier: 11.17.0
-        version: 11.17.0
+        specifier: 11.19.0
+        version: 11.19.0
       prettier:
         specifier: 3.9.6
         version: 3.9.6
@@ -3337,8 +3337,8 @@ packages:
     resolution: {integrity: sha512-uysumyrvkUX0rX/dEVqt8gC3sTBzd4zoWfLeS29nb53imdaXVvLINYXTI2GNqzaMuvacNx4uJQ8+b3zXR0pkgQ==}
     engines: {node: '>=10.4.0'}
 
-  pnpm@11.17.0:
-    resolution: {integrity: sha512-zKPOozKtJUu4QUX5ZtGfSHlhUhA0b8kseaBH8joNezzKPDeS8AdrofGDHSd++88KkRmzGppg7Kf7PWIx8zHvcg==}
+  pnpm@11.19.0:
+    resolution: {integrity: sha512-eIHz7VkNRyxKlV4riLISF5ERYGbcyIy8o4SeybYPG7qm0syyIfqR2k4cZb7yvL43k2Wup6xTnHv4be3DobItzg==}
     engines: {node: '>=22.13'}
     hasBin: true
 
@@ -7042,7 +7042,7 @@ snapshots:
       base64-js: 1.5.1
       xmlbuilder: 15.1.1
 
-  pnpm@11.17.0: {}
+  pnpm@11.19.0: {}
 
   points-on-curve@0.2.0: {}
 
