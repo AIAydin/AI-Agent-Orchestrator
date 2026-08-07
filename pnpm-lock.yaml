@@ -43,8 +43,8 @@ catalogs:
       specifier: 12.8.2
       version: 12.8.2
     electron:
-      specifier: 39.8.5
-      version: 39.8.5
+      specifier: 39.8.10
+      version: 39.8.10
     electron-builder:
       specifier: 26.15.3
       version: 26.15.3
@@ -262,7 +262,7 @@ importers:
         version: 4.6.0(supports-color@7.2.0)(vite@6.4.3(@types/node@26.1.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1))
       electron:
         specifier: 'catalog:'
-        version: 39.8.5(supports-color@7.2.0)
+        version: 39.8.10(supports-color@7.2.0)
       electron-builder:
         specifier: 'catalog:'
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)(supports-color@7.2.0)
@@ -375,7 +375,7 @@ importers:
     devDependencies:
       electron:
         specifier: 'catalog:'
-        version: 39.8.5(supports-color@7.2.0)
+        version: 39.8.10(supports-color@7.2.0)
       node-gyp:
         specifier: 13.0.1
         version: 13.0.1
@@ -1635,9 +1635,6 @@ packages:
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
 
-  '@types/node@24.0.10':
-    resolution: {integrity: sha512-ENHwaH+JIRTDIEEbDK6QSQntAYGtbvdDXnMXnZaZ6k13Du1dPMmprkEHIL7ok2Wl2aZevetwTAb5S+7yIF+enA==}
-
   '@types/node@26.1.2':
     resolution: {integrity: sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==}
 
@@ -2390,8 +2387,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@39.8.5:
-    resolution: {integrity: sha512-q6+LiQIcTadSyvtPgLDQkCtVA9jQJXQVMrQcctfOJILh6OFMN+UJJLRkuUTy8CZDYeCIBn1ZycqsL1dAXugxZA==}
+  electron@39.8.10:
+    resolution: {integrity: sha512-zbYtGPYUI7PzqLAzkk21Rk6j67WN0hxn0Mq/njErZo1d0HSf33is4f8ICI5fMLy5vYe0JtCtM5sYunNOaochSQ==}
     engines: {node: '>= 12.20.55'}
     hasBin: true
 
@@ -3812,9 +3809,6 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici-types@7.8.0:
-    resolution: {integrity: sha512-9UJ2xGDvQ43tYyVMpuHlsgApydB8ZKfVYTsLDhXkFL/6gfkp+U8xTGdh8pMJv1SpZna0zxG1DwsKZsreLbXBxw==}
-
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
@@ -5031,7 +5025,7 @@ snapshots:
     dependencies:
       '@types/http-cache-semantics': 4.2.0
       '@types/keyv': 3.1.4
-      '@types/node': 24.0.10
+      '@types/node': 26.1.2
       '@types/responselike': 1.0.3
 
   '@types/chai@5.2.3':
@@ -5178,17 +5172,13 @@ snapshots:
 
   '@types/keyv@3.1.4':
     dependencies:
-      '@types/node': 24.0.10
+      '@types/node': 26.1.2
 
   '@types/ms@2.1.0': {}
 
   '@types/node@22.20.1':
     dependencies:
       undici-types: 6.21.0
-
-  '@types/node@24.0.10':
-    dependencies:
-      undici-types: 7.8.0
 
   '@types/node@26.1.2':
     dependencies:
@@ -5204,14 +5194,14 @@ snapshots:
 
   '@types/responselike@1.0.3':
     dependencies:
-      '@types/node': 24.0.10
+      '@types/node': 26.1.2
 
   '@types/trusted-types@2.0.7':
     optional: true
 
   '@types/yauzl@2.10.3':
     dependencies:
-      '@types/node': 24.0.10
+      '@types/node': 26.1.2
     optional: true
 
   '@typescript-eslint/eslint-plugin@8.65.0(@typescript-eslint/parser@8.65.0(eslint@10.8.0(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.8.3))(eslint@10.8.0(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.8.3)':
@@ -6079,7 +6069,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@39.8.5(supports-color@7.2.0):
+  electron@39.8.10(supports-color@7.2.0):
     dependencies:
       '@electron/get': 2.0.3(supports-color@7.2.0)
       '@types/node': 22.20.1
@@ -7110,7 +7100,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 24.0.10
+      '@types/node': 26.1.2
       long: 5.3.2
 
   pump@3.0.4:
@@ -7560,8 +7550,6 @@ snapshots:
   ufo@1.6.4: {}
 
   undici-types@6.21.0: {}
-
-  undici-types@7.8.0: {}
 
   undici-types@8.3.0: {}
 
