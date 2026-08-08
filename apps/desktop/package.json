@@ -41,7 +41,7 @@
     "@xyflow/react": "catalog:",
     "dugite": "3.2.2",
     "lucide-react": "catalog:",
-    "mermaid": "^11.16.0",
+    "mermaid": "^11.16.1",
     "monaco-editor": "catalog:",
     "node-pty": "catalog:",
     "react": "catalog:",
